@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2001, 2012, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,6 @@
 
 package sun.nio.ch;
 
-import com.google.j2objc.annotations.ReflectionSupport;
 import java.io.*;
 import java.net.*;
 import java.nio.*;
@@ -177,40 +176,31 @@ public class DatagramSocketAdaptor
             return dc.receive(bb);
         }
 
-        // Implement timeout with a selector
-        SelectionKey sk = null;
-        Selector sel = null;
         dc.configureBlocking(false);
         try {
             int n;
             SocketAddress sender;
             if ((sender = dc.receive(bb)) != null)
                 return sender;
-            sel = Util.getTemporarySelector(dc);
-            sk = dc.register(sel, SelectionKey.OP_READ);
             long to = timeout;
             for (;;) {
                 if (!dc.isOpen())
                      throw new ClosedChannelException();
                 long st = System.currentTimeMillis();
-                int ns = sel.select(to);
-                if (ns > 0 && sk.isReadable()) {
+                int result = dc.poll(Net.POLLIN, to);
+                if (result > 0 &&
+                        ((result & Net.POLLIN) != 0)) {
                     if ((sender = dc.receive(bb)) != null)
                         return sender;
                 }
-                sel.selectedKeys().remove(sk);
                 to -= System.currentTimeMillis() - st;
                 if (to <= 0)
                     throw new SocketTimeoutException();
 
             }
         } finally {
-            if (sk != null)
-                sk.cancel();
             if (dc.isOpen())
                 dc.configureBlocking(true);
-            if (sel != null)
-                Util.releaseTemporarySelector(sel);
         }
     }
 
@@ -371,7 +361,7 @@ public class DatagramSocketAdaptor
         return dc;
     }
 
-    /** @hide */
+    // Android-added: for testing and internal use.
     @Override
     public final FileDescriptor getFileDescriptor$() {
         return dc.fd;
@@ -384,7 +374,6 @@ public class DatagramSocketAdaptor
     */
    private static final DatagramSocketImpl dummyDatagramSocket = new DummyDatagramSocket();
 
-   @ReflectionSupport(value = ReflectionSupport.Level.FULL)
    private static final class DummyDatagramSocket extends DatagramSocketImpl
    {
        protected void create() throws SocketException {}
@@ -399,8 +388,10 @@ public class DatagramSocketAdaptor
 
        protected void receive(DatagramPacket p) throws IOException {}
 
+       @Deprecated
        protected void setTTL(byte ttl) throws IOException {}
 
+       @Deprecated
        protected byte getTTL() throws IOException { return 0; }
 
        protected void setTimeToLive(int ttl) throws IOException {}

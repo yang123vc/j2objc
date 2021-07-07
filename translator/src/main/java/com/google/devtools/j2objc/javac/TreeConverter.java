@@ -112,11 +112,13 @@ import com.google.devtools.j2objc.ast.WhileStatement;
 import com.google.devtools.j2objc.translate.OcniExtractor;
 import com.google.devtools.j2objc.types.ExecutablePair;
 import com.google.devtools.j2objc.types.GeneratedPackageElement;
+import com.google.devtools.j2objc.types.GeneratedTypeElement;
 import com.google.devtools.j2objc.util.ElementUtil;
 import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.FileUtil;
 import com.google.devtools.j2objc.util.TranslationEnvironment;
 import com.google.j2objc.annotations.Property;
+import com.sun.source.tree.AnnotatedTypeTree;
 import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.ArrayAccessTree;
 import com.sun.source.tree.ArrayTypeTree;
@@ -674,9 +676,42 @@ public class TreeConverter {
     newNode.setInterface(
         node.getKind() == Kind.INTERFACE || node.getKind() == Kind.ANNOTATION_TYPE);
     if (ElementUtil.isAnonymous(element)) {
-      newUnit.getEnv().elementUtil().mapElementType(element, getTypeMirror(path));
+      TypeMirror classType = getTypeMirror(path);
+      if (!classType.getAnnotationMirrors().isEmpty()) {
+        newUnit.getEnv().elementUtil().mapElementType(element, classType);
+      } else {
+        // With javac 12 and above, annotations are no longer part of the supertype,
+        // so check to see if a mutated type that has them is necessary.
+        GeneratedTypeElement newElement = GeneratedTypeElement.mutableCopy(element);
+        boolean annotationFound =
+            copyAnnotations(node.getExtendsClause(), path, newNode, newElement);
+        for (Tree clause : node.getImplementsClause()) {
+          annotationFound |= copyAnnotations(clause, path, newNode, newElement);
+        }
+        if (annotationFound) {
+          newUnit.getEnv().elementUtil().mapElementType(element, newElement.asType());
+        }
+      }
     }
     return newNode;
+  }
+
+  // Copies annotations from tree to new node, returns true if any annotations were copied.
+  private boolean copyAnnotations(
+      Tree clause, TreePath path, TypeDeclaration newNode, GeneratedTypeElement newElement) {
+    if (clause == null) {
+      return false;
+    }
+    boolean annotationFound = false;
+    if (clause.getKind() == Kind.ANNOTATED_TYPE) {
+      for (AnnotationTree annTree : ((AnnotatedTypeTree) clause).getAnnotations()) {
+        Annotation ann = (Annotation) convert(annTree, getTreePath(path, annTree));
+        newNode.addAnnotation(ann);
+        newElement.addAnnotationMirror(ann.getAnnotationMirror());
+        annotationFound = true;
+      }
+    }
+    return annotationFound;
   }
 
   private TypeDeclaration convertClassDeclarationHelper(ClassTree node, TreePath parent) {
@@ -844,7 +879,8 @@ public class TreeConverter {
     if (ElementUtil.isConstant((VariableElement) element)
         && ElementUtil.isStatic(element)
         && !(selected.getKind() == Kind.METHOD_INVOCATION)
-        && !(selected.getKind() == Kind.MEMBER_SELECT)) {
+        && !(selected.getKind() == Kind.MEMBER_SELECT)
+        && !(selected.getKind() == Kind.PARENTHESIZED)) {
       return new QualifiedName()
           .setName(convertSimpleName(element, typeMirror, pos))
           .setQualifier((Name) convert(selected, path))

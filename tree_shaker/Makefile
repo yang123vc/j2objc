@@ -15,8 +15,6 @@
 #
 # Author: Keith Stanger, Priyank Malvania
 
-SUFFIXES:
-
 SOURCE_DIR = src/main
 JAVA_SOURCE_DIR = $(SOURCE_DIR)/java
 RESOURCE_DIR = $(SOURCE_DIR)/resources
@@ -29,29 +27,39 @@ include ../java_deps/jars.mk
 
 BUILD_DIR = build_result
 CLASS_DIR = $(BUILD_DIR)/classes
+PROTO_JAVA_DIR = $(BUILD_DIR)/java
 TEST_CLASS_DIR = $(BUILD_DIR)/test
 TRANSLATOR_CLASS_DIR = $(J2OBJC_ROOT)/translator/$(CLASS_DIR)
 TRANSLATOR_TEST_DIR = $(J2OBJC_ROOT)/translator/$(TEST_CLASS_DIR)
 
 JAVA_SOURCES = \
-    com/google/devtools/treeshaker/TreeShaker.java \
-    com/google/devtools/treeshaker/ElementReferenceMapper.java \
-    com/google/devtools/treeshaker/UnusedCodeTracker.java \
+    com/google/devtools/treeshaker/Member.java \
     com/google/devtools/treeshaker/Options.java \
+    com/google/devtools/treeshaker/RapidTypeAnalyser.java \
+    com/google/devtools/treeshaker/TreeShaker.java \
+    com/google/devtools/treeshaker/Type.java \
+    com/google/devtools/treeshaker/TypeGraphBuilder.java \
+    com/google/devtools/treeshaker/UsedCodeMarker.java
+
+PROTO_SOURCES = \
+    $(JAVA_SOURCE_DIR)/com/google/devtools/treeshaker/library_info.proto
 
 RESOURCES = \
     com/google/devtools/treeshaker/TreeShaker.properties \
     com/google/devtools/j2objc/J2ObjC.properties \
-    com/google/devtools/j2objc/JRE.mappings
+    com/google/devtools/j2objc/JRE.mappings \
+    com/google/devtools/j2objc/reserved_names.txt
 
-DIST_DEPS = $(JSR305_JAR) j2objc_annotations.jar
-INTERNAL_DEPS = $(GUAVA_JAR) $(PROCYON_JARS)
+DIST_DEPS = $(JSR305_JAR) j2objc_annotations.jar protobuf_runtime.jar
+INTERNAL_DEPS = $(GUAVA_JAR) $(PROCYON_JARS) $(SCENELIB_JAR) \
+  $(AUTOVALUE_ANNOTATIONS_JAR) $(FLOGGER_JARS)
 ifdef JAVA_8
 INTERNAL_DEPS += $(JAVAC_JAR)
 endif
 JAR_DEPS_DIST = $(DIST_DEPS:%=$(DIST_JAR_DIR)/%) $(INTERNAL_DEPS:%=$(JAVA_DEPS_JAR_DIR)/%)
 JAR_DEPS_PATH = $(subst $(eval) ,:,$(strip $(JAR_DEPS_DIST)))
 JUNIT_JAR_DIST = $(DIST_JAR_DIR)/$(JUNIT_JAR)
+TRUTH_JAR_PATH = $(JAVA_DEPS_JAR_DIR)/$(TRUTH_JAR)
 
 MAIN_CLASS = com.google.devtools.treeshaker.TreeShaker
 MANIFEST = $(BUILD_DIR)/manifest.mf
@@ -63,7 +71,7 @@ RESOURCE_FILES = $(RESOURCES:%=$(CLASS_DIR)/%)
 
 TEST_PATHS = \
   $(CLASS_DIR) $(JAR_DEPS_PATH) $(TEST_CLASS_DIR) $(JUNIT_JAR_DIST) \
-  $(TRANSLATOR_CLASS_DIR) $(TRANSLATOR_TEST_DIR)
+  $(TRANSLATOR_CLASS_DIR) $(TRANSLATOR_TEST_DIR) $(TRUTH_JAR_PATH)
 TEST_CLASSPATH = $(subst $(space),:,$(TEST_PATHS))
 
 ALL_LIBS = $(JAR) $(ECLIPSE_LIBS)
@@ -71,12 +79,13 @@ ALL_LIBS = $(JAR) $(ECLIPSE_LIBS)
 # Files in dependent jars that aren't needed in combined jar.
 UNUSED_JAR_CONTENTS = \
   $(CLASS_DIR)/[A-Z]* \
-  $(CLASS_DIR)/[ahps]* \
+  $(CLASS_DIR)/[ahp]* \
   $(CLASS_DIR)/about_files \
   $(CLASS_DIR)/ant_tasks \
   $(CLASS_DIR)/compiler* \
   $(CLASS_DIR)/hook* \
-  $(CLASS_DIR)/jdt*
+  $(CLASS_DIR)/jdt* \
+  $(CLASS_DIR)/sun
 
 ifeq ($(shell uname), Linux)
 PRUNE_CMD = bash -O globasciiranges -c "rm -rf $(UNUSED_JAR_CONTENTS)"
@@ -91,10 +100,13 @@ clean:
 	@rm -rf $(BUILD_DIR) $(JAR_DIST) $(DIST_DIR)/tree_shaker
 
 $(JAR): $(MANIFEST) $(RESOURCE_FILES) $(JAVA_SOURCES_FULL) \
-  | $(CLASS_DIR) java_deps_dist annotations_dist translator
+  | $(CLASS_DIR) $(PROTO_JAVA_DIR) java_deps_dist annotations_dist translator
 	@echo building tree_shaker jar
-	@$(JAVAC) -Xlint:unchecked -sourcepath $(JAVA_SOURCE_DIR):$(TRANSLATOR_SOURCE_DIR) \
-	    -classpath $(JAR_DEPS_PATH) -encoding UTF-8 \
+	@$(DIST_DIR)/j2objc_protoc --java_out=$(PROTO_JAVA_DIR) $(PROTO_SOURCES)
+	@$(JAVAC) -Xlint:unchecked \
+	    -sourcepath $(JAVA_SOURCE_DIR):$(TRANSLATOR_SOURCE_DIR):$(PROTO_JAVA_DIR) \
+	    -classpath $(JAR_DEPS_PATH):$(CLASS_DIR) \
+	    -processorpath $(JAVA_DEPS_JAR_DIR)/$(AUTOVALUE_JAR) -encoding UTF-8 \
 	    -d $(CLASS_DIR) -source 1.8 -target 1.8 -nowarn $(JAVA_SOURCES:%=$(JAVA_SOURCE_DIR)/%)
 	@for lib in $(JAR_DEPS_DIST); do unzip -oq $$lib -d $(CLASS_DIR); done
 	@$(PRUNE_CMD)
@@ -118,7 +130,7 @@ $(CLASS_DIR)/%: $(J2OBJC_ROOT)/translator/$(RESOURCE_DIR)/%
 	@mkdir -p $(@D)
 	cp -f $< $@
 
-DIRS = $(BUILD_DIR) $(CLASS_DIR) $(TEST_CLASS_DIR) $(DIST_DIR) $(DIST_JAR_DIR)
+DIRS = $(BUILD_DIR) $(CLASS_DIR) $(TEST_CLASS_DIR) $(DIST_DIR) $(DIST_JAR_DIR) $(PROTO_JAVA_DIR)
 
 $(sort $(DIRS)):
 	@mkdir -p $@
@@ -134,9 +146,9 @@ dist: $(JAR_DIST) $(DIST_DIR)/tree_shaker
 
 test: compile-tests
 	$(JAVA) -classpath $(TEST_CLASSPATH) junit.textui.TestRunner \
-	    com.google.devtools.treeshaker.ElementReferenceMapperTest
+	    com.google.devtools.treeshaker.TreeShakerTest
 
 compile-tests: $(JAR) | $(TEST_CLASS_DIR)
 	$(JAVAC) -encoding UTF-8 -sourcepath src/test/java \
 	    -classpath $(TEST_CLASSPATH) -d $(TEST_CLASS_DIR) \
-	    src/test/java/com/google/devtools/treeshaker/ElementReferenceMapperTest.java
+	    src/test/java/com/google/devtools/treeshaker/TreeShakerTest.java

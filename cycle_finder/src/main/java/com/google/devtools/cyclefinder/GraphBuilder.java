@@ -65,7 +65,7 @@ import scenelib.annotations.el.AScene;
 public class GraphBuilder {
 
   private final Map<String, TypeNode> allTypes = new HashMap<>();
-  private final NameList whitelist;
+  private final NameList suppressList;
   private final AScene scene;
   private final ReferenceGraph graph = new ReferenceGraph();
   private final Map<TypeNode, TypeNode> superclasses = new HashMap<>();
@@ -73,8 +73,8 @@ public class GraphBuilder {
   private final SetMultimap<TypeNode, Edge> possibleOuterEdges = HashMultimap.create();
   private final Set<TypeNode> hasOuterRef = new HashSet<>();
 
-  public GraphBuilder(NameList whitelist, ExternalAnnotations externalAnnotations) {
-    this.whitelist = whitelist;
+  public GraphBuilder(NameList suppressList, ExternalAnnotations externalAnnotations) {
+    this.suppressList = suppressList;
     this.scene = externalAnnotations.getScene();
   }
 
@@ -114,19 +114,19 @@ public class GraphBuilder {
     for (TypeNode type : allTypes.values()) {
       for (Edge e : ImmutableList.copyOf(graph.getEdges(type))) {
         Set<TypeNode> targetSubtypes = subtypes.get(e.getTarget());
-        Set<TypeNode> whitelisted = new HashSet<>();
+        Set<TypeNode> suppressListed = new HashSet<>();
         String fieldName = e.getFieldQualifiedName();
         if (fieldName == null) {
           continue;  // Outer or capture field.
         }
         for (TypeNode subtype : targetSubtypes) {
-          if (whitelist.isWhitelistedTypeForField(fieldName, subtype)
-              || whitelist.containsType(subtype)) {
-            whitelisted.add(subtype);
-            whitelisted.addAll(subtypes.get(subtype));
+          if (suppressList.isSuppressListedTypeForField(fieldName, subtype)
+              || suppressList.containsType(subtype)) {
+            suppressListed.add(subtype);
+            suppressListed.addAll(subtypes.get(subtype));
           }
         }
-        for (TypeNode subtype : Sets.difference(targetSubtypes, whitelisted)) {
+        for (TypeNode subtype : Sets.difference(targetSubtypes, suppressListed)) {
           addEdge(Edge.newSubtypeEdge(e, subtype));
         }
       }
@@ -272,12 +272,12 @@ public class GraphBuilder {
         TypeNode target = getOrCreateNode(fieldType);
         String fieldName = ElementUtil.getName(field);
         if (target != null
-            && !whitelist.containsField(node, fieldName)
-            && !whitelist.containsType(target)
+            && !suppressList.containsField(node, fieldName)
+            && !suppressList.containsType(target)
             && !ElementUtil.isStatic(field)
             // Exclude self-referential fields. (likely linked DS or delegate pattern)
             && !typeUtil.isAssignable(type, fieldType)
-            && !isWeakReference(field)
+            && !isUnretainedReference(field)
             && !isRetainedWithField(field)) {
           addEdge(Edge.newFieldEdge(node, target, fieldName));
         }
@@ -295,8 +295,8 @@ public class GraphBuilder {
       if (declarationType != null && enclosingTypeNode != null
           && ElementUtil.hasOuterContext(element)
           && !isWeakOuterType(element)
-          && !whitelist.containsType(enclosingTypeNode)
-          && !whitelist.hasOuterForType(typeNode)) {
+          && !suppressList.containsType(enclosingTypeNode)
+          && !suppressList.hasOuterForType(typeNode)) {
         possibleOuterEdges.put(
             declarationType, Edge.newOuterClassEdge(typeNode, enclosingTypeNode));
       }
@@ -306,8 +306,9 @@ public class GraphBuilder {
       assert ElementUtil.isAnonymous(type);
       for (VariableElement capturedVarElement : captureInfo.getLocalCaptureFields(type)) {
         TypeNode targetNode = getOrCreateNode(capturedVarElement.asType());
-        if (targetNode != null && !whitelist.containsType(targetNode)
-            && !ElementUtil.isWeakReference(capturedVarElement)) {
+        if (targetNode != null
+            && !suppressList.containsType(targetNode)
+            && !ElementUtil.isUnretainedReference(capturedVarElement)) {
           addEdge(Edge.newCaptureEdge(
               typeNode, targetNode, ElementUtil.getName(capturedVarElement)));
         }
@@ -316,6 +317,10 @@ public class GraphBuilder {
 
     private boolean isWeakReference(VariableElement field) {
       return ElementUtil.isWeakReference(field) || hasExternalAnnotation(field, Weak.class);
+    }
+
+    private boolean isUnretainedReference(VariableElement field) {
+      return isWeakReference(field);
     }
 
     private boolean isRetainedWithField(VariableElement field) {

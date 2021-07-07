@@ -17,7 +17,6 @@ package com.google.devtools.j2objc.translate;
 import com.google.devtools.j2objc.GenerationTest;
 import com.google.devtools.j2objc.Options.MemoryManagementOption;
 import com.google.devtools.j2objc.ast.Statement;
-
 import java.io.IOException;
 import java.util.List;
 
@@ -36,7 +35,25 @@ public class OperatorRewriterTest extends GenerationTest {
         "JreStrongAssign(&(b ? create_Test_init() : Test_getTest())->s_, @\"foo\");");
   }
 
-  public void testModAssignOperator() throws IOException {
+  public void testDivisionOperator() {
+    String source = "short s = 0; int i = 3 / s; long l = 7L / s; double d = 9.0 / s;";
+    List<Statement> stmts = translateStatements(source);
+    assertEquals(4, stmts.size());
+    assertEquals("jint i = JreIntDiv(3, s);", generateStatement(stmts.get(1)));
+    assertEquals("jlong l = JreLongDiv(7LL, s);", generateStatement(stmts.get(2)));
+    assertEquals("jdouble d = 9.0 / s;", generateStatement(stmts.get(3)));
+  }
+
+  public void testModuloOperator() {
+    String source = "short s = 0; int i = 3 % s; long l = 7L % s; double d = 9.0 % s;";
+    List<Statement> stmts = translateStatements(source);
+    assertEquals(4, stmts.size());
+    assertEquals("jint i = JreIntMod(3, s);", generateStatement(stmts.get(1)));
+    assertEquals("jlong l = JreLongMod(7LL, s);", generateStatement(stmts.get(2)));
+    assertEquals("jdouble d = fmod(9.0, s);", generateStatement(stmts.get(3)));
+  }
+
+  public void testModAssignOperator() {
     String source = "float a = 4.2f; a %= 2.1f; double b = 5.6; b %= 1.2; byte c = 3; c %= 2.3; "
         + "short d = 4; d %= 3.4; int e = 5; e %= 4.5; long f = 6; f %= 5.6; char g = 'a'; "
         + "g %= 6.7;";
@@ -61,7 +78,7 @@ public class OperatorRewriterTest extends GenerationTest {
     assertTranslation(translation, "return fmodf(three, four);");
   }
 
-  public void testLShift32WithExtendedOperands() throws IOException {
+  public void testLShift32WithExtendedOperands() {
     String source = "int a; a = 1 << 2; a = 1 << 2 << 3; a = 1 << 2 << 3 << 4;";
     List<Statement> stmts = translateStatements(source);
     assertEquals(4, stmts.size());
@@ -71,7 +88,7 @@ public class OperatorRewriterTest extends GenerationTest {
                  generateStatement(stmts.get(3)));
   }
 
-  public void testURShift64WithExtendedOperands() throws IOException {
+  public void testURShift64WithExtendedOperands() {
     String source = "long a; a = 65535L >>> 2; a = 65535L >>> 2 >>> 3; "
         + "a = 65535L >>> 2 >>> 3 >>> 4;";
     List<Statement> stmts = translateStatements(source);
@@ -166,7 +183,7 @@ public class OperatorRewriterTest extends GenerationTest {
         // The getTest() call must be extracted so that it can be passed as the parent ref without
         // duplicating the expression.
         "t *__rw$0;",
-        "(__rw$0 = nil_chk([self getTest]), "
+        "((void) (__rw$0 = nil_chk([self getTest])), "
           + "JreRetainedWithAssign(__rw$0, &__rw$0->rwo_, create_NSObject_init()));");
     // Test the dealloc calls too.
     assertTranslation(translation, "JreRetainedWithRelease(self, rwo_);");
@@ -199,6 +216,34 @@ public class OperatorRewriterTest extends GenerationTest {
         "thing = JreRetainedLocalValue(t2);",
         "return [((id<JavaUtilComparator>) nil_chk(((Test_Thing *) nil_chk(thing))->comp_)) "
           + "compareWithId:s1 withId:s2] == 0;");
+  }
+
+  public void testRetainedLocalRefFieldGetter() throws IOException {
+    String translation =
+        translateSourceFile(
+            // From jre_emul/misc_tests/RetentionTest.java.
+            "class Test {"
+                + "  static class Ref {"
+                + "    Object object;"
+                + "    Object get() {"
+                + "      return object;"
+                + "    }"
+                + "  }"
+                + "  public void testFieldGetter() {"
+                + "    Ref ref = new Ref();"
+                + "    com.google.j2objc.util.AutoreleasePool.run(() -> {"
+                + "      ref.object = new Object();"
+                + "    });"
+                + "    Object object = ref.get();"
+                + "    com.google.j2objc.util.AutoreleasePool.run(() -> {"
+                + "      ref.object = null;"
+                + "    });"
+                + "    object.hashCode();"
+                + "  }"
+                + "}",
+            "Test",
+            "Test.m");
+    assertTranslation(translation, "id object = JreRetainedLocalValue([ref get]);");
   }
 
   public void testLazyInitFields() throws IOException {
@@ -238,9 +283,9 @@ public class OperatorRewriterTest extends GenerationTest {
         + "    f2 = f1;"
         + "  }"
         + "}", "Test", "Test.m");
-    assertTranslation(translation, "Test_Foo *f2 = f_;");
+    assertTranslation(translation, "Test_Foo *f2 = JreRetainedLocalValue(f_);");
     assertTranslation(translation, "f1 = JreRetainedLocalValue(f2);");
-    assertTranslation(translation, "Test_Foo *f3 = f2;");
+    assertTranslation(translation, "Test_Foo *f3 = JreRetainedLocalValue(f2);");
     assertTranslation(translation, "s1 = @\"foo\";");
     assertTranslation(translation, "c1 = 'a';");
     assertTranslation(translation, "f3 = JreRetainedLocalValue(f1);");
@@ -270,5 +315,51 @@ public class OperatorRewriterTest extends GenerationTest {
     assertTranslation(translation, "return JreRetainedLocalValue(s1);");
     assertTranslation(translation, "return JreRetainedLocalValue(f1)");
     assertTranslation(translation, "return val;");
+  }
+
+  public void testObjectEquality() throws IOException {
+    String translation = translateSourceFile(
+        "class Test {"
+            + "  boolean testStringEquals(String s1, String s2) {"
+            + "    return s1 == s2;"
+            + "  }"
+            + "  boolean testObjectEquals(Object o1, Object o2) {"
+            + "    return o1 == o2;"
+            + "  }"
+            + "  boolean testObjectEqualsString(String s3, Object o3) {"
+            + "    return s3 == o3;"
+            + "  }"
+            + "  boolean testObjectEqualsNull(Object o4) {"
+            + "    return o4 == null;"
+            + "  }"
+            + "  boolean testPrimitiveEquals(int i1, int i2) {"
+            + "    return i1 == i2;"
+            + "  }"
+            + "  boolean testStringNotEquals(String s5, String s6) {"
+            + "    return s5 != s6;"
+            + "  }"
+            + "  boolean testObjectNotEquals(Object o5, Object o6) {"
+            + "    return o5 != o6;"
+            + "  }"
+            + "  boolean testObjectNotEqualsString(String s7, Object o7) {"
+            + "    return s7 != o7;"
+            + "  }"
+            + "  boolean testObjectNotEqualsNull(Object o8) {"
+            + "    return o8 != null;"
+            + "  }"
+            + "  boolean testPrimitiveNotEquals(int i3, int i4) {"
+            + "    return i3 != i4;"
+            + "  }"
+            + "}", "Test", "Test.m");
+    assertTranslation(translation, "return JreStringEqualsEquals(s1, s2);");
+    assertTranslation(translation, "return JreObjectEqualsEquals(o1, o2);");
+    assertTranslation(translation, "return JreObjectEqualsEquals(s3, o3);");
+    assertTranslation(translation, "return o4 == nil;");
+    assertTranslation(translation, "return i1 == i2;");
+    assertTranslation(translation, "return !JreStringEqualsEquals(s5, s6);");
+    assertTranslation(translation, "return !JreObjectEqualsEquals(o5, o6);");
+    assertTranslation(translation, "return !JreObjectEqualsEquals(s7, o7);");
+    assertTranslation(translation, "return o8 != nil;");
+    assertTranslation(translation, "return i3 != i4;");
   }
 }

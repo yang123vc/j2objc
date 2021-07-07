@@ -1,5 +1,3 @@
-SUFFIXES:
-
 J2OBJC_ROOT = ../..
 include $(J2OBJC_ROOT)/make/common.mk
 include $(J2OBJC_ROOT)/make/j2objc_deps.mk
@@ -25,11 +23,21 @@ OTHER_JAVA_SOURCES = \
   ProtobufTest.java
 
 JAVA_TESTS_ARC = \
-  CompatibilityTest.java
+  ByteStringTest.java \
+  CompatibilityTest.java \
+  EnumsTest.java \
+  MapsTest.java \
+  MessagesTest.java \
+  OneofTest.java \
+  PrimitivesTest.java \
+  StringsTest.java
 OTHER_JAVA_SOURCES_ARC = \
+  MemoryBenchmarks.java \
+  PerformanceBenchmarks.java \
   ProtobufTest.java
 
 PROTOS = \
+  conflicting_class_name.proto \
   empty_file.proto \
   enum_fields.proto \
   funny_names.proto \
@@ -42,7 +50,10 @@ PROTOS = \
   single_file.proto \
   size_test.proto \
   string_fields.proto \
-  typical.proto
+  typical.proto \
+  unittest.proto \
+  unittest_import.proto \
+  unittest_import_public.proto
 
 TESTDATA = \
   testdata/largeproto \
@@ -121,7 +132,7 @@ translate_dependencies: $(CREATE_JAR_RESULT)
 
 OBJS = $(JAVA_SOURCES:%.java=$(OBJS_DIR)/%.o) $(OBJS_DIR)/my_malloc.o \
   $(J2OBJC_PROTOS_SOURCES:$(GEN_OBJC_DIR)/%.m=$(OBJS_DIR)/%.o)
-OBJS_ARC = $(JAVA_SOURCES_ARC:%.java=$(OBJS_DIR)/arc/%.o) \
+OBJS_ARC = $(JAVA_SOURCES_ARC:%.java=$(OBJS_DIR)/arc/%.o) $(OBJS_DIR)/my_malloc.o \
   $(J2OBJC_PROTOS_SOURCES:$(GEN_OBJC_DIR)/%.m=$(OBJS_DIR)/%.o)
 BIN = $(BUILD_DIR)/protobuf_tests
 BIN_ARC = $(BUILD_DIR)/protobuf_tests_arc
@@ -139,8 +150,14 @@ test_objc_arc: $(BIN_ARC)
 memory_benchmarks: $(BIN)
 	@$(BIN) MemoryBenchmarks
 
+memory_benchmarks_arc: $(BIN)
+	@$(BIN_ARC) MemoryBenchmarks
+
 performance_benchmarks: $(BIN)
 	@$(BIN) PerformanceBenchmarks
+
+performance_benchmarks_arc: $(BIN)
+	@$(BIN_ARC) PerformanceBenchmarks
 
 test: test_java test_objc test_objc_arc
 
@@ -150,15 +167,18 @@ clean:
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
-$(OBJS_DIR)/%.o: $(GEN_OBJC_DIR)/%.m \
-  | jre_emul_dist junit_dist protobuf_runtime_dist $(J2OBJC_PROTOS_OBJC)
-	@mkdir -p $(@D)
-	$(TEST_J2OBJCC) -c $(INCLUDE_DIRS:%=-I%) $(C_FLAGS) -o $@ $<
-
+# This ARC rule needs to be declared first, since it uses a more specific
+# pattern than the following rule.
 $(OBJS_DIR)/arc/%.o: $(GEN_OBJC_DIR)/arc/%.m \
   | jre_emul_dist junit_dist protobuf_runtime_dist $(J2OBJC_PROTOS_OBJC)
 	@mkdir -p $(@D)
-	$(TEST_J2OBJCC) -c $(INCLUDE_DIRS:%=-I%) $(C_FLAGS) -fobjc-arc -o $@ $<
+	$(TEST_J2OBJCC) -Werror -c $(INCLUDE_DIRS:%=-I%) $(C_FLAGS) \
+      -fobjc-arc -fobjc-arc-exceptions -o $@ $<
+
+$(OBJS_DIR)/%.o: $(GEN_OBJC_DIR)/%.m \
+  | jre_emul_dist junit_dist protobuf_runtime_dist $(J2OBJC_PROTOS_OBJC)
+	@mkdir -p $(@D)
+	$(TEST_J2OBJCC) -Werror -c $(INCLUDE_DIRS:%=-I%) $(C_FLAGS) -o $@ $<
 
 $(OBJS_DIR)/my_malloc.o: my_malloc.m | jre_emul_dist
 	@mkdir -p $(@D)
@@ -168,5 +188,5 @@ $(BIN): $(OBJS) $(LIB_DEPS)
 	$(TEST_J2OBJCC) -ObjC -Werror -l c++ -ljre_emul -ljunit -lprotobuf_runtime -o $@ $(OBJS)
 
 $(BIN_ARC): $(OBJS_ARC) $(LIB_DEPS)
-	$(TEST_J2OBJCC) -ObjC -Werror -l c++ -ljre_emul -ljunit -lprotobuf_runtime -fobjc-arc \
-	  -o $@ $(OBJS_ARC)
+	$(TEST_J2OBJCC) -ObjC -Werror -l c++ -ljre_emul -ljunit -lprotobuf_runtime \
+       -fobjc-arc -fobjc-arc-exceptions -o $@ $(OBJS_ARC)

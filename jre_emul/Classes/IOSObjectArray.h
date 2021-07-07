@@ -34,13 +34,6 @@
  * an IOSObjectArray is fixed-size but its elements are mutable.
  */
 @interface IOSObjectArray : IOSArray <NSFastEnumeration> {
- @package
-  /**
-   * Determines whether elements are retained.
-   * This field is read-only, visible only for performance reasons. DO NOT MODIFY!
-   */
-  jboolean isRetained_;
-
  @public
   /**
    * The type of elements in this array.
@@ -73,17 +66,17 @@
 /** Create an autoreleased empty array with a type and length. */
 + (instancetype)arrayWithLength:(NSUInteger)length type:(IOSClass *)type;
 
-/** Create an empty multidimensional array. */
+/** Create an autoreleased empty multidimensional array. */
 + (instancetype)arrayWithDimensions:(NSUInteger)dimensionCount
                             lengths:(const jint *)dimensionLengths
                                type:(IOSClass *)type;
 
-/** Create an autoreleased empty multidimensional array. */
+/** Create an empty multidimensional array. */
 + (instancetype)newArrayWithDimensions:(NSUInteger)dimensionCount
                                lengths:(const jint *)dimensionLengths
                                   type:(IOSClass *)type;
 
-/** Create an array with the elements from an NSArray. */
+/** Create an autoreleased array with the elements from an NSArray. */
 + (instancetype)arrayWithArray:(IOSObjectArray *)array;
 
 /** Create an autoreleased array with the elements from an NSArray. */
@@ -123,7 +116,7 @@
 __attribute__((always_inline)) inline id IOSObjectArray_Get(
     __unsafe_unretained IOSObjectArray *array, jint index) {
   IOSArray_checkIndex(array->size_, index);
-  return array->buffer_[index];
+  return RETAIN_AND_AUTORELEASE(array->buffer_[index]);
 }
 
 /**

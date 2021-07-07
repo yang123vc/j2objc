@@ -65,7 +65,6 @@ import com.tngtech.java.junit.dataprovider.DataProvider;
 import com.tngtech.java.junit.dataprovider.DataProviderRunner;
 import com.tngtech.java.junit.dataprovider.UseDataProvider;
 import java.time.Instant;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -75,7 +74,6 @@ import org.junit.runner.RunWith;
 @RunWith(DataProviderRunner.class)
 public class TestInstant extends AbstractTest {
 
-    @Ignore("J2ObjC: requires reflection metadata.")
     @Test
     public void test_immutable() {
         assertImmutable(Instant.class);
@@ -83,7 +81,7 @@ public class TestInstant extends AbstractTest {
 
     @DataProvider
     public static Object[][] provider_sampleEpochMillis() {
-        return new Object [][] {
+        return new Object[][] {
             {"Long.MAX_VALUE", Long.MAX_VALUE},
             {"Long.MAX_VALUE-1", Long.MAX_VALUE - 1},
             {"1", 1L},

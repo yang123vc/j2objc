@@ -54,19 +54,21 @@
 
 - (void)dealloc {
   free(frames_);
+#if !__has_feature(objc_arc)
   [super dealloc];
+#endif
 }
 
 @end
 
 jobject Java_java_lang_Throwable_nativeFillInStackTrace(JNIEnv *_env_, jclass _cls_) {
-  return [[[RawStack alloc] init] autorelease];
+  return AUTORELEASE([[RawStack alloc] init]);
 }
 
 // Filter out native functions (no class), NSInvocation methods, and internal constructor.
 static jboolean ShouldFilterStackElement(JavaLangStackTraceElement *element) {
   NSString *className = [element getClassName];
-  if ([className isEqualToString:JavaLangStackTraceElement_STRIPPED]) {
+  if ([className hasPrefix:JavaLangStackTraceElement_STRIPPED]) {
     return true;
   }
   if ([className isEqualToString:@"NSInvocation"]) {
@@ -104,6 +106,11 @@ jarray Java_java_lang_Throwable_nativeGetStackTrace(
     if ([[element getClassName] isEqualToString:@"JavaLangReflectMethod"] &&
         [[element getMethodName] isEqualToString:@"invoke"]) {
       [frames removeLastObject];
+    }
+    // If symbols were removed, the stack trace will be empty at this point.
+    // In order to help with debugging, return the raw stack trace.
+    if ([frames count] == 0) {
+      ProcessRawStack(rawStack, frames, false);
     }
   }
   return [IOSObjectArray arrayWithNSArray:frames type:JavaLangStackTraceElement_class_()];

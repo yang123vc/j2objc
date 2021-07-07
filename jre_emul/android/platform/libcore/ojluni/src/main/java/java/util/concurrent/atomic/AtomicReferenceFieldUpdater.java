@@ -41,6 +41,7 @@ import java.util.function.BinaryOperator;
 import java.util.function.UnaryOperator;
 import sun.reflect.CallerSensitive;
 
+
 /**
  * A reflection-based utility that enables atomic updates to
  * designated {@code volatile} reference fields of designated
@@ -101,11 +102,8 @@ public abstract class AtomicReferenceFieldUpdater<T,V> {
     public static <U,W> AtomicReferenceFieldUpdater<U,W> newUpdater(Class<U> tclass,
                                                                     Class<W> vclass,
                                                                     String fieldName) {
-        return new AtomicReferenceFieldUpdaterImpl<U,W>(tclass, vclass, fieldName, null);
-        /* J2ObjC: Call stack not available.
         return new AtomicReferenceFieldUpdaterImpl<U,W>
-            (tclass, vclass, fieldName, VMStack.getStackClass1()); // android-changed
-        */
+            (tclass, vclass, fieldName, null);
     }
 
     /**
@@ -315,23 +313,34 @@ public abstract class AtomicReferenceFieldUpdater<T,V> {
             final Class<?> fieldClass;
             final int modifiers;
             try {
-                field = tclass.getDeclaredField(fieldName); // android-changed
+                // Android-changed: Skip privilege escalation which is a noop on Android.
+                /*
+                field = AccessController.doPrivileged(
+                    new PrivilegedExceptionAction<Field>() {
+                        public Field run() throws NoSuchFieldException {
+                            return tclass.getDeclaredField(fieldName);
+                        }
+                    });
+                */
+                field = tclass.getDeclaredField(fieldName);
                 modifiers = field.getModifiers();
-                // BEGIN Android-removed
-                // sun.reflect.misc.ReflectUtil.ensureMemberAccess(
-                //     caller, tclass, null, modifiers);
-                // ClassLoader cl = tclass.getClassLoader();
-                // ClassLoader ccl = caller.getClassLoader();
-                // if ((ccl != null) && (ccl != cl) &&
-                //     ((cl == null) || !isAncestor(cl, ccl))) {
-                //     sun.reflect.misc.ReflectUtil.checkPackageAccess(tclass);
-                // }
-                // END Android-removed
+                // Android-removed: Skip checkPackageAccess which is a noop on Android.
+                /*
+                sun.reflect.misc.ReflectUtil.ensureMemberAccess(
+                        caller, tclass, null, modifiers);
+                ClassLoader cl = tclass.getClassLoader();
+                ClassLoader ccl = caller.getClassLoader();
+                if ((ccl != null) && (ccl != cl) &&
+                    ((cl == null) || !isAncestor(cl, ccl))) {
+                    sun.reflect.misc.ReflectUtil.checkPackageAccess(tclass);
+                }
+                */
                 fieldClass = field.getType();
-            // BEGIN Android-removed
-            // } catch (PrivilegedActionException pae) {
-            //     throw new RuntimeException(pae.getException());
-            // END Android-removed
+                // Android-removed: Skip privilege escalation which is a noop on Android.
+            /*
+            } catch (PrivilegedActionException pae) {
+                throw new RuntimeException(pae.getException());
+            */
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -350,23 +359,24 @@ public abstract class AtomicReferenceFieldUpdater<T,V> {
             this.offset = U.objectFieldOffset(field);
         }
 
-        // BEGIN Android-removed
-        // /**
-        //  * Returns true if the second classloader can be found in the first
-        //  * classloader's delegation chain.
-        //  * Equivalent to the inaccessible: first.isAncestor(second).
-        //  */
-        // private static boolean isAncestor(ClassLoader first, ClassLoader second) {
-        //     ClassLoader acl = first;
-        //     do {
-        //         acl = acl.getParent();
-        //         if (second == acl) {
-        //             return true;
-        //         }
-        //     } while (acl != null);
-        //     return false;
-        // }
-        // END Android-removed
+        // Android-removed: isAncestor's only usage was removed above.
+        /*
+        /**
+         * Returns true if the second classloader can be found in the first
+         * classloader's delegation chain.
+         * Equivalent to the inaccessible: first.isAncestor(second).
+         *
+        private static boolean isAncestor(ClassLoader first, ClassLoader second) {
+            ClassLoader acl = first;
+            do {
+                acl = acl.getParent();
+                if (second == acl) {
+                    return true;
+                }
+            } while (acl != null);
+            return false;
+        }
+        */
 
         /**
          * Checks that target argument is instance of cclass.  On

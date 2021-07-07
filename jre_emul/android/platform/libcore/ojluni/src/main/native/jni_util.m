@@ -31,10 +31,12 @@
 #include "jvm.h"
 #include "jni.h"
 
+#include "IOSArray_PackagePrivate.h"
 #include "java/io/IOException.h"
 #include "java/lang/IllegalArgumentException.h"
 #include "java/lang/InternalError.h"
 #include "java/lang/OutOfMemoryError.h"
+#include "JreEmulation.h"
 
 static NSString *toNSString(const char *msg) {
   return msg ? [NSString stringWithUTF8String:msg] : nil;
@@ -97,6 +99,37 @@ JNU_ThrowIOExceptionWithLastError(JNIEnv *env, const char *defaultDetail)
   @throw create_JavaIoIOException_initWithNSString_(lastErrorString(defaultDetail));
 }
 
+JNIEXPORT jobject JNICALL
+JNU_NewObjectByName(JNIEnv *env, const char *class_name,
+                    const char *constructor_sig, ...)
+{
+    jobject obj = NULL;
+
+    jclass cls = 0;
+    jmethodID cls_initMID;
+    va_list args;
+
+    if ((*env)->EnsureLocalCapacity(env, 2) < 0)
+    goto done;
+
+    cls = (*env)->FindClass(env, class_name);
+    if (cls == 0) {
+        goto done;
+    }
+    cls_initMID  = (*env)->GetMethodID(env, cls,
+                                       "<init>", constructor_sig);
+    if (cls_initMID == NULL) {
+        goto done;
+    }
+    va_start(args, constructor_sig);
+    obj = (*env)->NewObjectV(env, cls, cls_initMID, args);
+    va_end(args);
+
+done:
+    (*env)->DeleteLocalRef(env, cls);
+    return obj;
+}
+
 JNIEXPORT jstring
 JNU_NewStringPlatform(JNIEnv *env, const char *str) {
   return [NSString stringWithUTF8String:str];
@@ -114,4 +147,19 @@ JNU_GetStringPlatformChars(JNIEnv *env, jstring jstr, jboolean *isCopy) {
 JNIEXPORT void JNICALL
 JNU_ReleaseStringPlatformChars(JNIEnv *env, jstring jstr, const char *str) {
   // no-op
+}
+
+JNIEXPORT jclass JNICALL
+JNU_ClassString(JNIEnv *env)
+{
+    return NSString_class_();
+}
+
+JNIEXPORT jint JNICALL
+JNU_CopyObjectArray(JNIEnv *env, jobjectArray dst, jobjectArray src, jint count) {
+  [(IOSArray *)src arraycopy:0
+                 destination:(IOSArray *)dst
+                   dstOffset:0
+                      length:count];
+  return 0;
 }

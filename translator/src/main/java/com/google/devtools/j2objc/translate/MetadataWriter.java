@@ -29,6 +29,7 @@ import com.google.devtools.j2objc.ast.EnumDeclaration;
 import com.google.devtools.j2objc.ast.Expression;
 import com.google.devtools.j2objc.ast.FieldDeclaration;
 import com.google.devtools.j2objc.ast.FunctionDeclaration;
+import com.google.devtools.j2objc.ast.FunctionInvocation;
 import com.google.devtools.j2objc.ast.MethodDeclaration;
 import com.google.devtools.j2objc.ast.NativeExpression;
 import com.google.devtools.j2objc.ast.NativeStatement;
@@ -39,6 +40,7 @@ import com.google.devtools.j2objc.ast.TreeUtil;
 import com.google.devtools.j2objc.ast.TypeDeclaration;
 import com.google.devtools.j2objc.ast.UnitTreeVisitor;
 import com.google.devtools.j2objc.ast.VariableDeclarationFragment;
+import com.google.devtools.j2objc.types.FunctionElement;
 import com.google.devtools.j2objc.types.GeneratedExecutableElement;
 import com.google.devtools.j2objc.types.GeneratedTypeElement;
 import com.google.devtools.j2objc.types.NativeType;
@@ -47,15 +49,18 @@ import com.google.devtools.j2objc.util.ElementUtil;
 import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.TypeUtil;
 import com.google.devtools.j2objc.util.UnicodeUtils;
+import java.lang.annotation.Repeatable;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ArrayType;
+import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -207,7 +212,7 @@ public class MetadataWriter extends UnitTreeVisitor {
       if (typeNode instanceof AnnotationTypeDeclaration) {
         // Add property accessor and static default methods.
         for (AnnotationTypeMemberDeclaration decl : TreeUtil.getAnnotationMembers(typeNode)) {
-          String name = ElementUtil.getName(decl.getExecutableElement());
+          String name = nameTable.getMethodSelector(decl.getExecutableElement());
           String returnType = getTypeName(decl.getExecutableElement().getReturnType());
           String metadata = UnicodeUtils.format("    { NULL, %s, 0x%x, -1, -1, -1, -1, -1, -1 },\n",
               cStr(returnType),
@@ -244,15 +249,23 @@ public class MetadataWriter extends UnitTreeVisitor {
       String methodName = ElementUtil.getName(method);
       String selector = nameTable.getMethodSelector(method);
       boolean isConstructor = ElementUtil.isConstructor(method);
-      if (selector.equals(methodName) || isConstructor) {
+      if (selector.equals(methodName) || isConstructor || translationUtil.isJUnit3TestClass(type)) {
         methodName = null;  // Reduce redundant data.
       }
 
       int modifiers = getMethodModifiers(method) & ElementUtil.ACC_FLAG_MASK;
       String returnTypeStr = isConstructor ? null : getTypeName(method.getReturnType());
+      List<VariableElement> params = new ArrayList<>();
+      if (isConstructor) {
+        Iterables.addAll(params, unit.getEnv().captureInfo().getImplicitPrefixParams(type));
+      }
+      params.addAll(method.getParameters());
+      if (isConstructor) {
+        Iterables.addAll(params, unit.getEnv().captureInfo().getImplicitPostfixParams(type));
+      }
       return UnicodeUtils.format("    { NULL, %s, 0x%x, %s, %s, %s, %s, %s, %s },\n",
           cStr(returnTypeStr), modifiers, cStrIdx(methodName),
-          cStrIdx(getTypeList(ElementUtil.asTypes(method.getParameters()))),
+          cStrIdx(getTypeList(ElementUtil.asTypes(params))),
           cStrIdx(getTypeList(method.getThrownTypes())),
           cStrIdx(signatureGenerator.createMethodTypeSignature(method)),
           funcPtrIdx(annotationsFunc), funcPtrIdx(paramAnnotationsFunc));
@@ -269,11 +282,10 @@ public class MetadataWriter extends UnitTreeVisitor {
       for (FieldDeclaration decl : TreeUtil.getFieldDeclarations(typeNode)) {
         // Fields that share a declaration can share an annotations function.
         String annotationsFunc = createAnnotationsFunction(decl);
-        for (VariableDeclarationFragment f : decl.getFragments()) {
-          String metadata = generateFieldMetadata(f.getVariableElement(), annotationsFunc);
-          if (metadata != null) {
-            fieldMetadata.add(metadata);
-          }
+        VariableDeclarationFragment f = decl.getFragment();
+        String metadata = generateFieldMetadata(f.getVariableElement(), annotationsFunc);
+        if (metadata != null) {
+          fieldMetadata.add(metadata);
         }
       }
       if (fieldMetadata.size() > 0) {
@@ -382,9 +394,20 @@ public class MetadataWriter extends UnitTreeVisitor {
       }
 
       List<Expression> subArrays = new ArrayList<>();
+      boolean isConstructor = ElementUtil.isConstructor(method.getExecutableElement());
+      if (isConstructor) {
+        for (VariableElement unused : unit.getEnv().captureInfo().getImplicitPrefixParams(type)) {
+          subArrays.add(createAnnotations(new ArrayList<>()));
+        }
+      }
       for (SingleVariableDeclaration param : params) {
         subArrays.add(createAnnotations(
             TreeUtil.getRuntimeAnnotationsList(param.getAnnotations())));
+      }
+      if (isConstructor) {
+        for (VariableElement unused : unit.getEnv().captureInfo().getImplicitPostfixParams(type)) {
+          subArrays.add(createAnnotations(new ArrayList<>()));
+        }
       }
 
       return addAnnotationsFunction(
@@ -404,11 +427,39 @@ public class MetadataWriter extends UnitTreeVisitor {
   }
 
   private Expression createAnnotations(List<Annotation> annotations) {
-    List<Expression> expressions = new ArrayList<>();
+    // Group repeated annotations.
+    LinkedHashMap<DeclaredType, List<Annotation>> groupedAnnotations = new LinkedHashMap<>();
     for (Annotation annotation : annotations) {
-      expressions.add(translationUtil.createAnnotation(annotation.getAnnotationMirror()));
+      DeclaredType type = annotation.getAnnotationMirror().getAnnotationType();
+      groupedAnnotations.computeIfAbsent(type, k -> new ArrayList<>()).add(annotation);
+    }
+
+    List<Expression> expressions = new ArrayList<>();
+    for (List<Annotation> group : groupedAnnotations.values()) {
+      if (group.size() == 1) {
+        expressions.add(translationUtil.createAnnotation(group.get(0).getAnnotationMirror()));
+      } else {
+        expressions.add(createContainerAnnotation(group));
+      }
     }
     return translationUtil.createObjectArray(expressions, annotationArray);
+  }
+
+  // Creates the container annotation which value is an array with the repeated annotations.
+  private Expression createContainerAnnotation(List<Annotation> annotations) {
+    DeclaredType annotationType = annotations.get(0).getAnnotationMirror().getAnnotationType();
+    ArrayType arrayType = typeUtil.getArrayType(annotationType);
+    DeclaredType containerType = (DeclaredType) ElementUtil.getAnnotationValue(
+        ElementUtil.getAnnotation(annotationType.asElement(), Repeatable.class), "value");
+    TypeElement containerElement = (TypeElement) containerType.asElement();
+    FunctionElement element = new FunctionElement(
+        "create_" + nameTable.getFullName(containerElement), containerType, containerElement);
+    FunctionInvocation invocation = new FunctionInvocation(element, containerType);
+    element.addParameters(arrayType);
+    List<Expression> array = annotations.stream().map(Annotation::getAnnotationMirror)
+        .map(translationUtil::createAnnotation).collect(Collectors.toList());
+    invocation.addArgument(translationUtil.createObjectArray(array, arrayType));
+    return invocation;
   }
 
   private static String getRawValueField(VariableElement var) {

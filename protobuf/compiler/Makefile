@@ -10,8 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-SUFFIXES:
-
 J2OBJC_ROOT = ../..
 
 include $(J2OBJC_ROOT)/make/common.mk
@@ -44,9 +42,9 @@ $(call check_protobuf_dir)
 PROTOBUF_LIB = $(PROTOBUF_LIB_PATH)/libprotobuf.a
 PROTOC_LIB = $(PROTOBUF_LIB_PATH)/libprotoc.a
 
-CXXFLAGS = -x c++ -stdlib=libc++ -Isrc -I../google/src -I$(PROTOBUF_INCLUDE_PATH) \
+CXXFLAGS = -x c++ -std=c++11 -stdlib=libc++ -Isrc -I$(PROTOBUF_INCLUDE_PATH) \
   -Wno-deprecated-declarations
-LDFLAGS = $(PROTOBUF_LIB) $(PROTOC_LIB) /usr/lib/libc++.dylib
+LDFLAGS = $(PROTOBUF_LIB) $(PROTOC_LIB)
 
 dist: $(PROTOC_EXE_DIST) $(PROTOC_PLUGIN_DIST)
 	@:

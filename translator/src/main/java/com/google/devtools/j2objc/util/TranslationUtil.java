@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
+import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
@@ -153,15 +154,21 @@ public final class TranslationUtil {
     return isJUnit3TestClass(type) || isJUnit4TestClass(type);
   }
 
-  private boolean isJUnit3TestClass(TypeElement type) {
+  public boolean isJUnit3TestClass(TypeElement type) {
     TypeElement testType = typeUtil.resolveJavaType("junit.framework.Test");
     return testType != null && typeUtil.isAssignable(type.asType(), testType.asType());
   }
 
   private boolean isJUnit4TestClass(TypeElement type) {
-    AnnotationMirror annotation =
-        ElementUtil.getQualifiedNamedAnnotation(type, "org.junit.runner.RunWith");
-    return annotation != null;
+    if (ElementUtil.hasQualifiedNamedAnnotation(type, "org.junit.runner.RunWith")) {
+      return true;
+    }
+    for (Element e : type.getEnclosedElements()) {
+      if (ElementUtil.hasQualifiedNamedAnnotation(e, "org.junit.Test")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private ReflectionSupport.Level getReflectionSupportLevelOnPackage(PackageElement node) {
@@ -219,7 +226,8 @@ public final class TranslationUtil {
     TreeNode parent = node.getParent();
 
     while (parent instanceof ParenthesizedExpression) {
-        parent = parent.getParent();
+      node = (Expression) parent;
+      parent = node.getParent();
     }
 
     if (parent instanceof PostfixExpression) {

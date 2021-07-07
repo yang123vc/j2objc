@@ -22,6 +22,7 @@
 #import "IOSClass.h"
 #import "JreRetainedWith.h"
 #import "java/lang/AbstractStringBuilder.h"
+#import "java/lang/ArithmeticException.h"
 #import "java/lang/AssertionError.h"
 #import "java/lang/ClassCastException.h"
 #import "java/lang/Iterable.h"
@@ -45,6 +46,10 @@ void JreThrowClassCastExceptionWithIOSClass(id obj, IOSClass *cls) {
   @throw create_JavaLangClassCastException_initWithNSString_(  // NOLINT
       [NSString stringWithFormat:@"Cannot cast object of type %@ to %@",
           [[obj java_getClass] getName], [cls getName]]);
+}
+
+void JreThrowArithmeticExceptionWithNSString(NSString *msg) {
+  @throw create_JavaLangArithmeticException_initWithNSString_(msg);  // NOLINT
 }
 
 void JreThrowAssertionError(id __unsafe_unretained msg) {
@@ -95,7 +100,7 @@ id JreLoadVolatileId(volatile_id *pVar) {
   VOLATILE_LOCK(lock);
   id value = [*(id *)pVar retain];
   VOLATILE_UNLOCK(lock);
-  return [value autorelease];
+  return AUTORELEASE(value);
 }
 
 id JreAssignVolatileId(volatile_id *pVar, id value) {
@@ -113,7 +118,7 @@ id JreVolatileStrongAssign(volatile_id *pIvar, id value) {
   id oldValue = *(id *)pIvar;
   *(id *)pIvar = value;
   VOLATILE_UNLOCK(lock);
-  [oldValue autorelease];
+  AUTORELEASE(oldValue);
   return value;
 }
 
@@ -126,7 +131,7 @@ jboolean JreCompareAndSwapVolatileStrongId(volatile_id *pVar, id expected, id ne
   }
   VOLATILE_UNLOCK(lock);
   if (result) {
-    [expected autorelease];
+    AUTORELEASE(expected);
   }
   return result;
 }
@@ -138,8 +143,7 @@ id JreExchangeVolatileStrongId(volatile_id *pVar, id newValue) {
   id oldValue = *(id *)pVar;
   *(id *)pVar = newValue;
   VOLATILE_UNLOCK(lock);
-  [oldValue autorelease];
-  return oldValue;
+  return AUTORELEASE(oldValue);
 }
 
 void JreReleaseVolatile(volatile_id *pVar) {
@@ -170,7 +174,7 @@ void JreCloneVolatileStrong(volatile_id *pVar, volatile_id *pOther) {
 id JreRetainedWithAssign(id parent, __strong id *pIvar, id value) {
   if (*pIvar) {
     JreRetainedWithHandlePreviousValue(parent, *pIvar);
-    [*pIvar autorelease];
+    AUTORELEASE(*pIvar);
   }
   // This retain makes sure that the child object has a retain count of at
   // least 2 which is required by JreRetainedWithInitialize.
@@ -191,7 +195,7 @@ id JreVolatileRetainedWithAssign(id parent, volatile_id *pIvar, id value) {
   VOLATILE_UNLOCK(lock);
   if (oldValue) {
     JreRetainedWithHandlePreviousValue(parent, oldValue);
-    [oldValue autorelease];
+    [oldValue release];
   }
   return value;
 }

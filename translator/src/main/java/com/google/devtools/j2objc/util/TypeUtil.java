@@ -44,6 +44,7 @@ import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
+import javax.lang.model.type.UnionType;
 import javax.lang.model.type.WildcardType;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
@@ -260,7 +261,7 @@ public final class TypeUtil {
 
   public boolean isAssignable(TypeMirror t1, TypeMirror t2) {
     if (isGeneratedType(t1) || isGeneratedType(t2)) {
-      // TODO(user): implement as part of converting Elements to their generated versions.
+      // TODO(antoniocortes): implement as part of converting Elements to their generated versions.
       return false;
     }
     return javacTypes.isAssignable(t1, t2);
@@ -268,12 +269,13 @@ public final class TypeUtil {
 
   public boolean isSubtype(TypeMirror t1, TypeMirror t2) {
     if (isGeneratedType(t1) || isGeneratedType(t2)) {
-      // TODO(user): implement as part of converting Elements to their generated versions.
+      // TODO(antoniocortes): implement as part of converting Elements to their generated versions.
       return false;
     }
     return javacTypes.isSubtype(t1, t2);
   }
 
+  @SuppressWarnings("TypeEquals")
   public boolean isSameType(TypeMirror t1, TypeMirror t2) {
     if (isGeneratedType(t1) || isGeneratedType(t2)) {
       return t1.equals(t2);
@@ -281,6 +283,7 @@ public final class TypeUtil {
     return javacTypes.isSameType(t1, t2);
   }
 
+  @SuppressWarnings("TypeEquals")
   public boolean isSubsignature(ExecutableType m1, ExecutableType m2) {
     if (isGeneratedType(m1) || isGeneratedType(m2)) {
       return m1.equals(m2);
@@ -337,7 +340,7 @@ public final class TypeUtil {
   }
 
   /**
-   * TODO(user): See jls-5.6.2 and jls-15.25.
+   * TODO(manvithn): See jls-5.6.2 and jls-15.25.
    * @param trueType the type of the true expression
    * @param falseType the type of the false expression
    * @return the inferred type of the conditional expression
@@ -362,11 +365,7 @@ public final class TypeUtil {
       // so prefer the JDT behavior here.
       return Collections.emptyList();
     }
-    List<? extends TypeMirror> result = new ArrayList<>(javacTypes.directSupertypes(t));
-    if (TypeUtil.isInterface(t)) {
-      result.remove(javaObject.asType());
-    }
-    return result;
+    return javacTypes.directSupertypes(t);
   }
 
   public TypeMirror erasure(TypeMirror t) {
@@ -446,13 +445,34 @@ public final class TypeUtil {
       return getIosArray(((ArrayType) t).getComponentType());
     } else if (isDeclaredType(t)) {
       return getObjcClass((TypeElement) ((DeclaredType) t).asElement());
+    } else if (t.getKind() == TypeKind.UNION) {
+      TypeMirror lub = leastUpperBound(((UnionType)t).getAlternatives());
+      return getObjcClass(asTypeElement(lub));
     }
     return null;
+  }
+
+  private TypeMirror leastUpperBound(List<? extends TypeMirror> types) {
+    List<TypeMirror> superTypes = new ArrayList<>();
+    superTypes.add(types.get(0));
+    while (!superTypes.isEmpty()) {
+      TypeMirror lub = superTypes.remove(0);
+      if (types.stream().allMatch(t -> isAssignable(t, lub))) {
+        // At some point we'll get here because Object is the root of the class hierarchy.
+        return lub;
+      }
+      superTypes.addAll(directSupertypes(lub));
+    }
+    throw new AssertionError("Unreachable path.");
   }
 
   public TypeElement getObjcClass(TypeElement element) {
     TypeElement mapped = javaToObjcTypeMap.get(element);
     return mapped != null ? mapped : element;
+  }
+
+  public boolean isMappedClass(TypeElement element) {
+    return javaToObjcTypeMap.containsKey(element);
   }
 
   /**
@@ -656,6 +676,7 @@ public final class TypeUtil {
     return isReferenceType(t) && getObjcUpperBounds(t).isEmpty();
   }
 
+  @SuppressWarnings("TypeEquals")
   public boolean isObjcAssignable(TypeMirror t1, TypeMirror t2) {
     if (!isReferenceType(t1) || !isReferenceType(t2)) {
       if (t1 instanceof PointerType && t2 instanceof PointerType) {
@@ -731,6 +752,8 @@ public final class TypeUtil {
         return ElementUtil.getName(asTypeElement(t));
       case TYPEVAR:
         return ElementUtil.getName(((TypeVariable) t).asElement());
+      case UNION:
+        return t.toString();
       case BOOLEAN:
         return "boolean";
       case BYTE:
@@ -769,6 +792,7 @@ public final class TypeUtil {
       case LONG:
       case SHORT:
       case TYPEVAR:
+      case UNION:
       case VOID:
         return getName(t);
       default:
@@ -783,6 +807,8 @@ public final class TypeUtil {
         return "[" + getSignatureName(((ArrayType) t).getComponentType());
       case DECLARED:
         return "L" + elementUtil.getBinaryName(asTypeElement(t)).replace('.', '/') + ";";
+      case UNION:
+        return "L" + t.toString().replace('.', '/') + ";";
       case BOOLEAN:
       case BYTE:
       case CHAR:

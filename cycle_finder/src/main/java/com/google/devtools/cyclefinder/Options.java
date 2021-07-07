@@ -17,6 +17,7 @@ package com.google.devtools.cyclefinder;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
@@ -29,6 +30,8 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
@@ -57,13 +60,18 @@ class Options {
   private String sourcepath;
   private String classpath;
   private String bootclasspath;
-  private List<String> whitelistFiles = Lists.newArrayList();
-  private List<String> blacklistFiles = Lists.newArrayList();
+  private final List<String> suppressListFiles = Lists.newArrayList();
+  private final List<String> restrictToListFiles = Lists.newArrayList();
   private List<String> sourceFiles = Lists.newArrayList();
   private String fileEncoding = System.getProperty("file.encoding", "UTF-8");
   private boolean printReferenceGraph = false;
   private SourceVersion sourceVersion = null;
   private final ExternalAnnotations externalAnnotations = new ExternalAnnotations();
+
+  // Flags that are directly forwarded to the javac parser.
+  private static final ImmutableSet<String> PLATFORM_MODULE_SYSTEM_OPTIONS =
+      ImmutableSet.of("--patch-module", "--system", "--add-reads");
+  private final List<String> platformModuleSystemOptions = new ArrayList<>();
 
   public List<String> getSourceFiles() {
     return sourceFiles;
@@ -89,32 +97,30 @@ class Options {
     return bootclasspath != null ? bootclasspath : System.getProperty("sun.boot.class.path");
   }
 
-  public List<String> getWhitelistFiles() {
-    return whitelistFiles;
+  public List<String> getSuppressListFiles() {
+    return suppressListFiles;
   }
 
-  public void addWhitelistFile(String fileName) {
-    whitelistFiles.add(fileName);
+  public void addSuppressListFile(String fileName) {
+    suppressListFiles.add(fileName);
   }
 
-  public List<String> getBlacklistFiles() {
-    return blacklistFiles;
+  public List<String> getRestrictToFiles() {
+    return restrictToListFiles;
   }
 
-  public void addBlacklistFile(String fileName) {
-    blacklistFiles.add(fileName);
+  public void addRestrictToFile(String fileName) {
+    restrictToListFiles.add(fileName);
   }
 
   private void addManifest(String manifestFile) throws IOException {
-    BufferedReader in = Files.newReader(new File(manifestFile), Charset.forName(fileEncoding));
-    try {
+    try (BufferedReader in =
+        Files.newReader(new File(manifestFile), Charset.forName(fileEncoding))) {
       for (String line = in.readLine(); line != null; line = in.readLine()) {
         if (!Strings.isNullOrEmpty(line)) {
           sourceFiles.add(line.trim());
         }
       }
-    } finally {
-      in.close();
     }
   }
 
@@ -147,13 +153,17 @@ class Options {
     return externalAnnotations;
   }
 
-  private void addExternalAnnotationFile(String file) throws IOException {
+  @VisibleForTesting
+  public void addExternalAnnotationFile(String file) throws IOException {
     externalAnnotations.addExternalAnnotationFile(file);
   }
 
-  @VisibleForTesting
-  public void addExternalAnnotationFileContents(String fileContents) throws IOException {
-    externalAnnotations.addExternalAnnotationFileContents(fileContents);
+  public void addPlatformModuleSystemOptions(String... flags) {
+    Collections.addAll(platformModuleSystemOptions, flags);
+  }
+
+  public List<String> getPlatformModuleSystemOptions() {
+    return platformModuleSystemOptions;
   }
 
   public static void usage(String invalidUseMsg) {
@@ -189,16 +199,21 @@ class Options {
           usage("-classpath requires an argument");
         }
         options.classpath = args[nArg];
-      } else if (arg.equals("--whitelist") || arg.equals("-w")) {
+      } else if (arg.equals("--suppress-list")
+          // Deprecated flag names.
+          || arg.equals("--whitelist")
+          || arg.equals("-w")) {
         if (++nArg == args.length) {
-          usage("--whitelist requires an argument");
+          usage("--suppress-list requires an argument");
         }
-        options.whitelistFiles.add(args[nArg]);
-      } else if (arg.equals("--blacklist")) {
+        options.suppressListFiles.add(args[nArg]);
+      } else if (arg.equals("--restrict-to")
+          // Deprecated flag name.
+          || arg.equals("--blacklist")) {
         if (++nArg == args.length) {
-          usage("--blacklist requires an argument");
+          usage("--restrict-to requires an argument");
         }
-        options.blacklistFiles.add(args[nArg]);
+        options.restrictToListFiles.add(args[nArg]);
       } else if (arg.equals("--sourcefilelist") || arg.equals("-s")) {
         if (++nArg == args.length) {
           usage("--sourcefilelist requires an argument");
@@ -228,11 +243,17 @@ class Options {
         }
       } else if (arg.equals("--print-reference-graph")) {
         options.printReferenceGraph = true;
-      } else if (arg.equals("-Xexternal-annotation-file")) {
+      } else if (arg.equals("-external-annotation-file")) {
         if (++nArg == args.length) {
           usage(arg + " requires an argument");
         }
         options.addExternalAnnotationFile(args[nArg]);
+      } else if (PLATFORM_MODULE_SYSTEM_OPTIONS.contains(arg)) {
+        String option = arg;
+        if (++nArg == args.length) {
+          usage(option + " requires an argument");
+        }
+        options.addPlatformModuleSystemOptions(option, args[nArg]);
       } else if (arg.equals("-version")) {
         version();
       } else if (arg.startsWith("-h") || arg.equals("--help")) {

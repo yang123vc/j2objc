@@ -17,11 +17,13 @@
 
 #pragma clang system_header
 
+#import <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
 
 #import "J2ObjC_types.h"
 
 @class IOSClass;
+@class JavaLangRefWeakReference;
 @protocol JavaLangIterable;
 
 #ifndef __has_feature
@@ -54,15 +56,10 @@
 #  define RETAIN_AND_AUTORELEASE(x) [[x retain] autorelease]
 # endif
 
-#ifdef J2OBJC_DISABLE_ALL_CHECKS
- #define J2OBJC_DISABLE_NIL_CHECKS 1
- #define J2OBJC_DISABLE_CAST_CHECKS 1
- #define J2OBJC_DISABLE_ARRAY_CHECKS 1
-#endif
-
-#ifdef J2OBJC_DISABLE_ARRAY_CHECKS
- #define J2OBJC_DISABLE_ARRAY_BOUND_CHECKS 1
- #define J2OBJC_DISABLE_ARRAY_TYPE_CHECKS 1
+#if __has_feature(objc_arc_weak)
+# define WEAK_ __weak
+#else
+# define WEAK_ __unsafe_unretained
 #endif
 
 CF_EXTERN_C_BEGIN
@@ -70,6 +67,7 @@ CF_EXTERN_C_BEGIN
 id JreThrowNullPointerException() __attribute__((noreturn));
 void JreThrowClassCastException(id p, Class cls) __attribute__((noreturn));
 void JreThrowClassCastExceptionWithIOSClass(id p, IOSClass *cls) __attribute__((noreturn));
+void JreThrowArithmeticExceptionWithNSString(NSString *msg) __attribute__((noreturn));
 
 id JreStrongAssign(__strong id *pIvar, id value);
 id JreStrongAssignAndConsume(__strong id *pIvar, NS_RELEASES_ARGUMENT id value);
@@ -82,6 +80,7 @@ id JreExchangeVolatileStrongId(volatile_id *pVar, id newValue);
 void JreCloneVolatile(volatile_id *pVar, volatile_id *pOther);
 void JreCloneVolatileStrong(volatile_id *pVar, volatile_id *pOther);
 void JreReleaseVolatile(volatile_id *pVar);
+id JreRetainedLocalValue(id value);
 
 id JreRetainedWithAssign(id parent, __strong id *pIvar, id value);
 id JreVolatileRetainedWithAssign(id parent, volatile_id *pIvar, id value);
@@ -105,23 +104,13 @@ CF_EXTERN_C_END
  *
  * @param p The object to check for nil.
  */
-#ifdef J2OBJC_DISABLE_NIL_CHECKS
-#define nil_chk(p) p
-#else
 #define nil_chk(p) (p ?: JreThrowNullPointerException())
-#endif
 
 #if !__has_feature(objc_arc)
 __attribute__((always_inline)) inline id JreAutoreleasedAssign(
     id *pIvar, NS_RELEASES_ARGUMENT id value) {
   [*pIvar autorelease];
   return *pIvar = value;
-}
-#endif
-
-#if !__has_feature(objc_arc)
-__attribute__((always_inline)) inline id JreRetainedLocalValue(id value) {
-  return [[value retain] autorelease];
 }
 #endif
 
@@ -268,5 +257,30 @@ J2OBJC_VOLATILE_ACCESS_DEFN(Double, jdouble)
   - (id)retain { return self; } \
   - (oneway void)release {} \
   - (id)autorelease { return self; }
+
+/*!
+ A type to represent an Objective C class.
+ This is actually an `objc_class` but the runtime headers will not allow us to
+ reference `objc_class`, so we have defined our own.
+
+ Adapted from:
+ https://github.com/protocolbuffers/protobuf/blob/master/objectivec/GPBRuntimeTypes.h
+*/
+typedef struct J2ObjCClass_t J2ObjCClass_t;
+
+/*!
+ Macros for generating a Class from a class name. These are used wherever a
+ static Objective C class reference is needed for a generated class. Unlike
+ "[classname class]", this macro doesn't trigger class initialization, avoiding
+ the chance of Objective C initialization deadlocks.
+
+ Adapted from:
+ https://github.com/protocolbuffers/protobuf/blob/master/objectivec/GPBUtilities_PackagePrivate.h
+ */
+#define J2OBJC_CLASS_SYMBOL(name) OBJC_CLASS_$_##name
+#define J2OBJC_CLASS_REFERENCE(name) \
+    ((__bridge Class)&(J2OBJC_CLASS_SYMBOL(name)))
+#define J2OBJC_CLASS_DECLARATION(name) \
+    extern const J2ObjCClass_t J2OBJC_CLASS_SYMBOL(name)
 
 #endif // _J2OBJC_COMMON_H_

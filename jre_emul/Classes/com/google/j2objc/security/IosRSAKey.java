@@ -131,12 +131,12 @@ public abstract class IosRSAKey implements RSAKey, Key {
       publicKeyQuery[(id) kSecReturnData] = (id) kCFBooleanTrue;
       OSStatus status =
           SecItemCopyMatching((CFDictionaryRef)publicKeyQuery, (CFTypeRef *)&publicKey);
-      [publicKeyQuery release];
+      RELEASE_(publicKeyQuery);
 
       IOSByteArray *bytes = nil;
       if (status == noErr && publicKey.length > 0) {
         bytes = [IOSByteArray arrayWithBytes:(jbyte *)publicKey.bytes count:publicKey.length];
-        [publicKey release];
+        RELEASE_(publicKey);
       } else {
           NSString *msg =
               [NSString stringWithFormat:@"PublicKey getEncoded error %d", (int)status];
@@ -229,7 +229,7 @@ public abstract class IosRSAKey implements RSAKey, Key {
 #endif
       }
 
-      [publicKey release];
+      RELEASE_(publicKey);
       return (jlong)secKeyRef;
     ]-*/;
   }
@@ -284,12 +284,12 @@ public abstract class IosRSAKey implements RSAKey, Key {
       [privateKeyQuery setObject:[NSNumber numberWithBool:true] forKey:(id)kSecReturnData];
       OSStatus status =
           SecItemCopyMatching((CFDictionaryRef)privateKeyQuery, (CFTypeRef *)&privateKey);
-      [privateKeyQuery release];
+      RELEASE_(privateKeyQuery);
 
       IOSByteArray *bytes = nil;
       if (status == noErr && privateKey.length > 0) {
         bytes = [IOSByteArray arrayWithBytes:(jbyte *)privateKey.bytes count:privateKey.length];
-        [privateKey release];
+        RELEASE_(privateKey);
       }
       return bytes;
     ]-*/;
@@ -325,8 +325,8 @@ public abstract class IosRSAKey implements RSAKey, Key {
      * certificate needs to be stripped first.
      */
     private static native long createPrivateSecKeyRef(byte[] bytes) /*-[
-      NSData * privateKey = [[[NSData alloc] initWithBytes:(const void *)(bytes->buffer_)
-                                                    length:bytes->size_] autorelease];
+      NSData * privateKey = AUTORELEASE([[NSData alloc] initWithBytes:(const void *)(bytes->buffer_)
+                                                               length:bytes->size_]);
 
       // Delete any previous key definition.
       NSMutableDictionary *keyQuery = getPrivateQuery();
@@ -341,7 +341,12 @@ public abstract class IosRSAKey implements RSAKey, Key {
       // Store key in keychain.
       // Set kSecAttrAccessible to Always, since this fails when the app launches before the phone
       // is unlocked (b/72042384).
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+      // Set kSecAttrAccessible to Always, since this fails when the app launches before the phone
+      // is unlocked (b/72042384).
       keyQuery[(id)kSecAttrAccessible] = (id)kSecAttrAccessibleAlways;
+#pragma clang diagnostic pop
       keyQuery[(id)kSecAttrCanDecrypt] = (id)kCFBooleanTrue;
       keyQuery[(id)kSecAttrCanDerive] = (id)kCFBooleanTrue;
       keyQuery[(id)kSecAttrCanEncrypt] = (id)kCFBooleanTrue;
@@ -378,7 +383,7 @@ public abstract class IosRSAKey implements RSAKey, Key {
 
         if (osStatus != errSecSuccess || !secKeyRef) {
           NSString *msg = [NSString stringWithFormat:
-              @"Problem adding the private key to the keychain after truncating, OSStatus: %d", 
+              @"Problem adding the private key to the keychain after truncating, OSStatus: %d",
               (int)osStatus];
           @throw create_JavaSecurityProviderException_initWithNSString_(msg);
         }

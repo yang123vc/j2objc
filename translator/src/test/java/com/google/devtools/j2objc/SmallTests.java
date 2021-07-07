@@ -52,6 +52,7 @@ import com.google.devtools.j2objc.translate.DefaultMethodsTest;
 import com.google.devtools.j2objc.translate.DestructorGeneratorTest;
 import com.google.devtools.j2objc.translate.EnhancedForRewriterTest;
 import com.google.devtools.j2objc.translate.EnumRewriterTest;
+import com.google.devtools.j2objc.translate.ExternalAnnotationInjectorTest;
 import com.google.devtools.j2objc.translate.FunctionizerTest;
 import com.google.devtools.j2objc.translate.GwtConverterTest;
 import com.google.devtools.j2objc.translate.InitializationNormalizerTest;
@@ -59,6 +60,7 @@ import com.google.devtools.j2objc.translate.InnerClassExtractorTest;
 import com.google.devtools.j2objc.translate.JavaCloneWriterTest;
 import com.google.devtools.j2objc.translate.JavaToIOSMethodTranslatorTest;
 import com.google.devtools.j2objc.translate.LambdaTypeElementAdderTest;
+import com.google.devtools.j2objc.translate.LogSiteInjectorTest;
 import com.google.devtools.j2objc.translate.MetadataWriterTest;
 import com.google.devtools.j2objc.translate.NilCheckResolverTest;
 import com.google.devtools.j2objc.translate.NumberMethodRewriterTest;
@@ -122,6 +124,7 @@ public class SmallTests {
         EnhancedForRewriterTest.class,
         EnumRewriterTest.class,
         ErrorUtilTest.class,
+        ExternalAnnotationInjectorTest.class,
         FileUtilTest.class,
         FunctionizerTest.class,
         GwtConverterTest.class,
@@ -141,6 +144,7 @@ public class SmallTests {
         LambdaTypeElementAdderTest.class,
         LineDirectivesTest.class,
         LiteralGeneratorTest.class,
+        LogSiteInjectorTest.class,
         MetadataWriterTest.class,
         MethodReferenceTest.class,
         NameTableTest.class,
@@ -175,7 +179,7 @@ public class SmallTests {
         UnicodeUtilsTest.class,
         UnsequencedExpressionRewriterTest.class,
         VarargsRewriterTest.class,
-        VariableRenamerTest.class
+        VariableRenamerTest.class,
       };
 
   public static Test suite() {

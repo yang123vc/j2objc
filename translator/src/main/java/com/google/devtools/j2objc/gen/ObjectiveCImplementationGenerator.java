@@ -20,7 +20,6 @@ import com.google.common.collect.Sets;
 import com.google.devtools.j2objc.J2ObjC;
 import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.types.Import;
-
 import java.util.Set;
 
 /**
@@ -53,6 +52,7 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
   public void generate() {
     print(J2ObjC.getFileHeader(options, getGenerationUnit().getSourceName()));
     printImports();
+    printMemoryManagement();
     printIgnoreIncompletePragmas();
     pushIgnoreDeprecatedDeclarationsPragma();
     for (GeneratedType generatedType : getOrderedTypes()) {
@@ -117,5 +117,29 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
     }
 
     printForwardDeclarations(forwardDecls);
+    newline();
+  }
+
+  private void printMemoryManagement() {
+    Options.MemoryManagementOption memoryManagementOption = options.getMemoryManagementOption();
+    String filename = getGenerationUnit().getOutputPath();
+
+    if (memoryManagementOption == Options.MemoryManagementOption.ARC) {
+      println("#if !__has_feature(objc_arc)");
+      println(String.format("#error \"%s must be compiled with ARC (-fobjc-arc)\"", filename));
+    } else {
+      println("#if __has_feature(objc_arc)");
+      println(String.format("#error \"%s must not be compiled with ARC (-fobjc-arc)\"", filename));
+      if (getGenerationUnit().hasWeakFields()) {
+        println("#if !__has_feature(objc_arc_weak)");
+        println(
+            String.format(
+                "#error \"%s must be compiled with weak references support (-fobjc-weak)\"",
+                filename));
+        println("#endif");
+      }
+    }
+
+    println("#endif");
   }
 }

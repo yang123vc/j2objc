@@ -36,9 +36,8 @@ public class TypeUseAnnotationTest extends GenerationTest {
     assertNotInTranslation(translation, "JavaLangString");
   }
 
-  // TODO(nbraswell): Use com.google.j2objc.annotations.WeakOuter when transitioned to Java 8
   String testWeakOuterSetup = "import java.lang.annotation.*;\n"
-      + "@Target(ElementType.TYPE_USE) @interface WeakOuter {}"
+      + "import com.google.j2objc.annotations.WeakOuter;"
       + "interface Simple { public int run(); }"
       + "class SimpleClass { public int run() {return 1;}; }"
       + "abstract class SimpleAbstractClass { public int run(){return 2;}; }"
@@ -48,12 +47,12 @@ public class TypeUseAnnotationTest extends GenerationTest {
     String translationInterfaceWithWeak = translateSourceFile(testWeakOuterSetup
         + "void f() { o = new @WeakOuter Simple() { public int run() { return member; } }; } }",
         "Test", "Test.m");
-    assertTranslation(translationInterfaceWithWeak, "__unsafe_unretained Test *this$0_;");
+    assertTranslation(translationInterfaceWithWeak, "WEAK_ Test *this$0_;");
 
     String translationInterfaceWithoutWeak = translateSourceFile(testWeakOuterSetup
         + "void f() { o = new Simple() { public int run() { return member; } }; } }",
         "Test", "Test.m");
-    assertNotInTranslation(translationInterfaceWithoutWeak, "__unsafe_unretained Test *this$0_;");
+    assertNotInTranslation(translationInterfaceWithoutWeak, "WEAK_ Test *this$0_;");
   }
 
   public void testWeakOuterClass() throws IOException {
@@ -61,12 +60,12 @@ public class TypeUseAnnotationTest extends GenerationTest {
         + "void f() { o = new @WeakOuter SimpleClass() {"
         + "public int run() { return member; } }; } }",
         "Test", "Test.m");
-    assertTranslation(translationInterfaceWithWeak, "__unsafe_unretained Test *this$0_;");
+    assertTranslation(translationInterfaceWithWeak, "WEAK_ Test *this$0_;");
 
     String translationInterfaceWithoutWeak = translateSourceFile(testWeakOuterSetup
         + "void f() { o = new SimpleClass() { public int run() { return member; } }; } }",
         "Test", "Test.m");
-    assertNotInTranslation(translationInterfaceWithoutWeak, "__unsafe_unretained Test *this$0_;");
+    assertNotInTranslation(translationInterfaceWithoutWeak, "WEAK_ Test *this$0_;");
   }
 
   public void testWeakOuterAbstractClass() throws IOException {
@@ -74,11 +73,11 @@ public class TypeUseAnnotationTest extends GenerationTest {
         + "void f() { o = new @WeakOuter SimpleAbstractClass() {"
         + "public int run() { return member; } }; } }",
         "Test", "Test.m");
-    assertTranslation(translationInterfaceWithWeak, "__unsafe_unretained Test *this$0_;");
+    assertTranslation(translationInterfaceWithWeak, "WEAK_ Test *this$0_;");
 
     String translationInterfaceWithoutWeak = translateSourceFile(testWeakOuterSetup
         + "void f() { o = new SimpleAbstractClass() { public int run() { return member; } }; } }",
         "Test", "Test.m");
-    assertNotInTranslation(translationInterfaceWithoutWeak, "__unsafe_unretained Test *this$0_;");
+    assertNotInTranslation(translationInterfaceWithoutWeak, "WEAK_ Test *this$0_;");
   }
 }

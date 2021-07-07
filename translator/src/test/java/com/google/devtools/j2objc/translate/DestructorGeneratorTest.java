@@ -18,7 +18,6 @@ package com.google.devtools.j2objc.translate;
 
 import com.google.devtools.j2objc.GenerationTest;
 import com.google.devtools.j2objc.Options;
-
 import java.io.IOException;
 
 /**
@@ -75,12 +74,18 @@ public class DestructorGeneratorTest extends GenerationTest {
    */
   public void testFieldReleaseReferenceCounting() throws IOException {
     options.setMemoryManagementOption(Options.MemoryManagementOption.REFERENCE_COUNTING);
-    String translation = translateSourceFile("class Test { Object o; Runnable r; }",
-        "Test", "Test.m");
-    assertTranslatedLines(translation,
+    String source =
+        "import com.google.j2objc.annotations.RetainedWith; "
+            + "class Test { "
+            + "  Object o; "
+            + "  @RetainedWith Runnable r; "
+            + "}";
+    String translation = translateSourceFile(source, "Test", "Test.m");
+    assertTranslatedLines(
+        translation,
         "- (void)dealloc {",
         "RELEASE_(o_);",
-        "RELEASE_(r_);",
+        "JreRetainedWithRelease(self, r_);",
         "[super dealloc];",
         "}");
   }
@@ -90,8 +95,13 @@ public class DestructorGeneratorTest extends GenerationTest {
    */
   public void testFieldReleaseARC() throws IOException {
     options.setMemoryManagementOption(Options.MemoryManagementOption.ARC);
-    String translation = translateSourceFile("class Test { Object o; Runnable r; }",
-        "Test", "Test.m");
+    String source =
+        "import com.google.j2objc.annotations.RetainedWith; "
+            + "class Test { "
+            + "  Object o; "
+            + "  @RetainedWith Runnable r; "
+            + "}";
+    String translation = translateSourceFile(source, "Test", "Test.m");
     assertNotInTranslation(translation, "dealloc");
   }
 
@@ -132,6 +142,36 @@ public class DestructorGeneratorTest extends GenerationTest {
         "}");
     assertTranslatedLines(translation,
         "- (void)dealloc {",
+        "  JreCheckFinalize(self, [Test class]);",
+        "}");
+  }
+
+  static final String ON_DEALLOC_SOURCE =
+      "import com.google.j2objc.annotations.OnDealloc;"
+          + "class Test {"
+          + "  @OnDealloc private void close() {}"
+          + "  protected void finalize() {}"
+          + "}";
+
+  public void testOnDeallocReferenceCounting() throws IOException {
+    options.setMemoryManagementOption(Options.MemoryManagementOption.REFERENCE_COUNTING);
+    String translation = translateSourceFile(ON_DEALLOC_SOURCE, "Test", "Test.m");
+    assertTranslatedLines(
+        translation,
+        "- (void)dealloc {",
+        "  Test_close(self);",
+        "  JreCheckFinalize(self, [Test class]);",
+        "  [super dealloc];",
+        "}");
+  }
+
+  public void testOnDeallocARC() throws IOException {
+    options.setMemoryManagementOption(Options.MemoryManagementOption.ARC);
+    String translation = translateSourceFile(ON_DEALLOC_SOURCE, "Test", "Test.m");
+    assertTranslatedLines(
+        translation,
+        "- (void)dealloc {",
+        "  Test_close(self);",
         "  JreCheckFinalize(self, [Test class]);",
         "}");
   }

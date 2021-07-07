@@ -40,10 +40,7 @@
 #define IPv6 AF_INET6
 
 #define NET_ERROR(env, ex, msg) \
-{ if (!(*env)->ExceptionOccurred(env)) JNU_ThrowByName(env, ex, msg) }
-
-#define CHECK_NULL(x) if ((x) == NULL) return;
-#define CHECK_NULL_RETURN(x, y) if ((x) == NULL) return y;
+{ if (!(*env)->ExceptionOccurred(env)) JNU_ThrowByName(env, ex, msg); }
 
 /************************************************************************
  * Cached field IDs
@@ -109,13 +106,13 @@ extern jmethodID ia6_ctrID;
  */
 
 JNIEXPORT void JNICALL NET_ThrowNew(JNIEnv *env, int errorNum, char *msg);
-int NET_GetError();
+int NET_GetError(void);
 
 void NET_ThrowCurrent(JNIEnv *env, char *msg);
 
 jfieldID NET_GetFileDescriptorID(JNIEnv *env);
 
-JNIEXPORT jint JNICALL ipv6_available();
+JNIEXPORT jint JNICALL ipv6_available(void);
 
 void
 NET_AllocSockaddr(struct sockaddr **him, int *len);
@@ -126,7 +123,7 @@ NET_InetAddressToSockaddr(JNIEnv *env, jobject iaObj, int port, struct sockaddr 
 JNIEXPORT jobject JNICALL
 NET_SockaddrToInetAddress(JNIEnv *env, struct sockaddr *him, int *port);
 
-void initLocalAddrTable ();
+void initLocalAddrTable(void);
 void parseExclusiveBindProperty(JNIEnv *env);
 
 void

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014 The Android Open Source Project
- * Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2015, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -35,8 +35,6 @@ import java.security.AccessController;
 import java.security.PrivilegedExceptionAction;
 import java.util.*;
 
-import sun.misc.IoTrace;
-
 
 // Make a socket channel look like a socket.
 //
@@ -61,6 +59,7 @@ public class SocketAdaptor
     private volatile int timeout = 0;
 
     private SocketAdaptor(SocketChannelImpl sc) throws SocketException {
+        // Android-changed: Conscrypt compatibility, ensure fd is not null. http://b/25857624
         super(new FileDescriptorHolderSocketImpl(sc.getFD()));
         this.sc = sc;
     }
@@ -96,7 +95,8 @@ public class SocketAdaptor
             try {
 
                 if (timeout == 0) {
-                    // Android-changed: Be consistent
+                    // Android-changed: Translate exceptions consistently.
+                    // sc.connect(remote);
                     try {
                         sc.connect(remote);
                     } catch (Exception ex) {
@@ -106,25 +106,19 @@ public class SocketAdaptor
                     return;
                 }
 
-                // Implement timeout with a selector
-                SelectionKey sk = null;
-                Selector sel = null;
                 sc.configureBlocking(false);
                 try {
                     if (sc.connect(remote))
                         return;
-                    sel = Util.getTemporarySelector(sc);
-                    sk = sc.register(sel, SelectionKey.OP_CONNECT);
                     long to = timeout;
                     for (;;) {
                         if (!sc.isOpen())
                             throw new ClosedChannelException();
                         long st = System.currentTimeMillis();
-                        int ns = sel.select(to);
-                        if (ns > 0 &&
-                            sk.isConnectable() && sc.finishConnect())
+
+                        int result = sc.poll(Net.POLLCONN, to);
+                        if (result > 0 && sc.finishConnect())
                             break;
-                        sel.selectedKeys().remove(sk);
                         to -= System.currentTimeMillis() - st;
                         if (to <= 0) {
                             try {
@@ -134,12 +128,8 @@ public class SocketAdaptor
                         }
                     }
                 } finally {
-                    if (sk != null)
-                        sk.cancel();
                     if (sc.isOpen())
                         sc.configureBlocking(true);
-                    if (sel != null)
-                        Util.releaseTemporarySelector(sel);
                 }
 
             } catch (Exception x) {
@@ -158,8 +148,7 @@ public class SocketAdaptor
     }
 
     public InetAddress getInetAddress() {
-        // Use #remoteAddress and do manual isConnected check. #getRemoteAddress() returns
-        // non-null result before connection.
+        // Android-changed: remoteAddress() returns non-null before connection. http://b/26140820
         if (!isConnected()) {
             return null;
         }
@@ -174,15 +163,15 @@ public class SocketAdaptor
     public InetAddress getLocalAddress() {
         if (sc.isOpen()) {
             InetSocketAddress local = sc.localAddress();
-            if (local != null)
+            if (local != null) {
                 return Net.getRevealedLocalAddress(local).getAddress();
+            }
         }
         return new InetSocketAddress(0).getAddress();
     }
 
     public int getPort() {
-        // Use #remoteAddress and do manual isConnected check. #getRemoteAddress() returns
-        // non-null result before connection.
+        // Android-changed: remoteAddress() returns non-null before connection. http://b/26140820
         if (!isConnected()) {
           return 0;
         }
@@ -218,42 +207,29 @@ public class SocketAdaptor
                     throw new IllegalBlockingModeException();
                 if (timeout == 0)
                     return sc.read(bb);
-
-                // Implement timeout with a selector
-                SelectionKey sk = null;
-                Selector sel = null;
                 sc.configureBlocking(false);
-                int n = 0;
-                Object traceContext = IoTrace.socketReadBegin();
+
                 try {
+                    int n;
                     if ((n = sc.read(bb)) != 0)
                         return n;
-                    sel = Util.getTemporarySelector(sc);
-                    sk = sc.register(sel, SelectionKey.OP_READ);
                     long to = timeout;
                     for (;;) {
                         if (!sc.isOpen())
                             throw new ClosedChannelException();
                         long st = System.currentTimeMillis();
-                        int ns = sel.select(to);
-                        if (ns > 0 && sk.isReadable()) {
+                        int result = sc.poll(Net.POLLIN, to);
+                        if (result > 0) {
                             if ((n = sc.read(bb)) != 0)
                                 return n;
                         }
-                        sel.selectedKeys().remove(sk);
                         to -= System.currentTimeMillis() - st;
                         if (to <= 0)
                             throw new SocketTimeoutException();
                     }
                 } finally {
-                    IoTrace.socketReadEnd(traceContext, getInetAddress(),
-                                          getPort(), timeout, n > 0 ? n : 0);
-                    if (sk != null)
-                        sk.cancel();
                     if (sc.isOpen())
                         sc.configureBlocking(true);
-                    if (sel != null)
-                        Util.releaseTemporarySelector(sel);
                 }
 
             }
@@ -362,12 +338,9 @@ public class SocketAdaptor
     }
 
     public void sendUrgentData(int data) throws IOException {
-        synchronized (sc.blockingLock()) {
-            if (!sc.isBlocking())
-                throw new IllegalBlockingModeException();
-            int n = sc.sendOutOfBandData((byte)data);
-            assert n == 1;
-        }
+        int n = sc.sendOutOfBandData((byte) data);
+        if (n == 0)
+            throw new IOException("Socket buffer full");
     }
 
     public void setOOBInline(boolean on) throws SocketException {
@@ -438,7 +411,6 @@ public class SocketAdaptor
         sc.close();
     }
 
-    /* TODO(user): Enable after java.nio.channels is updated to Android Nougat.
     public void shutdownInput() throws IOException {
         try {
             sc.shutdownInput();
@@ -454,7 +426,6 @@ public class SocketAdaptor
             Net.translateException(x);
         }
     }
-    */
 
     public String toString() {
         if (sc.isConnected())
@@ -484,6 +455,7 @@ public class SocketAdaptor
         return !sc.isOutputOpen();
     }
 
+    // Android-added: for testing and internal use.
     @Override
     public FileDescriptor getFileDescriptor$() {
         return sc.getFD();

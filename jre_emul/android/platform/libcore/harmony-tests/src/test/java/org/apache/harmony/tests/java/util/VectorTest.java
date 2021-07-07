@@ -17,8 +17,6 @@
 
 package org.apache.harmony.tests.java.util;
 
-import com.google.j2objc.util.ReflectionUtil;
-
 import libcore.java.util.ForEachRemainingTester;
 import libcore.java.util.SpliteratorTester;
 import tests.support.Support_ListTest;
@@ -1256,10 +1254,6 @@ public class VectorTest extends junit.framework.TestCase {
      * java.util.Vector#subList(int, int)
      */
     public void test_subListII() {
-        if (ReflectionUtil.isJreReflectionStripped()) {
-            return;
-        }
-
         // Test for method java.util.List java.util.Vector.subList(int, int)
         List sl = tVector.subList(10, 25);
         assertEquals("Returned sublist of incorrect size", 15, sl.size());
@@ -1443,8 +1437,8 @@ public class VectorTest extends junit.framework.TestCase {
     }
 
     public void test_forEachRemaining_iterator() throws Exception {
-        ForEachRemainingTester.runTests(Vector.class, new String[] { "foo", "bar", "baz" });
-        ForEachRemainingTester.runTests(Vector.class, new String[] { "foo" });
+        ForEachRemainingTester.runTests(Vector::new, new String[] { "foo", "bar", "baz" });
+        ForEachRemainingTester.runTests(Vector::new, new String[] { "foo" });
     }
 
     public void test_spliterator() throws Exception {

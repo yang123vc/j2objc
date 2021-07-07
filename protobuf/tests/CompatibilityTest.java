@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import protos.ConflictingClassNameOuterClass.ConflictingClassName;
 import protos.EmptyFile;
 import protos.MsgWithDefaults;
 import protos.MsgWithDefaultsOrBuilder;
@@ -101,13 +102,18 @@ public class CompatibilityTest extends ProtobufTest {
     PrefixDummy2 dummy2 = PrefixDummy2.newBuilder().build();
   }
 
+  public void testConflictingClassName() throws Exception {
+    @SuppressWarnings("unused")
+    ConflictingClassName dummy = ConflictingClassName.getDefaultInstance();
+  }
+
   public void testSetAndGetInt() throws Exception {
     TypicalData data = TypicalData.newBuilder().setMyInt(42).build();
     assertEquals(42, data.getMyInt());
   }
 
   public void testSetAndGetByteString() throws Exception {
-    ByteString bstr = ByteString.copyFrom("foo".getBytes());
+    ByteString bstr = ByteString.copyFromUtf8("foo");
     TypicalData data = TypicalData.newBuilder().setMyBytes(bstr).build();
     assertEquals("foo", new String(data.getMyBytes().toByteArray()));
   }
@@ -177,13 +183,14 @@ public class CompatibilityTest extends ProtobufTest {
 
   public void testSetAndGetRepeatedBytes() throws Exception {
     List<ByteString> list = new ArrayList<ByteString>();
-    list.add(ByteString.copyFrom("def".getBytes()));
-    list.add(ByteString.copyFrom("ghi".getBytes()));
-    TypicalData data = TypicalData.newBuilder()
-        .addRepeatedBytes(ByteString.copyFrom("abc".getBytes()))
-        .addAllRepeatedBytes(list)
-        .setRepeatedBytes(2, ByteString.copyFrom("jkl".getBytes()))
-        .build();
+    list.add(ByteString.copyFromUtf8("def"));
+    list.add(ByteString.copyFromUtf8("ghi"));
+    TypicalData data =
+        TypicalData.newBuilder()
+            .addRepeatedBytes(ByteString.copyFromUtf8("abc"))
+            .addAllRepeatedBytes(list)
+            .setRepeatedBytes(2, ByteString.copyFromUtf8("jkl"))
+            .build();
     assertEquals(3, data.getRepeatedBytesCount());
     assertEquals("abc", new String(data.getRepeatedBytes(0).toByteArray()));
     byte[] bytes = data.toByteArray();
@@ -626,7 +633,7 @@ public class CompatibilityTest extends ProtobufTest {
 
     TypicalData.Builder dataBuilder = TypicalData.newBuilder();
     dataBuilder.setField(fields[1], new Integer(42));
-    dataBuilder.setField(fields[2], ByteString.copyFrom("foo".getBytes()));
+    dataBuilder.setField(fields[2], ByteString.copyFromUtf8("foo"));
     dataBuilder.setField(fields[3], TypicalData.EnumType.VALUE9.getValueDescriptor());
     dataBuilder.setField(fields[11], TypicalDataMessage.newBuilder().build());
     dataBuilder.setField(fields[12], Boolean.TRUE);
@@ -932,16 +939,17 @@ public class CompatibilityTest extends ProtobufTest {
     List<TypicalDataMessage> repeatedData = new ArrayList<TypicalDataMessage>();
     repeatedData.add(TypicalDataMessage.newBuilder().setMyMessageInt(432).build());
     repeatedData.add(TypicalDataMessage.newBuilder().setMyMessageInt(543).build());
-    TypicalData.Builder dataBuilder = TypicalData.newBuilder()
-        .setExtension(Typical.myPrimitiveExtension, 123)
-        .setExtension(Typical.myExtension, extensionMessage)
-        .setExtension(Typical.myRepeatedPrimitiveExtension, repeatedInts)
-        .addExtension(Typical.myRepeatedPrimitiveExtension, 3)
-        .setExtension(Typical.myRepeatedExtension, repeatedData)
-        .setExtension(Typical.myEnumExtension, TypicalData.EnumType.VALUE1)
-        .setExtension(Typical.myBytesExtension, ByteString.copyFrom("abc".getBytes()))
-        .setExtension(Typical.myBoolExtension, Boolean.TRUE)
-        .setExtension(MsgWithNestedExtensions.intExt, 456);
+    TypicalData.Builder dataBuilder =
+        TypicalData.newBuilder()
+            .setExtension(Typical.myPrimitiveExtension, 123)
+            .setExtension(Typical.myExtension, extensionMessage)
+            .setExtension(Typical.myRepeatedPrimitiveExtension, repeatedInts)
+            .addExtension(Typical.myRepeatedPrimitiveExtension, 3)
+            .setExtension(Typical.myRepeatedExtension, repeatedData)
+            .setExtension(Typical.myEnumExtension, TypicalData.EnumType.VALUE1)
+            .setExtension(Typical.myBytesExtension, ByteString.copyFromUtf8("abc"))
+            .setExtension(Typical.myBoolExtension, Boolean.TRUE)
+            .setExtension(MsgWithNestedExtensions.intExt, 456);
     checkGetExtensions(dataBuilder);
     checkGetExtensions(dataBuilder.build());
 
@@ -1268,7 +1276,7 @@ public class CompatibilityTest extends ProtobufTest {
   }
 
   public void testByteAt() throws Exception {
-    ByteString bstr = ByteString.copyFrom("bar".getBytes());
+    ByteString bstr = ByteString.copyFromUtf8("bar");
     assertEquals(98, bstr.byteAt(0));
     assertEquals(97, bstr.byteAt(1));
     assertEquals(114, bstr.byteAt(2));
@@ -1345,9 +1353,11 @@ public class CompatibilityTest extends ProtobufTest {
 
   public void testDescriptorGetName() throws Exception {
     Descriptor descriptor = TypicalData.Builder.getDescriptor();
-    // Java returns TypicalData.
-    // The transpiled code returns ProtosTypicalData because it does not have
-    // reflection metadata (i.e. defaults to NSStringFromClass).
     assertTrue(descriptor.getName().endsWith("TypicalData"));
+  }
+
+  public void testDescriptorGetFullName() throws Exception {
+    Descriptor descriptor = TypicalData.Builder.getDescriptor();
+    assertTrue(descriptor.getFullName().endsWith("protos.TypicalData"));
   }
 }

@@ -24,9 +24,6 @@
  */
 
 package java.util;
-
-import com.google.j2objc.annotations.ReflectionSupport;
-
 import java.io.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.DoubleConsumer;
@@ -76,7 +73,6 @@ import sun.misc.Unsafe;
  * @author  Frank Yellin
  * @since   1.0
  */
-@ReflectionSupport(value = ReflectionSupport.Level.FULL)
 public
 class Random implements java.io.Serializable {
     /** use serialVersionUID from JDK 1.1 for interoperability */
@@ -387,20 +383,21 @@ class Random implements java.io.Serializable {
      * @throws IllegalArgumentException if bound is not positive
      * @since 1.2
      */
+    public int nextInt(int bound) {
+        if (bound <= 0)
+            throw new IllegalArgumentException(BadBound);
 
-    public int nextInt(int n) {
-        if (n <= 0)
-            throw new IllegalArgumentException("n must be positive");
-
-        if ((n & -n) == n)  // i.e., n is a power of 2
-            return (int)((n * (long)next(31)) >> 31);
-
-        int bits, val;
-        do {
-            bits = next(31);
-            val = bits % n;
-        } while (bits - val + (n-1) < 0);
-        return val;
+        int r = next(31);
+        int m = bound - 1;
+        if ((bound & m) == 0)  // i.e., bound is a power of 2
+            r = (int)((bound * (long)r) >> 31);
+        else {
+            for (int u = r;
+                 u - (r = u % bound) + m < 0;
+                 u = next(31))
+                ;
+        }
+        return r;
     }
 
     /**
@@ -532,8 +529,7 @@ class Random implements java.io.Serializable {
      * @see Math#random
      */
     public double nextDouble() {
-        return (((long)(next(26)) << 27) + next(27))
-            / (double)(1L << 53);
+        return (((long)(next(26)) << 27) + next(27)) * DOUBLE_UNIT;
     }
 
     private double nextNextGaussian;

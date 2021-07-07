@@ -16,8 +16,6 @@
 #
 # Author: Tom Ball, Keith Stanger
 
-SUFFIXES:
-
 CWD = .
 SOURCE_DIR = src/main
 JAVA_SOURCE_DIR = $(SOURCE_DIR)/java
@@ -36,16 +34,18 @@ BASE_PACKAGE = com/google/devtools/j2objc
 
 DIST_DEPS = $(JSR305_JAR) j2objc_annotations.jar
 INTERNAL_DEPS = $(GUAVA_JAR) $(JSR305_JAR) $(PROCYON_JARS) $(SCENELIB_JAR) \
-    $(PLUME_UTIL_JAR)
+    $(PLUME_UTIL_JAR) $(FLOGGER_JARS)
 ifdef JAVA_8
 INTERNAL_DEPS += $(JAVAC_JAR)
 endif
 JAR_DEPS_DIST = $(DIST_DEPS:%=$(DIST_JAR_DIR)/%) $(INTERNAL_DEPS:%=$(JAVA_DEPS_JAR_DIR)/%)
 JAR_DEPS_PATH = $(subst $(eval) ,:,$(strip $(JAR_DEPS_DIST)))
 JUNIT_JAR_DIST = $(DIST_JAR_DIR)/$(JUNIT_JAR)
+TRUTH_JAR_PATH = $(DIST_JAR_DIR)/$(TRUTH_JAR)
 
 CLASSPATH = $(CLASS_DIR):$(JAR_DEPS_PATH)
-TEST_CLASSPATH = $(TEST_DIR):$(CLASS_DIR):$(JAR_DEPS_PATH):$(JUNIT_JAR_DIST)
+TEST_CLASSPATH = \
+  $(TEST_DIR):$(CLASS_DIR):$(JUNIT_JAR_DIST):$(TRUTH_JAR_PATH)
 TEST_BOOT_CLASSPATH = $(DIST_JAR_DIR)/jre_emul.jar
 
 MAIN_CLASS = com.google.devtools.j2objc.J2ObjC
@@ -90,7 +90,6 @@ JAVA_SOURCES = \
 	ast/CreationReference.java \
 	ast/DebugASTDump.java \
 	ast/DebugASTPrinter.java \
-	ast/Dimension.java \
 	ast/DoStatement.java \
 	ast/EmptyStatement.java \
 	ast/EnhancedForStatement.java \
@@ -120,7 +119,6 @@ JAVA_SOURCES = \
 	ast/MethodInvocation.java \
 	ast/MethodReference.java \
 	ast/Name.java \
-	ast/NameQualifiedType.java \
 	ast/NativeDeclaration.java \
 	ast/NativeExpression.java \
 	ast/NativeStatement.java \
@@ -224,6 +222,7 @@ JAVA_SOURCES = \
 	translate/JavaCloneWriter.java \
 	translate/JavaToIOSMethodTranslator.java \
 	translate/LabelRewriter.java \
+	translate/LogSiteInjector.java \
 	translate/MetadataWriter.java \
 	translate/LambdaTypeElementAdder.java \
 	translate/LambdaRewriter.java \
@@ -304,11 +303,45 @@ UNUSED_JAR_CONTENTS = \
   $(CLASS_DIR)/ant_tasks \
   $(CLASS_DIR)/compiler* \
   $(CLASS_DIR)/hook* \
-  $(CLASS_DIR)/jdt*
+  $(CLASS_DIR)/jdt* \
+  $(CLASS_DIR)/com/google/common/cache \
+  $(CLASS_DIR)/com/google/common/eventbus \
+  $(CLASS_DIR)/com/google/common/[nrx]* \
+  $(CLASS_DIR)/com/google/common/util \
+  $(CLASS_DIR)/com/google/third_party \
+  $(CLASS_DIR)/com/sun/[cij]* \
+  $(CLASS_DIR)/com/sun/jvmstat \
+  $(CLASS_DIR)/com/sun/rmi \
+  $(CLASS_DIR)/com/sun/tools/attach \
+  $(CLASS_DIR)/com/sun/tools/classfile \
+  $(CLASS_DIR)/com/sun/tools/corba \
+  $(CLASS_DIR)/com/sun/tools/doclets \
+  $(CLASS_DIR)/com/sun/tools/ex* \
+  $(CLASS_DIR)/com/sun/tools/hat \
+  $(CLASS_DIR)/com/sun/tools/internal \
+  $(CLASS_DIR)/com/sun/tools/javadoc \
+  $(CLASS_DIR)/com/sun/tools/javah \
+  $(CLASS_DIR)/com/sun/tools/javap \
+  $(CLASS_DIR)/com/sun/tools/jdeps \
+  $(CLASS_DIR)/com/sun/tools/jdi \
+  $(CLASS_DIR)/com/sun/tools/jstat \
+  $(CLASS_DIR)/com/sun/tools/script \
+  $(CLASS_DIR)/com/sun/tools/serialver \
+  $(CLASS_DIR)/com/sun/xml \
+  $(CLASS_DIR)/org/relaxng \
+  $(CLASS_DIR)/scenelib/annotations/io/classfile \
+  $(CLASS_DIR)/scenelib/annotations/t* \
+  $(CLASS_DIR)/sun/[ajrs]* \
+  $(CLASS_DIR)/sun/tools/[ans]* \
+  $(CLASS_DIR)/sun/tools/jar \
+  $(CLASS_DIR)/sun/tools/j[cimps]* \
+  $(CLASS_DIR)/sun/tools/tree \
+
 ifeq ($(shell uname), Linux)
-PRUNE_CMD = bash -O globasciiranges -c "rm -rf $(UNUSED_JAR_CONTENTS)"
+PRUNE_CMD = bash -O globasciiranges -c "rm -rf $(UNUSED_JAR_CONTENTS)" \
+   && find $(CLASS_DIR) -name '*.java' -delete
 else
-PRUNE_CMD = rm -rf $(UNUSED_JAR_CONTENTS)
+PRUNE_CMD = rm -rf $(UNUSED_JAR_CONTENTS) && find $(CLASS_DIR) -name '*.java' -delete
 endif
 
 default: $(J2OBJC_JAR)
@@ -354,10 +387,17 @@ dist: $(J2OBJC_JAR_DIST) $(J2OBJC_SH_DIST)
 clean:
 	@rm -rf $(BUILD_DIR) $(J2OBJC_JAR_DIST) $(J2OBJC_SH_DIST)
 
+COMMON_TEST_FLAGS = \
+  -classpath $(TEST_CLASSPATH):$(TEST_BOOT_CLASSPATH) \
+  -Xss4m -XX:+UseParallelGC \
+  -ea junit.textui.TestRunner
+
 test: compile-tests copy-test-resources
-	$(JAVA) -classpath $(TEST_CLASSPATH):$(TEST_BOOT_CLASSPATH) \
-	    -Xss4m -XX:+UseParallelGC \
-	    -ea junit.textui.TestRunner com.google.devtools.j2objc.SmallTests
+	$(JAVA) $(COMMON_TEST_FLAGS) com.google.devtools.j2objc.SmallTests
+
+regression-test: compile-tests copy-test-resources
+	$(JAVA) -Dj2objcc.path=$(ARCH_BIN_DIR)/j2objcc $(COMMON_TEST_FLAGS) \
+	    com.google.devtools.j2objc.regression.LambdaExpressionsTest
 
 compile-tests: $(J2OBJC_JAR)
 	@mkdir -p $(TEST_DIR)

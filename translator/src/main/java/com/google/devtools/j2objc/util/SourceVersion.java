@@ -14,6 +14,8 @@
 
 package com.google.devtools.j2objc.util;
 
+import static com.google.common.base.StandardSystemProperty.JAVA_SPECIFICATION_VERSION;
+
 import java.lang.reflect.Method;
 
 /**
@@ -21,6 +23,12 @@ import java.lang.reflect.Method;
  */
 public enum SourceVersion {
 
+  JAVA_17(17, "17"),
+  JAVA_16(16, "16"),
+  JAVA_15(15, "15"),
+  JAVA_14(14, "14"),
+  JAVA_13(13, "13"),
+  JAVA_12(12, "12"),
   JAVA_11(11, "11"),
   JAVA_10(10, "10"),
   JAVA_9(9, "9"),
@@ -29,7 +37,13 @@ public enum SourceVersion {
   JAVA_6(6, "1.6"),
   JAVA_5(5, "1.5");
 
-  private static SourceVersion maxSupportedVersion = JAVA_8;
+  // Max version supported by translator and runtime.
+  private static SourceVersion maxSupportedVersion = JAVA_15;
+
+  // Max version supported by this class. This allows work on
+  // future versions to be done without exposing customers to
+  // a partial implementation.
+  private static final SourceVersion maxVersion = JAVA_17;
 
   private final int version;
   private final String flag;
@@ -74,6 +88,10 @@ public enum SourceVersion {
     maxSupportedVersion = sourceVersion;
   }
 
+  public static SourceVersion getMaxVersion() {
+    return maxVersion;
+  }
+
   /**
    * Returns the source version value associated with the runtime currently running.
    */
@@ -85,9 +103,10 @@ public enum SourceVersion {
       int majorVersion = (int) version.getClass().getMethod("major").invoke(version);
       sourceVersion = SourceVersion.valueOf(majorVersion);
     } catch (Exception e) {
-      sourceVersion = SourceVersion.parse(System.getProperty("java.specification.version"));
+      sourceVersion = SourceVersion.parse(JAVA_SPECIFICATION_VERSION.value());
     }
-    return sourceVersion.version > maxSupportedVersion.version ? maxSupportedVersion
+    return sourceVersion.version > maxSupportedVersion.version
+        ? maxSupportedVersion
         : sourceVersion;
   }
 

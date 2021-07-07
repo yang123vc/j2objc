@@ -18,15 +18,16 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.io.Files;
 import com.google.common.io.Resources;
 import com.google.devtools.j2objc.util.SourceVersion;
 import com.google.devtools.j2objc.util.Version;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Properties;
 
@@ -35,7 +36,6 @@ class Options {
   private static final String XBOOTCLASSPATH = "-Xbootclasspath:";
   private static String usageMessage;
   private static String helpMessage;
-  private static File publicRootSetFile = null;
 
   static {
     // Load string resources.
@@ -59,6 +59,8 @@ class Options {
   private List<String> sourceFiles = Lists.newArrayList();
   private String fileEncoding = System.getProperty("file.encoding", "UTF-8");
   private boolean treatWarningsAsErrors = false;
+  private File treeShakerRoots;
+  private File outputFile = new File("tree-shaker-report.txt");
 
   // The default source version number if not passed with -source is determined from the system
   // properties of the running java version after parsing the argument list.
@@ -92,6 +94,18 @@ class Options {
     return treatWarningsAsErrors;
   }
 
+  public File getTreeShakerRoots() {
+    return treeShakerRoots;
+  }
+
+  public void setTreeShakerRoots(File treeShakerRoots) {
+    this.treeShakerRoots = treeShakerRoots;
+  }
+
+  public File getOutputFile() {
+    return outputFile;
+  }
+
   private void addManifest(String manifestFile) throws IOException {
     BufferedReader in = new BufferedReader(new FileReader(new File(manifestFile)));
     try {
@@ -111,8 +125,7 @@ class Options {
 
   public SourceVersion sourceVersion() {
     if (sourceVersion == null) {
-      // Pull source version from system properties if it is not passed with -source flag.
-      sourceVersion = SourceVersion.parse(System.getProperty("java.version").substring(0, 3));
+      sourceVersion = SourceVersion.defaultVersion();
     }
     return sourceVersion;
   }
@@ -141,11 +154,29 @@ class Options {
 
   public static Options parse(String[] args) throws IOException {
     Options options = new Options();
+    processArgs(args, options);
+    return options;
+  }
+
+  private static void processArgsFile(String filename, Options options) throws IOException {
+    if (filename.isEmpty()) {
+      usage("no @ file specified");
+    }
+    File f = new File(filename);
+    String fileArgs = Files.asCharSource(f, Charset.forName(options.fileEncoding())).read();
+    // Simple split on any whitespace, quoted values aren't supported.
+    processArgs(fileArgs.split("\\s+"), options);
+  }
+
+  private static void processArgs(String[] args, Options options) throws IOException {
+    boolean printArgs = false;
 
     int nArg = 0;
     while (nArg < args.length) {
       String arg = args[nArg];
-      if (arg.equals("-sourcepath")) {
+      if (arg.startsWith("@")) {
+        processArgsFile(arg.substring(1), options);
+      } else if (arg.equals("-sourcepath")) {
         if (++nArg == args.length) {
           usage("-sourcepath requires an argument");
         }
@@ -164,10 +195,15 @@ class Options {
         if (++nArg == args.length) {
           usage("--tree-shaker-roots");
         }
-        publicRootSetFile = new File(args[nArg]);
-      //TODO(malvania): Enable the bootclasspath option when we have a class file AST
-      //                parser that can use class jars.
+        options.treeShakerRoots = new File(args[nArg]);
+      } else if (arg.equals("--output-file")) {
+        if (++nArg == args.length) {
+          usage("--output-file");
+        }
+        options.outputFile = new File(args[nArg]);
       } else if (arg.startsWith(XBOOTCLASSPATH)) {
+        // TODO(malvania): Enable the bootclasspath option when we have a class file AST
+        //                 parser that can use class jars.
         options.bootclasspath = arg.substring(XBOOTCLASSPATH.length());
       } else if (arg.equals("-encoding")) {
         if (++nArg == args.length) {
@@ -187,6 +223,8 @@ class Options {
         version();
       } else if (arg.equals("-Werror")) {
         options.treatWarningsAsErrors = true;
+      } else if (arg.equals("-Xprint-args")) {
+        printArgs = true;
       } else if (arg.startsWith("-h") || arg.equals("--help")) {
         help(false);
       } else if (arg.startsWith("-")) {
@@ -203,11 +241,9 @@ class Options {
     if (options.sourceFiles.isEmpty()) {
       usage("no source files");
     }
-
-    return options;
-  }
-
-  public File getPublicRootSetFile() {
-    return publicRootSetFile;
+    if (printArgs) {
+      System.err.print("tree_shaker ");
+      System.err.println(String.join(" ", args));
+    }
   }
 }

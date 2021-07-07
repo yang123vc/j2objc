@@ -16,15 +16,15 @@
 #
 # Author: Tom Ball
 
-.SUFFIXES:
 .PHONY: default clean
 
 include environment.mk
 include jre_sources.mk
+include icu_data.mk
 
 MAIN_OBJ = J2ObjCMain.o
 
-JAVA_TO_TRANSLATE = $(JAVA_SOURCES)
+JAVA_TO_TRANSLATE = $(JAVA_SOURCES) $(JAVA_SOURCES_JSON)
 
 MAIN_LIB_OBJS = $(MAIN_OBJ:%=$(CLASS_DIR)/%)
 
@@ -38,12 +38,13 @@ TRANSLATE_JAVA_FULL = $(JAVA_TO_TRANSLATE)
 TRANSLATE_JAVA_RELATIVE = $(JAVA_TO_TRANSLATE)
 TRANSLATE_ARGS = -sourcepath $(JRE_SRC) \
   $(J2OBJC_DEBUGFLAGS) -encoding UTF-8 --doc-comments -Xtranslate-bootclasspath \
-  --nullability -Xexternal-annotation-file $(ANDROID_ANNOTATIONS)
+  --nullability -external-annotation-file $(ANDROID_ANNOTATIONS) \
+  -external-annotation-file $(J2OBJC_ANNOTATIONS)
 ifndef JAVA_8
 TRANSLATE_ARGS += --patch-module java.base=$(JRE_SRC)
 endif
-ifdef J2OBJC_JRE_REFLECTION
-TRANSLATE_ARGS += --reflection:$(J2OBJC_JRE_REFLECTION)
+ifdef J2OBJC_JRE_STRIP_REFLECTION
+TRANSLATE_ARGS += --strip-reflection
 endif
 include ../make/translate.mk
 
@@ -59,22 +60,31 @@ FAT_LIB_COMPILE = $(CLANG) $(OBJCFLAGS) -I$(GEN_OBJC_DIR)
 FAT_LIB_PRECOMPILED_HEADER = JreEmulation.h
 endif
 
-CORE_OBJS_RELATIVE = $(JAVA_SOURCES_CORE:.java=.o) $(NATIVE_JRE_SOURCES_CORE:.m=.o)
-IO_OBJS_RELATIVE = $(JAVA_SOURCES_IO:.java=.o)
-NET_OBJS_RELATIVE = $(JAVA_SOURCES_NET:.java=.o) $(NATIVE_JRE_SOURCES_NET:.m=.o)
-UTIL_OBJS_RELATIVE = $(JAVA_SOURCES_UTIL:.java=.o)
-CONCURRENT_OBJS_RELATIVE = $(JAVA_SOURCES_CONCURRENT:.java=.o)
-CHANNELS_OBJS_RELATIVE = $(JAVA_SOURCES_CHANNELS:.java=.o) $(NATIVE_JRE_SOURCES_CHANNELS:.m=.o)
-SECURITY_OBJS_RELATIVE = $(JAVA_SOURCES_SECURITY:.java=.o)
-SSL_OBJS_RELATIVE = $(JAVA_SOURCES_SSL:.java=.o) $(NATIVE_JRE_SOURCES_SSL:.m=.o)
-XML_OBJS_RELATIVE = $(JAVA_SOURCES_XML:.java=.o)
-ZIP_OBJS_RELATIVE = $(JAVA_SOURCES_ZIP:.java=.o) $(NATIVE_JRE_SOURCES_ZIP:.m=.o)
-SQL_OBJS_RELATIVE = $(JAVA_SOURCES_SQL:.java=.o)
-BEANS_OBJS_RELATIVE = $(JAVA_SOURCES_BEANS:.java=.o)
-TIME_OBJS_RELATIVE = $(JAVA_SOURCES_TIME:.java=.o)
-ICU_OBJS_RELATIVE = $(JAVA_SOURCES_ICU:.java=.o) $(NATIVE_JRE_SOURCES_ICU:.m=.o)
-JRE_OBJS_RELATIVE = $(JAVA_SOURCES:.java=.o) $(NATIVE_JRE_SOURCES:.m=.o)
-ANDROID_OBJS_RELATIVE = $(JAVA_SOURCES_ANDROID:.java=.o)
+srcs_to_objs = $(filter %.o,$(1:.java=.o) $(1:.m=.o) $(1:.mm=.o))
+
+CORE_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_CORE) $(NATIVE_JRE_SOURCES_CORE))
+IO_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_IO))
+NET_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_NET) $(NATIVE_JRE_SOURCES_NET))
+UTIL_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_UTIL))
+CONCURRENT_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_CONCURRENT))
+CHANNELS_OBJS_RELATIVE = \
+    $(call srcs_to_objs, $(JAVA_SOURCES_CHANNELS) $(NATIVE_JRE_SOURCES_CHANNELS))
+FILE_OBJS_RELATIVE = \
+    $(call srcs_to_objs,$(JAVA_SOURCES_FILE) $(NATIVE_JRE_SOURCES_FILE))
+SECURITY_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_SECURITY))
+SSL_OBJS_RELATIVE = \
+    $(call srcs_to_objs,$(JAVA_SOURCES_SSL) $(NATIVE_JRE_SOURCES_SSL))
+XML_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_XML))
+ZIP_OBJS_RELATIVE = \
+    $(call srcs_to_objs,$(JAVA_SOURCES_ZIP) $(NATIVE_JRE_SOURCES_ZIP))
+SQL_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_SQL))
+BEANS_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_BEANS))
+TIME_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_TIME))
+ICU_OBJS_RELATIVE = \
+    $(call srcs_to_objs,$(JAVA_SOURCES_ICU) $(NATIVE_JRE_ICU_EMBEDDED_DATA))
+ANDROID_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_ANDROID))
+JSON_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES_JSON))
+JRE_OBJS_RELATIVE = $(call srcs_to_objs,$(JAVA_SOURCES) $(NATIVE_JRE_SOURCES))
 
 include ../make/fat_lib_macros.mk
 $(call emit_compile_rules,$(FAT_LIB_SOURCE_DIRS),$(FAT_LIB_COMPILE),$(FAT_LIB_PRECOMPILED_HEADER))
@@ -85,6 +95,7 @@ LIBS += $(call emit_library_rules,jre_net,$(NET_OBJS_RELATIVE))
 LIBS += $(call emit_library_rules,jre_util,$(UTIL_OBJS_RELATIVE))
 LIBS += $(call emit_library_rules,jre_concurrent,$(CONCURRENT_OBJS_RELATIVE))
 LIBS += $(call emit_library_rules,jre_channels,$(CHANNELS_OBJS_RELATIVE))
+LIBS += $(call emit_library_rules,jre_file,$(FILE_OBJS_RELATIVE))
 LIBS += $(call emit_library_rules,jre_security,$(SECURITY_OBJS_RELATIVE))
 LIBS += $(call emit_library_rules,jre_ssl,$(SSL_OBJS_RELATIVE))
 LIBS += $(call emit_library_rules,jre_xml,$(XML_OBJS_RELATIVE))
@@ -94,20 +105,21 @@ LIBS += $(call emit_library_rules,jre_beans,$(BEANS_OBJS_RELATIVE))
 LIBS += $(call emit_library_rules,jre_time,$(TIME_OBJS_RELATIVE))
 LIBS += $(call emit_library_rules,jre_icu,$(ICU_OBJS_RELATIVE))
 LIBS += $(call emit_library_rules,android_util,$(ANDROID_OBJS_RELATIVE))
+LIBS += $(call emit_library_rules,json,$(JSON_OBJS_RELATIVE))
 DIST_LIBS = $(LIBS:$(ARCH_BUILD_DIR)/%=$(ARCH_LIB_DIR)/%)
 
 # This list overlaps with EMULATION_HEADERS, but only includes those headers
 # supported for use by native code.
 PUBLIC_EMULATION_HEADERS = $(PUBLIC_NATIVE_HEADERS)
-PUBLIC_TRANSLATED_HEADERS = $(JAVA_PUBLIC_SOURCES:.java=.h)
+PUBLIC_TRANSLATED_HEADERS = $(JAVA_PUBLIC_SOURCES:.java=.h) $(JSON_PUBLIC_SOURCES:.java=.h)
 INCLUDES = $(PUBLIC_TRANSLATED_HEADERS) $(PUBLIC_EMULATION_HEADERS)
 DIST_INCLUDES = $(INCLUDES:%=$(DIST_INCLUDE_DIR)/%)
 
-STATIC_FRAMEWORK_NAME = JRE
-STATIC_FRAMEWORK_HEADERS = $(PUBLIC_EMULATION_HEADERS) $(PUBLIC_TRANSLATED_HEADERS)
+FRAMEWORK_NAME = JRE
+FRAMEWORK_HEADERS = $(PUBLIC_EMULATION_HEADERS) $(PUBLIC_TRANSLATED_HEADERS)
 STATIC_LIBRARY_NAME = $(TRANSLATE_NAME)
 STATIC_HEADERS_DIR = $(ARCH_INCLUDE_DIR)
-include ../make/static_framework.mk
+include ../make/framework.mk
 
 JRE_EMUL_LICENSES = \
   $(DIST_LICENSE_DIR)/android_license.txt \
@@ -165,6 +177,9 @@ $(CLASS_DIR)/%.o: $(EMULATION_CLASS_DIR)/%.m | translate
 	@echo clang -c $<
 	@$(CLANG) $(OBJCFLAGS) -I$(EMULATION_CLASS_DIR) -I$(GEN_OBJC_DIR) $(SDK_FLAGS) -c $< -o $@
 
+icu_data: $(ICU_EMBEDDED_RES_DIR)/$(NATIVE_JRE_ICU_EMBEDDED_DATA)
+	@:
+
 test: libs_dist $(DIST_DIR)/j2objcc
 	$(MAKE) -f tests.mk all-tests
 
@@ -173,14 +188,19 @@ clean:
 	@rm -f $(DIST_DIR)/j2objcc $(DIST_LIBS) $(MAIN_LIB_DIST)
 	@rm -f $(DIST_INCLUDES)
 	@rm -f $(JRE_EMUL_LICENSES)
-	@rm -rf $(STATIC_FRAMEWORK_DIR)
+	@rm -rf $(FRAMEWORK_DIR)
 	@$(MAKE) -f java.mk clean
 
 dist: jre_emul_jars_dist libs_dist $(DIST_DIR)/j2objcc licenses
 
 jars_dist: jre_emul_jars_dist
 
-libs_dist: libs dist_includes $(DIST_LIBS) $(MAIN_LIB_DIST)
+libs_dist: archs_list libs dist_includes $(DIST_LIBS) $(MAIN_LIB_DIST)
+
+# Log which archs will be built (phony because archs_list isn't a file).
+.PHONY: archs_list
+archs_list:
+	@$(info building jre_emul archs: ${J2OBJC_ARCHS})
 
 $(ARCH_LIB_DIR)/%.a: $(ARCH_BUILD_DIR)/%.a
 	@mkdir -p $(@D)
@@ -212,6 +232,7 @@ OBJC_SOURCES_MANIFESTS := \
   $(call objc_manifest,objc_sources_util,$(JAVA_SOURCES_UTIL)) \
   $(call objc_manifest,objc_sources_concurrent,$(JAVA_SOURCES_CONCURRENT)) \
   $(call objc_manifest,objc_sources_channels,$(JAVA_SOURCES_CHANNELS)) \
+  $(call objc_manifest,objc_sources_file,$(JAVA_SOURCES_FILE)) \
   $(call objc_manifest,objc_sources_security,$(JAVA_SOURCES_SECURITY)) \
   $(call objc_manifest,objc_sources_ssl,$(JAVA_SOURCES_SSL)) \
   $(call objc_manifest,objc_sources_xml,$(JAVA_SOURCES_XML)) \
@@ -247,4 +268,3 @@ $(DIST_LICENSE_DIR)/icu_license.txt: icu4c/LICENSE
 $(DIST_LICENSE_DIR)/openjdk_license.txt: openjdk/LICENSE
 	@mkdir -p $(@D)
 	@install -m 0644 $< $@
-

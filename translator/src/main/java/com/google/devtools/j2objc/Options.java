@@ -14,6 +14,9 @@
 
 package com.google.devtools.j2objc;
 
+import static com.google.common.io.FileWriteMode.APPEND;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
@@ -33,6 +36,7 @@ import com.google.devtools.j2objc.util.PackagePrefixes;
 import com.google.devtools.j2objc.util.SourceVersion;
 import com.google.devtools.j2objc.util.Version;
 import java.io.File;
+import java.io.FileFilter;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.UnsupportedCharsetException;
@@ -61,7 +65,7 @@ public class Options {
   private List<String> processorPathEntries = new ArrayList<>();
   private OutputLanguageOption language = OutputLanguageOption.OBJECTIVE_C;
   private MemoryManagementOption memoryManagementOption = null;
-  private boolean emitLineDirectives = false;
+  private EmitLineDirectivesOption emitLineDirectives = EmitLineDirectivesOption.NONE;
   private boolean warningsAsErrors = false;
   private boolean deprecatedDeclarations = false;
   private HeaderMap headerMap = new HeaderMap();
@@ -80,6 +84,7 @@ public class Options {
   private String processors = null;
   private boolean disallowInheritedConstructors = true;
   private boolean nullability = false;
+  private boolean defaultNonnull = false;
   private TimingLevel timingLevel = TimingLevel.NONE;
   private boolean dumpAST = false;
   private String lintArgument = null;
@@ -91,6 +96,8 @@ public class Options {
   private String bootclasspath = null;
   private boolean emitKytheMappings = false;
   private boolean emitSourceHeaders = true;
+  private boolean injectLogSites = false;
+  private boolean allVersions = false;
 
   private Mappings mappings = new Mappings();
   private FileUtil fileUtil = new FileUtil();
@@ -101,7 +108,7 @@ public class Options {
 
   private SourceVersion sourceVersion = null;
 
-  private static File proGuardUsageFile = null;
+  private File proGuardUsageFile = null;
 
   private static String fileHeader;
   private static final String FILE_HEADER_KEY = "file-header";
@@ -195,6 +202,23 @@ public class Options {
   }
 
   /**
+   * Different ways that #line debug directives can be emitted.
+   */
+  private enum EmitLineDirectivesOption {
+    // Don't emit #line directives.
+    NONE,
+
+    // Emit #line directives using the unmodified source file path of the compilation unit; this may
+    // be an absolute path or a relative path.
+    NORMAL,
+
+    // Emit #line directives using the source file path of the compilation unit converted to a
+    // relative path, relative to the current working directory; if the file is not in a
+    // subdirectory of the current working directory then the emitted path is the same as NORMAL.
+    RELATIVE,
+  }
+
+  /**
    * Class that holds the information needed to generate combined output, so that all output goes to
    * a single, named .h/.m file set.
    */
@@ -222,6 +246,8 @@ public class Options {
       ImmutableSet.of("--patch-module", "--system", "--add-reads");
   private final List<String> platformModuleSystemOptions = new ArrayList<>();
 
+  private static final Logger logger = Logger.getLogger("com.google.devtools.j2objc");
+  private boolean logLevelSet = false;
 
   static {
     // Load string resources.
@@ -260,11 +286,12 @@ public class Options {
    * Set all log handlers in this package with a common level.
    */
   private void setLogLevel(Level level) {
-    Logger.getLogger("com.google.devtools.j2objc").setLevel(level);
+    logger.setLevel(level);
+    logLevelSet = true;
   }
 
   public boolean isVerbose() {
-    return Logger.getLogger("com.google.devtools.j2objc").getLevel().equals(Level.FINEST);
+    return logger.getLevel().equals(Level.FINEST);
   }
 
   /**
@@ -274,8 +301,6 @@ public class Options {
    * @throws IOException
    */
   public List<String> load(String[] args) throws IOException {
-    setLogLevel(Level.WARNING);
-
     mappings.addJreMappings();
 
     // Create a temporary directory as the sourcepath's first entry, so that
@@ -284,6 +309,10 @@ public class Options {
 
     ArgProcessor processor = new ArgProcessor();
     processor.processArgs(args);
+    processor.logExpandedArgs(args);
+    if (!logLevelSet) {
+      setLogLevel(Level.WARNING);
+    }
     postProcessArgs();
 
     return processor.sourceFiles;
@@ -291,12 +320,17 @@ public class Options {
 
   private class ArgProcessor {
 
-    private List<String> sourceFiles = new ArrayList<>();
+    private final List<String> sourceFiles = new ArrayList<>();
+    private boolean printArgs = false;
 
     private void processArgs(String[] args) throws IOException {
       Iterator<String> iter = Arrays.asList(args).iterator();
       while (iter.hasNext()) {
         processArg(iter);
+      }
+      if (printArgs) {
+        System.err.print("j2objc ");
+        System.err.println(String.join(" ", args));
       }
     }
 
@@ -324,11 +358,12 @@ public class Options {
       } else if (arg.startsWith("@")) {
         processArgsFile(arg.substring(1));
       } else if (arg.equals("-classpath") || arg.equals("-cp")) {
-        fileUtil.getClassPathEntries().addAll(getPathArgument(getArgValue(args, arg), true));
+        fileUtil.getClassPathEntries().addAll(getPathArgument(getArgValue(args, arg), true, true));
       } else if (arg.equals("-sourcepath")) {
-        fileUtil.getSourcePathEntries().addAll(getPathArgument(getArgValue(args, arg), false));
+        fileUtil.getSourcePathEntries()
+            .addAll(getPathArgument(getArgValue(args, arg), false, false));
       } else if (arg.equals("-processorpath")) {
-        processorPathEntries.addAll(getPathArgument(getArgValue(args, arg), true));
+        processorPathEntries.addAll(getPathArgument(getArgValue(args, arg), true, false));
       } else if (arg.equals("-d")) {
         fileUtil.setOutputDirectory(new File(getArgValue(args, arg)));
       } else if (arg.equals("--mapping")) {
@@ -338,7 +373,7 @@ public class Options {
       } else if (arg.equals("--output-header-mapping")) {
         headerMap.setOutputMappingFile(new File(getArgValue(args, arg)));
       } else if (arg.equals("--dead-code-report")) {
-        proGuardUsageFile = new File(getArgValue(args, arg));
+        addDeadCodeReport(getArgValue(args, arg));
       } else if (arg.equals("--prefix")) {
         addPrefixOption(getArgValue(args, arg));
       } else if (arg.equals("--prefixes")) {
@@ -371,9 +406,11 @@ public class Options {
       } else if (arg.equals("-use-arc")) {
         checkMemoryManagementOption(MemoryManagementOption.ARC);
       } else if (arg.equals("-g")) {
-        emitLineDirectives = true;
+        emitLineDirectives = EmitLineDirectivesOption.NORMAL;
       } else if (arg.equals("-g:none")) {
-        emitLineDirectives = false;
+        emitLineDirectives = EmitLineDirectivesOption.NONE;
+      } else if (arg.equals("-g:relative")) {
+        emitLineDirectives = EmitLineDirectivesOption.RELATIVE;
       } else if (arg.equals("-Werror")) {
         warningsAsErrors = true;
       } else if (arg.equals("--generate-deprecated")) {
@@ -461,6 +498,8 @@ public class Options {
         staticAccessorMethods = true;
       } else if (arg.equals("--class-properties")) {
         setClassProperties(true);
+      } else if (arg.equals("--no-class-properties")) {
+        setClassProperties(false);
       } else if (arg.equals("--swift-friendly")) {
         setSwiftFriendly(true);
       } else if (arg.equals("-processor")) {
@@ -469,6 +508,10 @@ public class Options {
         disallowInheritedConstructors = false;
       } else if (arg.equals("--nullability")) {
         nullability = true;
+      } else if (arg.equals("--no-nullability")) {
+        nullability = false;
+      } else if (arg.equals("-Xdefault-nonnull")) {
+        defaultNonnull = true;
       } else if (arg.startsWith("-Xlint")) {
         lintArgument = arg;
       } else if (arg.equals("-Xtranslate-bootclasspath")) {
@@ -483,15 +526,24 @@ public class Options {
         emitKytheMappings = true;
       } else if (arg.equals("-Xno-source-headers")) {
         emitSourceHeaders = false;
-      } else if (arg.equals("-Xexternal-annotation-file")) {
+      } else if (arg.equals("-Xprint-args")) {
+        printArgs = true;
+      } else if (arg.equals("-external-annotation-file")) {
         addExternalAnnotationFile(getArgValue(args, arg));
+      } else if (arg.equals("--reserved-names")) {
+        NameTable.addReservedNames(getArgValue(args, arg));
       } else if (arg.equals("-version")) {
         version();
       } else if (arg.startsWith("-h") || arg.equals("--help")) {
         help(false);
       } else if (arg.equals("-X")) {
         xhelp();
-      }  else if (arg.equals("-source")) {
+      } else if (arg.equals("-XDinjectLogSites=true")) {
+        injectLogSites = true;
+      } else if (arg.equals("-XDallVersions")) {
+        // For internal use only when adding new version support.
+        allVersions = true;
+      } else if (arg.equals("-source")) {
         String s = getArgValue(args, arg);
         // Handle aliasing of version numbers as supported by javac.
         try {
@@ -503,8 +555,9 @@ public class Options {
         // Dummy out passed target argument, since we don't care about target.
         getArgValue(args, arg);  // ignore
       } else if (PLATFORM_MODULE_SYSTEM_OPTIONS.contains(arg)) {
-        SourceVersion.setMaxSupportedVersion(SourceVersion.JAVA_11);
         addPlatformModuleSystemOptions(arg, getArgValue(args, arg));
+      } else if (arg.equals("--enable-preview")) {
+        addPlatformModuleSystemOptions(arg);
       } else if (arg.startsWith(BATCH_PROCESSING_MAX_FLAG)) {
         // Ignore, batch processing isn't used with javac front-end.
       } else if (obsoleteFlags.contains(arg)) {
@@ -517,6 +570,22 @@ public class Options {
       } else {
         sourceFiles.add(arg);
       }
+    }
+
+    private void logExpandedArgs(String[] args) throws IOException {
+      StringBuilder sb = new StringBuilder();
+      for (String arg : args) {
+        if (sb.length() > 0) {
+          sb.append(' ');
+        }
+        if (arg.startsWith("@")) {
+          File f = new File(arg.substring(1));
+          sb.append(Files.asCharSource(f, fileUtil.getCharset()).read());
+        } else {
+          sb.append(arg);
+        }
+      }
+      logger.fine(sb.toString());
     }
   }
 
@@ -573,11 +642,23 @@ public class Options {
     if (sourceVersion == null) {
       sourceVersion = SourceVersion.defaultVersion();
     }
-    SourceVersion maxVersion = SourceVersion.getMaxSupportedVersion();
-    if (sourceVersion.version() > maxVersion.version()) {
-      ErrorUtil.warning("Java " + sourceVersion.version() + " source version is not "
-          + "supported, using Java " + maxVersion.version() + ".");
-      sourceVersion = maxVersion;
+
+    if (allVersions) {
+      // Warn if using known but unsupported version.
+      if (sourceVersion.version() > SourceVersion.getMaxSupportedVersion().version()) {
+        ErrorUtil.warning("Using unsupported version: " + sourceVersion.version());
+      }
+    } else {
+      SourceVersion maxVersion = SourceVersion.getMaxSupportedVersion();
+      if (sourceVersion.version() > maxVersion.version()) {
+        ErrorUtil.warning(
+            "Java "
+                + sourceVersion.version()
+                + " is not installed, using Java "
+                + maxVersion.version()
+                + " as source version.");
+        sourceVersion = maxVersion;
+      }
     }
     if (sourceVersion.version() > 8) {
       // Allow the modularized JRE to read the J2ObjC annotations (they are in the unnamed module).
@@ -635,7 +716,8 @@ public class Options {
     System.exit(0);
   }
 
-  private List<String> getPathArgument(String argument, boolean expandAarFiles) {
+  private List<String> getPathArgument(String argument, boolean expandAarFiles,
+      boolean expandWildcard) {
     List<String> entries = new ArrayList<>();
     for (String entry : Splitter.on(File.pathSeparatorChar).split(argument)) {
       if (entry.startsWith("~/")) {
@@ -644,6 +726,17 @@ public class Options {
         entry = System.getProperty("user.home") + entry.substring(1);
       }
       File f = new File(entry);
+      if (f.getName().equals("*") && expandWildcard) {
+        File parent = f.getParentFile() == null ? new File(".") : f.getParentFile();
+        FileFilter jarFilter = file -> file.getName().endsWith(".jar");
+        File[] files = parent.listFiles(jarFilter);
+        if (files != null) {
+          for (File jar : files) {
+            entries.add(jar.toString());
+          }
+        }
+        continue;
+      }
       if (entry.endsWith(".aar") && expandAarFiles) {
         // Extract classes.jar from Android library AAR file.
         f = fileUtil().extractClassesJarFromAarFile(f);
@@ -699,11 +792,21 @@ public class Options {
   }
 
   public boolean emitLineDirectives() {
-    return emitLineDirectives;
+    return emitLineDirectives != EmitLineDirectivesOption.NONE;
   }
 
+  @VisibleForTesting
   public void setEmitLineDirectives(boolean b) {
-    emitLineDirectives = b;
+    emitLineDirectives = b ? EmitLineDirectivesOption.NORMAL : EmitLineDirectivesOption.NONE;
+  }
+
+  public boolean emitRelativeLineDirectives() {
+    return emitLineDirectives == EmitLineDirectivesOption.RELATIVE;
+  }
+
+  @VisibleForTesting
+  public void setEmitRelativeLineDirectives() {
+    emitLineDirectives = EmitLineDirectivesOption.RELATIVE;
   }
 
   public boolean treatWarningsAsErrors() {
@@ -735,16 +838,29 @@ public class Options {
     return fileHeader;
   }
 
-  public static void setProGuardUsageFile(File newProGuardUsageFile) {
+  public void setProGuardUsageFile(File newProGuardUsageFile) {
     proGuardUsageFile = newProGuardUsageFile;
   }
 
-  public static File getProGuardUsageFile() {
+  public File getProGuardUsageFile() {
     return proGuardUsageFile;
   }
 
+  /**
+   * Appends a dead code report to the proGuardUsageFile. If that file
+   * doesn't exist, it's created first.
+   */
+  public void addDeadCodeReport(String path) throws IOException {
+    if (proGuardUsageFile == null) {
+      proGuardUsageFile = File.createTempFile("dead_code_report", "cfg");
+    }
+    File f = new File(path);
+    String newReport = Files.asCharSource(f, UTF_8).read();
+    Files.asCharSink(proGuardUsageFile, UTF_8, APPEND).write(newReport);
+  }
+
   public List<String> getBootClasspath() {
-    return getPathArgument(bootclasspath, false);
+    return getPathArgument(bootclasspath, false, false);
   }
 
   public Mappings getMappings() {
@@ -920,6 +1036,16 @@ public class Options {
     nullability = b;
   }
 
+  public boolean defaultNonnull() {
+    return nullability && defaultNonnull;
+  }
+
+  @VisibleForTesting
+  public void setDefaultNonnull(boolean b) {
+    nullability = true;
+    defaultNonnull = b;
+  }
+
   public String lintArgument() {
     return lintArgument;
   }
@@ -967,11 +1093,6 @@ public class Options {
     externalAnnotations.addExternalAnnotationFile(file);
   }
 
-  @VisibleForTesting
-  public void addExternalAnnotationFileContents(String fileContents) throws IOException {
-    externalAnnotations.addExternalAnnotationFileContents(fileContents);
-  }
-
   // Unreleased experimental project.
   public boolean translateClassfiles() {
     return translateClassfiles;
@@ -992,5 +1113,14 @@ public class Options {
 
   public List<String> getPlatformModuleSystemOptions() {
     return platformModuleSystemOptions;
+  }
+
+  public boolean injectLogSites() {
+    return injectLogSites;
+  }
+
+  @VisibleForTesting
+  public void setInjectLogSites(boolean b) {
+    injectLogSites = b;
   }
 }

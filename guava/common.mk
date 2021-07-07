@@ -14,22 +14,21 @@ JAVA_SRC_DIR = $(BUILD_DIR)/java
 JAVA_SOURCES = $(GUAVA_SOURCES:%=$(JAVA_SRC_DIR)/%) \
     $(ERROR_PRONE_ANNOTATIONS_SOURCES:%=$(JAVA_SRC_DIR)/%) \
     $(CHECKER_QUAL_SOURCES:%=$(JAVA_SRC_DIR)/%) \
-    $(ANIMAL_SNIFFER_ANNOTATIONS_SOURCES:%=$(JAVA_SRC_DIR)/%)
+    $(ANIMAL_SNIFFER_ANNOTATIONS_SOURCES:%=$(JAVA_SRC_DIR)/%) \
+    $(FAILUREACCESS_SOURCES:%=$(JAVA_SRC_DIR)/%)
 OBJC_SOURCES_MANIFEST = $(BUILD_DIR)/objc_sources.mf
 CLASSPATH_LIST = \
   $(DIST_JAR_DIR)/$(JSR305_JAR) \
   $(JAVA_DEPS_JAR_DIR)/$(ERROR_PRONE_ANNOTATIONS_JAR) \
   $(JAVA_DEPS_JAR_DIR)/$(CHECKER_QUAL_JAR) \
   $(JAVA_DEPS_JAR_DIR)/$(ANIMAL_SNIFFER_ANNOTATIONS_JAR) \
+  $(JAVA_DEPS_JAR_DIR)/$(FAILUREACCESS_JAR) \
   $(DIST_JAR_DIR)/j2objc_annotations.jar
 CLASSPATH = $(subst $(eval) ,:,$(strip $(CLASSPATH_LIST)))
 
 TRANSLATE_JAVA_FULL = $(JAVA_SOURCES)
 TRANSLATE_JAVA_RELATIVE = $(JAVA_SOURCES:$(JAVA_SRC_DIR)/%=%)
 TRANSLATE_ARGS = -classpath $(CLASSPATH) -encoding UTF-8
-ifndef JAVA_8
-TRANSLATE_ARGS += --patch-module java.base=$(DIST_JAR_DIR)/$(JSR305_JAR)
-endif
 include $(J2OBJC_ROOT)/make/translate.mk
 
 J2OBJCC := $(ARCH_BIN_DIR)/j2objcc -c -I$(GEN_OBJC_DIR) $(CC_WARNINGS)
@@ -39,8 +38,8 @@ FAT_LIB_SOURCE_DIRS = $(GEN_OBJC_DIR)
 FAT_LIB_COMPILE = $(J2OBJCC)
 include $(J2OBJC_ROOT)/make/fat_lib.mk
 
-STATIC_FRAMEWORK_NAME = $(GUAVA_STATIC_FRAMEWORK_NAME)
-include $(J2OBJC_ROOT)/make/static_framework.mk
+FRAMEWORK_NAME = $(GUAVA_FRAMEWORK_NAME)
+include $(J2OBJC_ROOT)/make/framework.mk
 
 fat_lib_dependencies: jre_emul_dist jsr305_dist
 
@@ -54,7 +53,7 @@ dist: $(FAT_LIBS_DIST) $(DIST_JAR) $(DIST_HEADERS)
 
 clean:
 	@rm -rf $(BUILD_DIR) $(FAT_LIBS_DIST) $(DIST_GUAVA_INCLUDE_DIR) $(DIST_JAR)
-	@rm -rf $(STATIC_FRAMEWORK_DIR)
+	@rm -rf $(FRAMEWORK_DIR)
 
 java: $(DIST_JAR)
 
@@ -81,7 +80,8 @@ objc_sources_manifest: $(OBJC_SOURCES_MANIFEST)
 	@:
 
 $(BUILD_DIR)/.extracted: $(GUAVA_SRC_JAR) $(ERROR_PRONE_ANNOTATIONS_SRC_JAR) \
-	$(CHECKER_QUAL_SRC_JAR) $(ANIMAL_SNIFFER_ANNOTATIONS_SRC_JAR) | java_deps_dist
+	$(CHECKER_QUAL_SRC_JAR) $(ANIMAL_SNIFFER_ANNOTATIONS_SRC_JAR) \
+	$(FAILUREACCESS_SRC_JAR) | java_deps_dist
 	@echo "Extracting Guava sources"
 	@mkdir -p $(JAVA_SRC_DIR)
 	@unzip -o -q -d $(JAVA_SRC_DIR) $(GUAVA_SRC_JAR) $(GUAVA_SOURCES)
@@ -91,6 +91,8 @@ $(BUILD_DIR)/.extracted: $(GUAVA_SRC_JAR) $(ERROR_PRONE_ANNOTATIONS_SRC_JAR) \
 		$(CHECKER_QUAL_SOURCES_ORIGINAL_PATH)
 	@unzip -o -q -d $(JAVA_SRC_DIR) $(ANIMAL_SNIFFER_ANNOTATIONS_SRC_JAR) \
 		$(ANIMAL_SNIFFER_ANNOTATIONS_SOURCES)
+	@unzip -o -q -d $(JAVA_SRC_DIR) $(FAILUREACCESS_SRC_JAR) \
+		$(FAILUREACCESS_SOURCES)
 	@echo "Moving checker sources to top level."
 	@rsync -a $(JAVA_SRC_DIR)/checker/src/org/ $(JAVA_SRC_DIR)/org/
 	@rsync -a $(JAVA_SRC_DIR)/framework/src/org/ $(JAVA_SRC_DIR)/org/

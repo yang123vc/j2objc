@@ -72,10 +72,12 @@ import sun.reflect.CallerSensitive;
   return originalName_;
 }
 
+#if !__has_feature(objc_arc)
 - (void)dealloc {
   RELEASE_(originalName_);
   [super dealloc];
 }
+#endif
 @end
 ]-*/
 
@@ -870,7 +872,10 @@ public class Proxy implements java.io.Serializable {
     ]-*/;
 
     native int proxy_hashCode() /*-[
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpointer-to-int-cast"
       return (jint)self;
+#pragma clang diagnostic pop
     ]-*/;
 
     @Override
@@ -927,7 +932,7 @@ public class Proxy implements java.io.Serializable {
         if (method) {
           NSString *originalName = strcmp(selName, "proxy_equalsWithId:") == 0
               ? @"equals" : [NSString stringWithUTF8String:(selName + 6)];
-          return [[ProxyMethod alloc] initWithMethod:method originalName:originalName];
+          return AUTORELEASE([[ProxyMethod alloc] initWithMethod:method originalName:originalName]);
         }
       }
       return nil;

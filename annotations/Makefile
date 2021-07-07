@@ -14,8 +14,6 @@
 #
 # Author: Tom Ball, Keith Stanger
 
-SUFFIXES:
-
 J2OBJC_ROOT = ..
 
 include ../make/common.mk
@@ -35,7 +33,7 @@ $(BUILD_DIR) $(CLASSES_DIR) $(DIST_JAR_DIR):
 
 $(JAR): $(SOURCE_JAVA_FULL) | $(BUILD_DIR) $(CLASSES_DIR)
 	@echo Building j2objc annotations
-	@$(JAVAC) -encoding UTF-8 -d $(CLASSES_DIR) -source 1.7 -target 1.7 \
+	@$(JAVAC) -encoding UTF-8 -d $(CLASSES_DIR) -source 1.8 -target 1.8 \
 	    -nowarn $^
 	@jar cf $(JAR) -C $(CLASSES_DIR) .
 

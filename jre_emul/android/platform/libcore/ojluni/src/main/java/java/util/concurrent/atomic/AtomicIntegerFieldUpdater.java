@@ -40,6 +40,7 @@ import java.lang.reflect.Modifier;
 import java.util.function.IntBinaryOperator;
 import java.util.function.IntUnaryOperator;
 import sun.reflect.CallerSensitive;
+import sun.reflect.Reflection;
 
 /**
  * A reflection-based utility that enables atomic updates to

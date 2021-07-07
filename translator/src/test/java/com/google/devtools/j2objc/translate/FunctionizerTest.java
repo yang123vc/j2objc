@@ -137,7 +137,6 @@ public class FunctionizerTest extends GenerationTest {
         + "  private String str(int i) { return str(); }"
         + "  private String str() { return hello; } }",
         "A", "A.m");
-    translation = getTranslatedFile("A.m");
     assertTranslatedLines(translation,
         "- (NSString *)test {",
         "return A_strWithInt_(self, 0);");
@@ -584,6 +583,13 @@ public class FunctionizerTest extends GenerationTest {
     assertTranslation(translation, "- (instancetype)init NS_UNAVAILABLE;");
   }
 
+  public void testDisallowedConstructorInAbstractClass() throws IOException {
+    String translation = translateSourceFile(
+        "public abstract class A { public A(String unused) {} }", "A", "A.h");
+    // init is inherited from NSObject.
+    assertTranslation(translation, "- (instancetype)init NS_UNAVAILABLE;");
+  }
+
   // Even when the private method contains a super invocation, it must be functionized. (b/63163887)
   public void testPrivateInstanceMethodIsFunctionized() throws IOException {
     String translation = translateSourceFile(
@@ -609,5 +615,25 @@ public class FunctionizerTest extends GenerationTest {
         "NSString *A_testWithNSString_(id<A> self, NSString *msg) {",
         "A_initialize();",  // Issue 1009: this initialize call was missing.
         "return [((NSString *) nil_chk(msg)) uppercaseString];");
+  }
+
+  public void testEnumValuesMethodIsNotRemoved() throws IOException {
+    // Preconditions:
+    // 1) Reflection stripped and no wrapper methods.
+    // 2) Private enum.
+    // 3) No explicit reference to values method.
+    options.setStripReflection(true);
+    options.setEmitWrapperMethods(false);
+    String translation = translateSourceFile(
+        "public class Test { "
+            + "  private enum AnEnum { "
+            + "    A, B, C; "
+            + "  } "
+            + "  public String test() { "
+            + "    return AnEnum.B.toString(); "
+            + "  } "
+            + "} ",
+        "Test", "Test.m");
+    assertTranslation(translation, "+ (IOSObjectArray *)values {");
   }
 }

@@ -33,24 +33,11 @@
 # Author: Tom Ball
 
 APACHE_HARMONY_BASE = apache_harmony/classlib/modules
-JRE_ROOT = $(APACHE_HARMONY_BASE)/luni/src/main/java
-JRE_ARCHIVE_ROOT = $(APACHE_HARMONY_BASE)/archive/src/main/java
 JRE_BEANS_ROOT = $(APACHE_HARMONY_BASE)/beans/src/main/java
-JRE_KERNEL_ROOT = $(APACHE_HARMONY_BASE)/luni-kernel/src/main/java
-JRE_TEST_ROOT = $(APACHE_HARMONY_BASE)/luni/src/test/api/common
-JRE_MATH_TEST_ROOT = $(APACHE_HARMONY_BASE)/math/src/test/java
-JRE_TEXT_TEST_ROOT = $(APACHE_HARMONY_BASE)/text/src/test/java
-TEST_SUPPORT_ROOT = $(APACHE_HARMONY_BASE)/../support/src/test/java
-MATH_TEST_SUPPORT_ROOT = $(APACHE_HARMONY_BASE)/math/src/test/java/tests/api
-REGEX_TEST_ROOT = $(APACHE_HARMONY_BASE)/regex/src/test/java
-CONCURRENT_TEST_ROOT = $(APACHE_HARMONY_BASE)/concurrent/src/test/java
-ARCHIVE_TEST_ROOT = $(APACHE_HARMONY_BASE)/archive/src/test/java
 BEANS_TEST_ROOT = $(APACHE_HARMONY_BASE)/beans/src/test/java
 BEANS_TEST_SUPPORT_ROOT = $(APACHE_HARMONY_BASE)/beans/src/test/support/java
-LOGGING_TEST_ROOT = $(APACHE_HARMONY_BASE)/logging/src/test/java
 ICU4C_I18N_ROOT = icu4c/i18n
 ICU4C_COMMON_ROOT = icu4c/common
-J2OBJC_ANNOTATIONS_ROOT = ../annotations/src/main/java
 
 ANDROID_BASE = android
 ANDROID_PLATFORM = android/platform
@@ -77,16 +64,21 @@ ANDROID_XML_ROOT = $(LIBCORE_BASE)/xml/src/main/java
 OKIO_ROOT = $(ANDROID_PLATFORM)/external/okhttp/okio/okio/src/main/java
 OKIO_TEST_ROOT = $(ANDROID_PLATFORM)/external/okhttp/okio/okio/src/test/java
 OJLUNI_TEST_BASE = $(LIBCORE_BASE)/ojluni/src/test
+OJLUNI_NIO_TEST_ROOT = $(LIBCORE_BASE)/ojluni/src
 JAVA_TIME_TEST_ROOT = $(OJLUNI_TEST_BASE)/java/time
 ICU_ROOT = $(ANDROID_PLATFORM)/external/icu/android_icu4j/src/main/java
 ICU_TEST_ROOT = $(ANDROID_PLATFORM)/external/icu/android_icu4j/src/main/tests
-ICU_DATA_ROOT = $(ANDROID_PLATFORM)/external/icu/data
+ICU_RES_DIR = $(BUILD_DIR)/icu_res
+ICU_EMBEDDED_RES_DIR = $(ICU_RES_DIR)/embedded
+ANDROID_PLATFORM_COMPAT_ROOT = $(ANDROID_BASE)/tools/platform-compat/java
 
-OPENJDK_ROOT = openjdk/src/share/classes
+OPENJDK_SHARE_ROOT = openjdk/src/share/classes
+OPENJDK_MACOSX_ROOT = openjdk/src/macosx/classes
+OPENJDK_MACOSX_NATIVE = openjdk/src/macosx/native
 
 APPLE_ROOT = apple_apsl
 
-MISC_TEST_ROOT = Tests
+MISC_TEST_ROOT = misc_tests
 J2OBJC_ROOT = ..
 
 ANDROID_INCLUDE = $(LIBCORE_BASE)/include
@@ -108,10 +100,12 @@ MAIN_LIB_DIST = $(DIST_LIB_MACOSX_DIR)/libj2objc_main.a
 EMULATION_CLASS_DIR = Classes
 TESTS_DIR = $(BUILD_DIR)/tests
 RELATIVE_TESTS_DIR = $(BUILD_DIR_NAME)/tests
-STUBS_DIR = stub_classes
+STUBS_DIR = stub_classes/java
 ANDROID_NATIVE_DIR = $(LIBCORE_BASE)/luni/src/main/native
 ANDROID_NATIVE_TEST_DIR = $(LIBCORE_BASE)/luni/src/test/native
 LAMBDA_DIR = $(LIBCORE_BASE)/ojluni/src/lambda/java
+JSON_JAR = $(BUILD_DIR)/json.jar
+JSON_JAR_DIST = $(DIST_JAR_DIR)/json.jar
 
 ifndef TRANSLATED_SOURCE_DIR
 TRANSLATED_SOURCE_DIR = $(CLASS_DIR)
@@ -123,32 +117,34 @@ else
 RESOURCES_DEST_DIR = $(TESTS_DIR)
 endif
 
-JRE_SRC_ROOTS = $(JRE_ROOT) $(JRE_KERNEL_ROOT) \
+JRE_SRC_ROOTS = \
     $(ANDROID_DALVIK_ROOT) $(ANDROID_LUNI_ROOT) \
-    $(ANDROID_XML_ROOT) $(EMULATION_CLASS_DIR) $(JRE_ARCHIVE_ROOT) \
-    $(ANDROID_CORE_ROOT) $(ANDROID_JSON_ROOT) $(J2OBJC_ANNOTATIONS_ROOT) \
+    $(ANDROID_XML_ROOT) $(EMULATION_CLASS_DIR) \
+    $(ANDROID_CORE_ROOT) $(ANDROID_JSON_ROOT) \
     $(JRE_BEANS_ROOT) $(J2OBJC_LUNI_ROOT) $(ANDROID_OPENJDK_ROOT) \
-    $(OKIO_ROOT) $(LAMBDA_DIR) $(OPENJDK_ROOT) $(STUBS_DIR) $(ICU_ROOT)
+    $(OKIO_ROOT) $(LAMBDA_DIR) $(OPENJDK_SHARE_ROOT) $(OPENJDK_MACOSX_ROOT) \
+    $(STUBS_DIR) $(ICU_ROOT) $(ANDROID_PLATFORM_COMPAT_ROOT)
 JRE_SRC = $(subst $(eval) ,:,$(JRE_SRC_ROOTS))
-TEST_SRC_ROOTS = $(JRE_TEST_ROOT) $(JRE_MATH_TEST_ROOT) \
-    $(TEST_SUPPORT_ROOT) $(MATH_TEST_SUPPORT_ROOT) $(REGEX_TEST_ROOT) \
-    $(CONCURRENT_TEST_ROOT) $(MISC_TEST_ROOT) $(ANDROID_TEST_SUPPORT_ROOT) \
-    $(JRE_TEXT_TEST_ROOT) $(ANDROID_LUNI_TEST_ROOT) $(ARCHIVE_TEST_ROOT) \
-    $(ANDROID_APACHE_TEST_ROOT) $(LOGGING_TEST_ROOT) \
+TEST_SRC_ROOTS = \
+    $(MISC_TEST_ROOT) $(ANDROID_TEST_SUPPORT_ROOT) \
+    $(ANDROID_LUNI_TEST_ROOT) \
+    $(ANDROID_APACHE_TEST_ROOT) \
     $(ANDROID_CORE_TESTS_ROOT) $(ANDROID_TESTS_RUNNER_ROOT) \
     $(ANDROID_JSON_TEST_ROOT) $(BEANS_TEST_ROOT) $(BEANS_TEST_SUPPORT_ROOT) \
     $(ANDROID_JSR166_TEST_ROOT) $(MOCKWEBSERVER_ROOT) \
     $(OKIO_TEST_ROOT) $(ANDROID_DALVIK_TEST_ROOT) \
-    $(APACHE_COMMONS_LANG_TEST_ROOT) $(JAVA_TIME_TEST_ROOT) $(ICU_TEST_ROOT)
+    $(APACHE_COMMONS_LANG_TEST_ROOT) $(JAVA_TIME_TEST_ROOT) \
+    $(OJLUNI_NIO_TEST_ROOT) $(ICU_TEST_ROOT)
 TEST_SRC = $(subst $(eval) ,:,$(TEST_SRC_ROOTS))
 vpath %.java $(JRE_SRC):$(TEST_SRC)
 
 NATIVE_SOURCE_DIRS = $(EMULATION_CLASS_DIR) $(APPLE_ROOT) $(ANDROID_NATIVE_DIR) \
   $(ANDROID_OPENJDK_NATIVE) $(J2OBJC_LUNI_NATIVE) \
-  $(ICU_DATA_ROOT)
+  $(ICU_EMBEDDED_RES_DIR) $(OPENJDK_MACOSX_NATIVE)
 
 # Clang warnings
-WARNINGS := $(CC_WARNINGS) $(WARNINGS) -Wno-unused-label -Wno-dangling-else
+WARNINGS := $(CC_WARNINGS) $(WARNINGS) -Wno-unused-label -Wno-dangling-else \
+  -Wimplicit-function-declaration -Wint-conversion -Wshorten-64-to-32 -Wcomma -Wnonnull
 
 ifeq ("$(strip $(XCODE_VERSION_MAJOR))", "0500")
 OBJCFLAGS += -DSET_MIN_IOS_VERSION
@@ -183,11 +179,11 @@ OBJCFLAGS_NO_ARC := $(OBJCFLAGS)
 
 OBJCPPFLAGS := $(OBJCFLAGS) -x objective-c++ -DU_SHOW_CPLUSPLUS_API=0
 
-# Require C11 compilation to support Java volatile translation.
-OBJCFLAGS += -std=c11
-
 ifeq ("$(strip $(CLANG_ENABLE_OBJC_ARC))", "YES")
-$(error The jre_emul build no longer supports an ARC build)
+TRANSLATE_ARGS += -use-arc
+OBJCFLAGS := $(OBJCFLAGS) -fobjc-arc -fobjc-arc-exceptions\
+ -Wno-arc-bridge-casts-disallowed-in-nonarc \
+ -Xclang -fobjc-runtime-has-weak
 endif
 
 # Specify bitcode flag if clang version 7 or greater. This is necessary to support

@@ -17,8 +17,6 @@
 
 package org.apache.harmony.tests.java.util;
 
-import com.google.j2objc.util.ReflectionUtil;
-
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -945,8 +943,8 @@ public class LinkedListTest extends junit.framework.TestCase {
     }
 
     public void test_forEachRemaining_iterator() throws Exception {
-        ForEachRemainingTester.runTests(LinkedList.class, new String[]{ "foo", "bar", "baz "});
-        ForEachRemainingTester.runTests(LinkedList.class, new String[] { "foo" });
+        ForEachRemainingTester.runTests(LinkedList::new, new String[]{ "foo", "bar", "baz "});
+        ForEachRemainingTester.runTests(LinkedList::new, new String[] { "foo" });
     }
 
     public void test_spliterator() throws Exception {
@@ -998,10 +996,6 @@ public class LinkedListTest extends junit.framework.TestCase {
      * java.util.LinkedList#Serialization()
      */
     public void test_serialization() throws Exception {
-        if (ReflectionUtil.isJreReflectionStripped()) {
-            return;
-        }
-
         assertTrue(ll.add(new Integer(1)));
         assertTrue(ll.add(new Integer(2)));
         assertTrue(ll.add(new Integer(3)));

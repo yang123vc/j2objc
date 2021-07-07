@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The Android Open Source Project
+ * Copyright (C) 2016 The Android Open Source Project
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
@@ -21,7 +21,6 @@
 
 package sun.nio.ch;
 
-import com.google.j2objc.annotations.ReflectionSupport;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,7 +38,6 @@ import java.net.SocketImpl;
  * since {@link SocketAdaptor} should override everything in {@link Socket}
  * which may access the {@code impl} field.
  */
-@ReflectionSupport(value = ReflectionSupport.Level.FULL)
 class FileDescriptorHolderSocketImpl extends SocketImpl {
     public FileDescriptorHolderSocketImpl(FileDescriptor fd) {
         this.fd = fd;

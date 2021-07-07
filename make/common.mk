@@ -34,8 +34,18 @@ ARCH_BUILD_DIR = $(BUILD_DIR)
 ARCH_BIN_DIR = $(DIST_DIR)
 ARCH_LIB_DIR = $(DIST_LIB_DIR)
 ARCH_LIB_MACOSX_DIR = $(DIST_LIB_MACOSX_DIR)
+ARCH_LIB_MAC_CATALYST_DIR = $(DIST_LIB_MAC_CATALYST_DIR)
+ARCH_LIB_SIMULATOR_DIR = $(ARCH_LIB_SIMULATOR_DIR)
 ARCH_INCLUDE_DIR = $(DIST_INCLUDE_DIR)
 endif
+
+# iPhone-specific library dirs, used for xcframework.
+ARCH_BUILD_IPHONE_DIR = $(ARCH_BUILD_DIR)/iphone
+
+# iPhone simulator library dirs.
+ARCH_BUILD_SIMULATOR_DIR = $(ARCH_BUILD_DIR)/simulator
+ARCH_LIB_SIMULATOR_DIR = $(ARCH_LIB_DIR)/simulator
+DIST_LIB_SIMULATOR_DIR = $(DIST_LIB_DIR)/simulator
 
 # Macosx library dirs.
 ARCH_BUILD_MACOSX_DIR = $(ARCH_BUILD_DIR)/macosx
@@ -52,6 +62,11 @@ ARCH_BUILD_TV_DIR = $(ARCH_BUILD_DIR)/appletvos
 ARCH_LIB_TV_DIR = $(ARCH_LIB_DIR)/appletvos
 DIST_LIB_TV_DIR = $(DIST_LIB_DIR)/appletvos
 
+# Mac Catalyst library dirs.
+ARCH_BUILD_MAC_CATALYST_DIR = $(ARCH_BUILD_DIR)/maccatalyst
+ARCH_LIB_MAC_CATALYST_DIR = $(ARCH_LIB_DIR)/maccatalyst
+DIST_LIB_MAC_CATALYST_DIR = $(DIST_LIB_DIR)/maccatalyst
+
 ifndef GEN_OBJC_DIR
 GEN_OBJC_DIR = $(BUILD_DIR)/objc
 endif
@@ -63,14 +78,28 @@ TVOS_AVAILABLE = \
   $(shell if xcodebuild -version -sdk appletvos >/dev/null 2>&1; \
   then echo "YES"; else echo "NO"; fi)
 
+MACOSX64_AVAILABLE = \
+  $(shell xcodebuild -version | grep '^Xcode ' | grep -Eo '[0-9\.]+' | \
+  awk '{ split($$0, v, "."); print ((v[1] == 12 && v[2] >= 2) || v[1] > 12) ? "YES" : "NO"; }')
+
 ifndef J2OBJC_ARCHS
+ifdef ENV_J2OBJC_ARCHS
+# The env command cannot forward variables with spaces in them.
+J2OBJC_ARCHS = $(subst _, ,$(ENV_J2OBJC_ARCHS))
+else
 # 32bit iPhone archs are no longer built by default. To build a release
 # with them, define J2OBJC_ARCHS with "iphone" and "simulator" included.
-J2OBJC_ARCHS = macosx iphone64 watchv7k watch64 watchsimulator simulator64
+J2OBJC_ARCHS = macosx iphone64 iphone64e watchv7k watch64 watchsimulator \
+    simulator simulator64 maccatalyst
 ifeq ($(TVOS_AVAILABLE), YES)
 J2OBJC_ARCHS += appletvos appletvsimulator
 endif
+ifeq ($(MACOSX64_AVAILABLE), YES)
+J2OBJC_ARCHS += macosx64 maccatalyst64
 endif
+endif
+endif
+export J2OBJC_ARCHS
 
 # xcrun finds a specified tool in the current SDK /usr/bin directory.
 XCRUN := $(shell if test -f /usr/bin/xcrun; then echo xcrun; else echo ""; fi)
@@ -87,6 +116,14 @@ LIBTOOL = libtool
 LIPO = lipo
 endif
 
+# The following test returns true on Linux or with GNU tools installed,
+# otherwise false on macOS which uses the BSD version.
+ifeq ($(shell mktemp --version >/dev/null 2>&1 && echo GNU || echo BSD), GNU)
+MKTEMP_CMD = mktemp -d --tmpdir $(MKTEMP_DIR).XXXXXX
+else
+MKTEMP_CMD = mktemp -d -t $(MKTEMP_DIR)
+endif
+
 ifndef CONFIGURATION_BUILD_DIR
 # Determine this makefile's path.
 SYSROOT_SCRIPT := $(J2OBJC_ROOT)/scripts/sysroot_path.sh
@@ -94,6 +131,9 @@ SDKROOT := $(shell bash ${SYSROOT_SCRIPT})
 endif
 
 SDK_FLAGS = -isysroot $(SDKROOT)
+
+# Enable zeroing weak references.
+OBJCFLAGS += -fobjc-weak
 
 ifeq ($(DEBUGGING_SYMBOLS), YES)
 # Enable when it's decided to distribute JRE with Java source debugging.
@@ -133,8 +173,19 @@ ifneq (,$(findstring build 1.8, $(shell $(JAVA) -version 2>&1)))
 JAVA_8 = 1
 else ifneq (,$(findstring build 11, $(shell $(JAVA) -version 2>&1)))
 JAVA_VERSION = 11
+else ifneq (,$(findstring build 15, $(shell $(JAVA) -version 2>&1)))
+JAVA_VERSION = 15
 else
-$(error JDK not supported. Please set JAVA_HOME to JDK 1.8 or 11.)
+$(error JDK not supported. Please set JAVA_HOME to JDK 1.8, 11 or 15.)
+endif
+
+ifndef MEMORY_MODEL_FLAG
+  # Default memory model.
+  MEMORY_MODEL_FLAG = -use-reference-counting
+endif
+
+ifeq ("$(strip $(MEMORY_MODEL_FLAG))", "-use-arc")
+  CLANG_ENABLE_OBJC_ARC=YES
 endif
 
 TRANSLATOR_BUILD_FLAGS = \

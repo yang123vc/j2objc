@@ -142,7 +142,15 @@ public final class NativeTimeZone extends TimeZone {
    */
   private NativeTimeZone(Object nativeTimeZone, String name, int rawOffset, int dstSavings,
                  boolean useDaylightTime) {
-    setID(name);
+    if (name.startsWith("GMT-")) {
+      int offsetMillis = rawOffset;
+      if (useDaylightTime) {
+        offsetMillis += dstSavings;
+      }
+      setID(createGmtOffsetString(true, true, offsetMillis));
+    } else {
+      setID(name);
+    }
     this.nativeTimeZone = nativeTimeZone;
     this.rawOffset = rawOffset;
     this.dstSavings = dstSavings;
@@ -267,7 +275,7 @@ public final class NativeTimeZone extends TimeZone {
   @Override
   public native String getDisplayName(boolean daylight, int style, Locale locale) /*-[
     if (style != JavaUtilTimeZone_SHORT && style != JavaUtilTimeZone_LONG) {
-      @throw [[[JavaLangIllegalArgumentException alloc] init] autorelease];
+      @throw AUTORELEASE([[JavaLangIllegalArgumentException alloc] init]);
     }
 
     NSTimeZoneNameStyle zoneStyle;

@@ -403,15 +403,25 @@ static NSString *StringFromCharArray(IOSCharArray *value, jint offset, jint coun
 
 - (NSString *)java_replaceAll:(NSString *)regex
               withReplacement:(NSString *)replacement {
-  return [[JavaUtilRegexPattern_compileWithNSString_(regex) matcherWithJavaLangCharSequence:self]
-      replaceAllWithNSString:replacement];
+  NSString *result;
+  @autoreleasepool {
+    JavaUtilRegexMatcher *matcher =
+        [JavaUtilRegexPattern_compileWithNSString_(regex) matcherWithJavaLangCharSequence:self];
+    result = RETAIN_([matcher replaceAllWithNSString:replacement]);
+  }
+  return AUTORELEASE(result);
 }
 
 
 - (NSString *)java_replaceFirst:(NSString *)regex
                 withReplacement:(NSString *)replacement {
-  return [[JavaUtilRegexPattern_compileWithNSString_(regex) matcherWithJavaLangCharSequence:self]
-      replaceFirstWithNSString:replacement];
+  NSString *result;
+  @autoreleasepool {
+    JavaUtilRegexMatcher *matcher =
+        [JavaUtilRegexPattern_compileWithNSString_(regex) matcherWithJavaLangCharSequence:self];
+    result = RETAIN_([matcher replaceFirstWithNSString:replacement]);
+  }
+  return AUTORELEASE(result);
 }
 
 
@@ -479,7 +489,7 @@ static NSString *StringFromCharArray(IOSCharArray *value, jint offset, jint coun
         NULL, (const UInt8 *)value->buffer_ + offset, count, encoding, true);
     // CFString can return nil if there are invalid bytes in the input.
     if (result) {
-      return [result autorelease];
+      return AUTORELEASE(result);
     }
   }
   JavaNioCharBuffer *cb = [charset decodeWithJavaNioByteBuffer:
@@ -696,8 +706,12 @@ static jboolean RangeIsEqual(NSString *self, NSString *other, jint startIdx) {
   if (!str) {
     @throw makeException([JavaLangNullPointerException class]);
   }
-  JavaUtilRegexPattern *p = JavaUtilRegexPattern_compileWithNSString_(str);
-  return [p splitWithJavaLangCharSequence:self withInt:n];
+  IOSObjectArray *result;
+  @autoreleasepool {
+    JavaUtilRegexPattern *p = JavaUtilRegexPattern_compileWithNSString_(str);
+    result = RETAIN_([p splitWithJavaLangCharSequence:self withInt:n]);
+  }
+  return AUTORELEASE(result);
 }
 
 - (jboolean)java_equalsIgnoreCase:(NSString *)aString {
@@ -851,31 +865,6 @@ static jboolean RangeIsEqual(NSString *self, NSString *other, jint startIdx) {
 + (NSString *)java_joinWithJavaLangCharSequence:(id<JavaLangCharSequence>)delimiter
                            withJavaLangIterable:(id<JavaLangIterable>)elements {
   return NSString_java_joinWithJavaLangCharSequence_withJavaLangIterable_(delimiter, elements);
-}
-
-
-jint javaStringHashCode(NSString *string) {
-  static const char *hashKey = "__JAVA_STRING_HASH_CODE_KEY__";
-  id cachedHash = objc_getAssociatedObject(string, hashKey);
-  if (cachedHash) {
-    return (jint) [(JavaLangInteger *) cachedHash intValue];
-  }
-  jint len = (jint)[string length];
-  jint hash = 0;
-  if (len > 0) {
-    unichar *chars = (unichar *)malloc(len * sizeof(unichar));
-    [string getCharacters:chars range:NSMakeRange(0, len)];
-    for (int i = 0; i < len; i++) {
-      hash = 31 * hash + (jint)chars[i];
-    }
-    free(chars);
-  }
-  if (![string isKindOfClass:[NSMutableString class]]) {
-    // Only cache hash for immutable strings.
-    objc_setAssociatedObject(string, hashKey, JavaLangInteger_valueOfWithInt_(hash),
-                             OBJC_ASSOCIATION_RETAIN);
-  }
-  return hash;
 }
 
 // Java 8 default methods from CharSequence.

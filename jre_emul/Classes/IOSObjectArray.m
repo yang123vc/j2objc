@@ -19,6 +19,10 @@
 //  Created by Tom Ball on 9/9/11.
 //
 
+#if __has_feature(objc_arc)
+#error "b/158196682: IOSObjectArray cannot be built with ARC"
+#endif
+
 #import "IOSObjectArray.h"
 
 #import "IOSArray_PackagePrivate.h"
@@ -31,7 +35,7 @@
 extern id IOSArray_NewArrayWithDimensions(
     Class self, NSUInteger dimensionCount, const jint *dimensionLengths, IOSClass *type);
 
-static IOSObjectArray *IOSObjectArray_CreateArray(jint length, IOSClass *type, jboolean retained) {
+static IOSObjectArray *IOSObjectArray_CreateArray(jint length, IOSClass *type) {
   if (length < 0) {
     @throw AUTORELEASE([[JavaLangNegativeArraySizeException alloc] init]);
   }
@@ -39,30 +43,16 @@ static IOSObjectArray *IOSObjectArray_CreateArray(jint length, IOSClass *type, j
   IOSObjectArray *array = NSAllocateObject([IOSObjectArray class], buf_size, nil);
   // Set array contents to Java default value (null).
   memset(array->buffer_, 0, buf_size);
-  if (!retained) {
-    // It is important that this autorelease occurs here and NOT as part of the
-    // return statement of one of the public methods. When such a public method
-    // is called from ARC code, it can omit the autorelease call (and the
-    // subsequent retain in the caller) even though this code is compiled as
-    // non-ARC. Such behavior would allow our isRetained_ field to remain false
-    // even when this array has a strong reference.
-    [array autorelease];
-  }
   array->size_ = length;
   array->elementType_ = type; // All IOSClass types are singleton so don't need to retain.
-  array->isRetained_ = retained;
   return array;
 }
 
 static IOSObjectArray *IOSObjectArray_CreateArrayWithObjects(
-    jint length, IOSClass *type, jboolean retained, const id *objects) {
-  IOSObjectArray *array = IOSObjectArray_CreateArray(length, type, retained);
-  if (retained) {
-    for (jint i = 0; i < length; i++) {
-      array->buffer_[i] = [objects[i] retain];
-    }
-  } else {
-    memcpy(array->buffer_, objects, length * sizeof(id));
+    jint length, IOSClass *type, const id *objects) {
+  IOSObjectArray *array = IOSObjectArray_CreateArray(length, type);
+  for (jint i = 0; i < length; i++) {
+    array->buffer_[i] = RETAIN_(objects[i]);
   }
   return array;
 }
@@ -72,23 +62,23 @@ static IOSObjectArray *IOSObjectArray_CreateArrayWithObjects(
 @synthesize elementType = elementType_;
 
 + (instancetype)newArrayWithLength:(NSUInteger)length type:(IOSClass *)type {
-  return IOSObjectArray_CreateArray((jint)length, type, true);
+  return IOSObjectArray_CreateArray((jint)length, type);
 }
 
 + (instancetype)arrayWithLength:(NSUInteger)length type:(IOSClass *)type {
-  return IOSObjectArray_CreateArray((jint)length, type, false);
+  return AUTORELEASE(IOSObjectArray_CreateArray((jint)length, type));
 }
 
 + (instancetype)newArrayWithObjects:(const id *)objects
                               count:(NSUInteger)count
                                type:(IOSClass *)type {
-  return IOSObjectArray_CreateArrayWithObjects((jint)count, type, true, objects);
+  return IOSObjectArray_CreateArrayWithObjects((jint)count, type, objects);
 }
 
 + (instancetype)arrayWithObjects:(const id *)objects
                            count:(NSUInteger)count
                             type:(IOSClass *)type {
-  return IOSObjectArray_CreateArrayWithObjects((jint)count, type, false, objects);
+  return AUTORELEASE(IOSObjectArray_CreateArrayWithObjects((jint)count, type, objects));
 }
 
 + (instancetype)arrayWithArray:(IOSObjectArray *)array {
@@ -99,16 +89,19 @@ static IOSObjectArray *IOSObjectArray_CreateArrayWithObjects(
 
 + (instancetype)arrayWithNSArray:(NSArray *)array type:(IOSClass *)type {
   NSUInteger count = [array count];
-  IOSObjectArray *result = IOSObjectArray_CreateArray((jint)count, type, false);
+  IOSObjectArray *result = AUTORELEASE(IOSObjectArray_CreateArray((jint)count, type));
   [array getObjects:result->buffer_ range:NSMakeRange(0, count)];
+  for (NSUInteger i = 0; i < count; i++) {
+    RETAIN_(result->buffer_[i]);
+  }
   return result;
 }
 
 + (instancetype)arrayWithDimensions:(NSUInteger)dimensionCount
                             lengths:(const jint *)dimensionLengths
                                type:(IOSClass *)type {
-  return [IOSArray_NewArrayWithDimensions(
-      self, dimensionCount, dimensionLengths, type) autorelease];
+  return AUTORELEASE(IOSArray_NewArrayWithDimensions(
+      self, dimensionCount, dimensionLengths, type));
 }
 
 + (instancetype)newArrayWithDimensions:(NSUInteger)dimensionCount
@@ -118,79 +111,58 @@ static IOSObjectArray *IOSObjectArray_CreateArrayWithObjects(
 }
 
 - (id)objectAtIndex:(NSUInteger)index {
-  IOSArray_checkIndex(size_, (jint)index);
-  return buffer_[index];
+  return IOSObjectArray_Get(self, (jint)index);
 }
 
-#if !defined(J2OBJC_DISABLE_ARRAY_TYPE_CHECKS)
 static void ThrowArrayStoreException(IOSObjectArray *array, id value) {
   NSString *msg = [NSString stringWithFormat:
       @"attempt to add object of type %@ to array with type %@",
       [[value java_getClass] getName], [array->elementType_ getName]];
   @throw AUTORELEASE([[JavaLangArrayStoreException alloc] initWithNSString:msg]);
 }
-#endif
 
 static inline id IOSObjectArray_checkValue(
     __unsafe_unretained IOSObjectArray *array, __unsafe_unretained id value) {
-#if !defined(J2OBJC_DISABLE_ARRAY_TYPE_CHECKS)
   if (value && ![array->elementType_ isInstance:value]) {
     ThrowArrayStoreException(array, value);
   }
-#endif
   return value;
 }
 
 // Same as above, but releases the value before throwing an exception.
 static inline void IOSObjectArray_checkRetainedValue(IOSObjectArray *array, id value) {
-#if !defined(J2OBJC_DISABLE_ARRAY_TYPE_CHECKS)
   if (value && ![array->elementType_ isInstance:value]) {
-    [value autorelease];
+    AUTORELEASE(value);
     ThrowArrayStoreException(array, value);
   }
-#endif
 }
 
 // Same as IOSArray_checkIndex, but releases the value before throwing an
 // exception.
 static inline void IOSObjectArray_checkIndexRetainedValue(jint size, jint index, id value) {
-#if !defined(J2OBJC_DISABLE_ARRAY_BOUND_CHECKS)
   if (index < 0 || index >= size) {
-    [value autorelease];
+    AUTORELEASE(value);
     IOSArray_throwOutOfBoundsWithMsg(size, index);
   }
-#endif
 }
 
 id IOSObjectArray_Set(
     __unsafe_unretained IOSObjectArray *array, NSUInteger index, __unsafe_unretained id value) {
   IOSArray_checkIndex(array->size_, (jint)index);
   IOSObjectArray_checkValue(array, value);
-  if (array->isRetained_) {
-    return JreAutoreleasedAssign(&array->buffer_[index], [value retain]);
-  } else {
-    return array->buffer_[index] = value;
-  }
+  return JreAutoreleasedAssign(&array->buffer_[index], RETAIN_(value));
 }
 
 id IOSObjectArray_SetAndConsume(IOSObjectArray *array, NSUInteger index, id value) {
   IOSObjectArray_checkIndexRetainedValue(array->size_, (jint)index, value);
   IOSObjectArray_checkRetainedValue(array, value);
-  if (array->isRetained_) {
-    return JreAutoreleasedAssign(&array->buffer_[index], value);
-  } else {
-    return array->buffer_[index] = [value autorelease];
-  }
+  return JreAutoreleasedAssign(&array->buffer_[index], value);
 }
 
 id IOSObjectArray_SetRef(JreArrayRef ref, id value) {
   // Index is checked when accessing the JreArrayRef.
   IOSObjectArray_checkValue(ref.arr, value);
-  if (ref.arr->isRetained_) {
-    return JreAutoreleasedAssign(ref.pValue, [value retain]);
-  } else {
-    return *ref.pValue = value;
-  }
+  return JreAutoreleasedAssign(ref.pValue, RETAIN_(value));
 }
 
 - (id)replaceObjectAtIndex:(NSUInteger)index withObject:(id)value {
@@ -201,7 +173,7 @@ id IOSObjectArray_SetRef(JreArrayRef ref, id value) {
   IOSArray_checkIndex(size_, (jint)length - 1);
   for (NSUInteger i = 0; i < length; i++) {
     id element = buffer_[i];
-    buffer[i] = element;
+    buffer[i] = RETAIN_(element);
   }
 }
 
@@ -220,12 +192,14 @@ static void DoRetainedMove(id __strong *buffer, jint src, jint dest, jint length
     releaseEnd = tmp;
   }
   for (jint i = releaseStart; i < releaseEnd; i++) {
-    [buffer[i] autorelease];
+    AUTORELEASE(buffer[i]);
   }
   memmove(buffer + dest, buffer + src, length * sizeof(id));
+#if ! __has_feature(objc_arc)
   for (jint i = retainStart; i < retainEnd; i++) {
     [buffer[i] retain];
   }
+#endif
 }
 
 - (void)arraycopy:(jint)offset
@@ -236,49 +210,29 @@ static void DoRetainedMove(id __strong *buffer, jint src, jint dest, jint length
   IOSArray_checkRange(destination->size_, dstOffset, length);
   IOSObjectArray *dest = (IOSObjectArray *) destination;
 
-#ifdef J2OBJC_DISABLE_ARRAY_TYPE_CHECKS
-  jboolean skipElementCheck = true;
-#else
-  // If dest element type can be assigned to this array, then all of its
-  // elements are assignable and therefore don't need to be individually
-  // checked.
-  jboolean skipElementCheck = [dest->elementType_ isAssignableFrom:elementType_];
-#endif
-
   if (self == dest) {
-    if (dest->isRetained_) {
-      DoRetainedMove(buffer_, offset, dstOffset, length);
-    } else {
-      memmove(buffer_ + dstOffset, buffer_ + offset, length * sizeof(id));
-    }
+    DoRetainedMove(buffer_, offset, dstOffset, length);
   } else {
-    if (dest->isRetained_) {
-      if (skipElementCheck) {
-        for (jint i = 0; i < length; i++) {
-          JreAutoreleasedAssign(&dest->buffer_[i + dstOffset], [buffer_[i + offset] retain]);
-        }
-      } else {
-        for (jint i = 0; i < length; i++) {
-          id newElement = IOSObjectArray_checkValue(dest, buffer_[i + offset]);
-          JreAutoreleasedAssign(&dest->buffer_[i + dstOffset], [newElement retain]);
-        }
+    // If dest element type can be assigned to this array, then all of its
+    // elements are assignable and therefore don't need to be individually
+    // checked.
+    if ([dest->elementType_ isAssignableFrom:elementType_]) {
+      for (jint i = 0; i < length; i++) {
+        JreAutoreleasedAssign(&dest->buffer_[i + dstOffset], RETAIN_(buffer_[i + offset]));
       }
     } else {
-      if (skipElementCheck) {
-        memcpy(dest->buffer_ + dstOffset, buffer_ + offset, length * sizeof(id));
-      } else {
-        for (jint i = 0; i < length; i++) {
-          dest->buffer_[i + dstOffset] = IOSObjectArray_checkValue(dest, buffer_[i + offset]);
-        }
+      for (jint i = 0; i < length; i++) {
+        id newElement = IOSObjectArray_checkValue(dest, buffer_[i + offset]);
+        JreAutoreleasedAssign(&dest->buffer_[i + dstOffset], RETAIN_(newElement));
       }
     }
   }
 }
 
 - (id)copyWithZone:(NSZone *)zone {
-  IOSObjectArray *result = IOSObjectArray_CreateArray(size_, elementType_, true);
+  IOSObjectArray *result = IOSObjectArray_CreateArray(size_, elementType_);
   for (jint i = 0; i < size_; i++) {
-    result->buffer_[i] = [buffer_[i] retain];
+    result->buffer_[i] = RETAIN_(buffer_[i]);
   }
   return result;
 }
@@ -287,25 +241,14 @@ static void DoRetainedMove(id __strong *buffer, jint src, jint dest, jint length
   return (NSString *) [buffer_[index] description];
 }
 
-- (id)retain {
-  if (!isRetained_) {
-    // Set isRetained_ before retaining the elements to avoid infinite loop if two arrays happen to
-    // contain each other.
-    isRetained_ = true;
-    for (jint i = 0; i < size_; i++) {
-      [buffer_[i] retain];
-    }
-  }
-  return [super retain];
-}
-
 - (void)dealloc {
-  if (isRetained_) {
-    for (jint i = 0; i < size_; i++) {
-      [buffer_[i] release];
-    }
+  for (jint i = 0; i < size_; i++) {
+    RELEASE_(buffer_[i]);   // NO-OP with ARC.
+    buffer_[i] = nil;
   }
+#if ! __has_feature(objc_arc)
   [super dealloc];
+#endif
 }
 
 - (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state

@@ -98,7 +98,7 @@ public class LineDirectivesTest extends GenerationTest {
     assertTranslatedLines(translation,
         "for (jint i = 0; i < 10; i++)",
         "#line 4",
-        "if ((n % 2) == 0)",
+        "if ((JreIntMod(n, 2)) == 0)",
         "#line 5",
         "n += i;",
         "",
@@ -177,6 +177,25 @@ public class LineDirectivesTest extends GenerationTest {
     assertTranslatedLines(translation,
         "#line 9",
         "- (NSString *)DummyTwoWithInt:(jint)i {");
+  }
+
+  public void testSyncAfterMultilineMethodSignature() throws IOException {
+    String translation = translateSourceFile(
+        "public class Test {\n"
+            + "  int sum(int a, int b, int c) {\n"
+            + "    return a + b + c;\n"
+            + "  }\n"
+            + "}",
+        "Test", "Test.m");
+    assertTranslatedLines(translation,
+        "#line 2",
+        "- (jint)sumWithInt:(jint)a",
+        "           withInt:(jint)b",
+        "           withInt:(jint)c {",
+        "",
+        "#line 3",
+        "  return a + b + c;",
+        "}");
   }
 
   private static final Pattern LINE_DIRECTIVE_PATTERN = Pattern.compile(

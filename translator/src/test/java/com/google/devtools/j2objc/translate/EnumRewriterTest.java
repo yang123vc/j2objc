@@ -37,13 +37,7 @@ public class EnumRewriterTest extends GenerationTest {
         "Test_initWithId_withNSString_withInt_(e, @\"foo\", @\"A\", 0);");
   }
 
-  public void testNoDefaultToNsEnumConversion() throws Exception {
-    String translation = translateSourceFile("enum Test { A }", "Test", "Test.m");
-    assertNotInTranslation(translation, "toNSEnum");
-  }
-
   public void testToNsEnumConversion() throws Exception {
-    options.setSwiftFriendly(true);
     String translation = translateSourceFile("enum Test { A }", "Test", "Test.m");
     assertTranslatedLines(translation,
         "- (Test_Enum)toNSEnum {",
@@ -52,8 +46,6 @@ public class EnumRewriterTest extends GenerationTest {
   }
 
   public void testEmptyEnum() throws Exception {
-    // Add --swift-friendly to test that toNSEnum is not generated.
-    options.setSwiftFriendly(true);
     String header = translateSourceFile("enum Test {}", "Test", "Test.h");
     assertNotInTranslation(header, "Test_Enum");
     String source = getTranslatedFile("Test.m");
@@ -81,11 +73,11 @@ public class EnumRewriterTest extends GenerationTest {
         "enum Test { A, B, C }", "Test", "Test.m");
     assertTranslatedLines(translation,
         "JreEnum(Test, A) = "
-            + "new_Test_initWithNSString_withInt_(JreEnumConstantName(Test_class_(), 0), 0);",
+            + "new_Test_initWithNSString_withInt_(@\"A\", 0);",
         "JreEnum(Test, B) = "
-            + "new_Test_initWithNSString_withInt_(JreEnumConstantName(Test_class_(), 1), 1);",
+            + "new_Test_initWithNSString_withInt_(@\"B\", 1);",
         "JreEnum(Test, C) = "
-            + "new_Test_initWithNSString_withInt_(JreEnumConstantName(Test_class_(), 2), 2);",
+            + "new_Test_initWithNSString_withInt_(@\"C\", 2);",
         "J2OBJC_SET_INITIALIZED(Test)");
   }
 

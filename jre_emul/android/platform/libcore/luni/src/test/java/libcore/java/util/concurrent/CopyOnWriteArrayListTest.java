@@ -16,8 +16,6 @@
 
 package libcore.java.util.concurrent;
 
-import com.google.j2objc.util.ReflectionUtil;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.ConcurrentModificationException;
@@ -32,7 +30,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import junit.framework.TestCase;
 import libcore.java.util.ForEachRemainingTester;
-import libcore.util.SerializationTester;
+import libcore.libcore.util.SerializationTester;
 public final class CopyOnWriteArrayListTest extends TestCase {
 
     public void testIteratorAndNonStructuralChanges() {
@@ -168,9 +166,11 @@ public final class CopyOnWriteArrayListTest extends TestCase {
         testAddAllIsAtomic(new CopyOnWriteArrayList<Object>());
     }
 
+    /* J2ObjC removed: Disabled on JVM, see b/27673247
     public void testSubListAtomicAdds() throws Exception {
         testAddAllIsAtomic(new CopyOnWriteArrayList<Object>().subList(0, 0));
     }
+     */
 
     /**
      * Attempts to observe {@code list} in the middle of an add. The RI's
@@ -261,10 +261,6 @@ public final class CopyOnWriteArrayListTest extends TestCase {
     }
 
     public void testSerialize() {
-        // J2ObjC reflection-stripping change.
-        if (ReflectionUtil.isJreReflectionStripped()) {
-            return;
-        }
         String s = "aced0005737200296a6176612e7574696c2e636f6e63757272656e742e436f70"
                 + "794f6e577269746541727261794c697374785d9fd546ab90c3030000787077040"
                 + "0000005740001617400016274000163707400016578";
@@ -324,11 +320,6 @@ public final class CopyOnWriteArrayListTest extends TestCase {
         assertEquals(-3.0, l.get(0));
         assertEquals(2.0, l.get(1));
         assertEquals(5.0, l.get(2));
-
-        try {
-            l.sort((v1, v2) -> v1.compareTo(v2));
-        } catch (NullPointerException expected) {
-        }
     }
 
     public void test_forEach() {
@@ -347,6 +338,7 @@ public final class CopyOnWriteArrayListTest extends TestCase {
 
         try {
             l.forEach(null);
+            fail();
         } catch (NullPointerException expected) {
         }
     }
@@ -412,11 +404,6 @@ public final class CopyOnWriteArrayListTest extends TestCase {
         assertEquals(9, (int)completeList.get(3));
         assertEquals(22, (int)completeList.get(4));
         assertEquals(12, (int)completeList.get(5));
-
-        try {
-            l.sort((v1, v2) -> v1.compareTo(v2));
-        } catch (NullPointerException expected) {
-        }
     }
 
     public void test_subList_forEach() {
@@ -436,6 +423,7 @@ public final class CopyOnWriteArrayListTest extends TestCase {
 
         try {
             l.forEach(null);
+            fail();
         } catch (NullPointerException expected) {
         }
     }

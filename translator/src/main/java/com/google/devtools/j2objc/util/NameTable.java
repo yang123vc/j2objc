@@ -28,6 +28,8 @@ import com.google.devtools.j2objc.types.PointerType;
 import com.google.j2objc.annotations.ObjectiveCName;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -36,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import javax.lang.model.element.AnnotationMirror;
@@ -87,7 +90,8 @@ public class NameTable {
    * The list of predefined types, common primitive typedefs, constants and
    * variables. Loaded from a resource file.
    */
-  private static final ImmutableSet<String> reservedNames = loadReservedNames();
+  private static ImmutableSet<String> reservedNames = loadReservedNames(
+      () -> J2ObjC.class.getResourceAsStream(RESERVED_NAMES_FILE));
 
   // Regex pattern for fully-qualified Java class or package names.
   private static final String JAVA_CLASS_NAME_REGEX
@@ -96,8 +100,8 @@ public class NameTable {
   private static final Pattern JAVA_CLASS_NAME_PATTERN = Pattern.compile(JAVA_CLASS_NAME_REGEX);
 
 
-  private static ImmutableSet<String> loadReservedNames() {
-    try (InputStream stream = J2ObjC.class.getResourceAsStream(RESERVED_NAMES_FILE);
+  private static ImmutableSet<String> loadReservedNames(Supplier<InputStream> inputStream) {
+    try (InputStream stream = inputStream.get();
         BufferedReader lines = new BufferedReader(new InputStreamReader(stream, "UTF-8"))) {
       ImmutableSet.Builder<String> builder = ImmutableSet.builder();
       String line;
@@ -111,6 +115,21 @@ public class NameTable {
     } catch (IOException e) {
       throw new AssertionError(e);
     }
+  }
+
+  public static void addReservedNames(String file) {
+    ImmutableSet.Builder<String> updatedReservedNames = ImmutableSet.builder();
+    updatedReservedNames.addAll(reservedNames);
+    updatedReservedNames.addAll(
+        loadReservedNames(
+            () -> {
+              try {
+                return new FileInputStream(file);
+              } catch (FileNotFoundException e) {
+                throw new AssertionError(e);
+              }
+            }));
+    reservedNames = updatedReservedNames.build();
   }
 
   private static final ImmutableSet<String> badParameterNames = ImmutableSet.of(
@@ -183,6 +202,10 @@ public class NameTable {
       return name;
     }
     name = ElementUtil.getName(var);
+    if (name.equals("initialize")) {
+      // Avoid conflict with class initialize function name.
+      return "initialize_";
+    }
     if (allowReservedName) {
       return name;
     }
@@ -324,7 +347,14 @@ public class NameTable {
 
   private static String getMethodName(ExecutableElement method) {
     if (ElementUtil.isConstructor(method)) {
-      return "init";
+      TypeElement clazz = ElementUtil.getDeclaringClass(method);
+      boolean needsPackagePrivateSuffix = ElementUtil.isTopLevel(clazz)
+          && ElementUtil.getVisibilityModifiers(clazz).isEmpty()
+          && !ElementUtil.isEnum(clazz)
+          // Do not apply this change to classes in the default package
+          // because it affects/breaks several translator tests.
+          && !ElementUtil.getPackage(clazz).isUnnamed();
+      return needsPackagePrivateSuffix ? "initPackagePrivate" : "init";
     }
     String name = ElementUtil.getName(method);
     if (isReservedName(name)) {
@@ -474,7 +504,6 @@ public class NameTable {
     if (currentType == null) {
       return null;
     }
-    // TODO(tball): simplify to ElementUtil.getSuperclass() when javac update is complete.
     TypeElement superclass = currentType.getKind().isInterface()
         ? typeUtil.getJavaObject() : ElementUtil.getSuperclass(currentType);
     ExecutableElement original = getOriginalMethod(topMethod, declaringClass, superclass);

@@ -349,6 +349,19 @@ public class StatementGeneratorTest extends GenerationTest {
     assertTranslation(translation, "RELEASE_(i_);");
   }
 
+  public void testStaticFinalFieldAccessWithParenthesizedExpression() throws IOException {
+    String translation = translateSourceFile(
+        "public class Test { "
+            + "  private static final int t = 7; "
+            + "  static int test() { "
+            + "    Object o = new Test(); "
+            + "    return ((Test)o).t; "
+            + "  } "
+            + "}",
+        "Test", "Test.m");
+    assertTranslation(translation, "return Test_t;");
+  }
+
   public void testInnerInnerClassFieldAccess() throws IOException {
     String translation = translateSourceFile(
         "public class Test { static class One {} static class Two extends Test { "
@@ -402,7 +415,8 @@ public class StatementGeneratorTest extends GenerationTest {
         + "public T nextElement() { return it.next(); } }; }}",
         "Test", "Test.m");
     assertTranslation(translation, "return [((id<JavaUtilIterator>) nil_chk(it_)) hasNext];");
-    assertTranslation(translation, "return [((id<JavaUtilIterator>) nil_chk(it_)) next];");
+    assertTranslation(translation,
+        "return JreRetainedLocalValue([((id<JavaUtilIterator>) nil_chk(it_)) next]);");
     assertFalse(translation.contains("Test *this$0;"));
   }
 
@@ -1258,25 +1272,6 @@ public class StatementGeneratorTest extends GenerationTest {
         + "type:NSObject_class_()]];");
   }
 
-  // Verify that a string == comparison is converted to compare invocation.
-  public void testStringComparison() throws IOException {
-    String translation = translateSourceFile(
-      "public class Test { void check(String s, Object o) { "
-      + "boolean b1 = s == null; boolean b2 = \"foo\" == s; boolean b3 = o == \"bar\"; "
-      + "boolean b4 = \"baz\" != s; boolean b5 = null != \"abc\"; }}",
-      "Test", "Test.m");
-    // Assert that non-string compare isn't converted.
-    assertTranslation(translation, "jboolean b1 = s == nil;");
-    // Assert string equate is converted,
-    assertTranslation(translation, "jboolean b2 = [@\"foo\" isEqual:s];");
-    // Order is reversed when literal is on the right.
-    assertTranslation(translation, "jboolean b3 = [@\"bar\" isEqual:o];");
-    // Not equals is converted.
-    assertTranslation(translation, "jboolean b4 = ![@\"baz\" isEqual:s];");
-    // Comparing null with string literal.
-    assertTranslation(translation, "jboolean b5 = ![@\"abc\" isEqual:nil];");
-  }
-
   public void testBinaryLiterals() throws IOException {
     String translation = translateSourceFile(
         "public class A { "
@@ -1357,6 +1352,25 @@ public class StatementGeneratorTest extends GenerationTest {
         "@catch (Test_SecondException *e) {\n    @throw e;\n  }");
     assertNotInTranslation(translation,
         "@catch (JavaLangException *e) {\n    @throw e;\n  }");
+  }
+
+  public void testLambdaCapturesMultiCatchExceptionParameter() throws IOException {
+    String translation = translateSourceFile(
+        "import java.util.function.Supplier; "
+            + "public class Test { "
+            + "  public void test() { "
+            + "    try { "
+            + "      \"\".charAt(10); "
+            + "    } catch (ArrayIndexOutOfBoundsException | StringIndexOutOfBoundsException e) { "
+            + "      Supplier<String> s = () -> e.getMessage(); "
+            + "      System.out.println(s.get()); "
+            + "    } "
+            + "  } "
+            + "} ",
+        "Test", "Test.m");
+    // Note that the type of the captured parameter is the least upper bound of
+    // (Array | String) IndexOutOfBoundsException.
+    assertTranslation(translation, "JavaLangIndexOutOfBoundsException *capture$0");
   }
 
   public void testDifferentTypesInConditionalExpression() throws IOException {

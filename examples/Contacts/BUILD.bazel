@@ -11,6 +11,7 @@
 # limitations under the License.
 
 load("@build_bazel_rules_apple//apple:ios.bzl", "ios_application")
+load("@rules_java//java:defs.bzl", "java_library")
 
 ios_application(
     name = "Contacts",
@@ -18,18 +19,7 @@ ios_application(
     infoplists = ["src/Info.plist"],
     families = ["iphone", "ipad"],
     deps = [":ContactsMainLib"],
-    app_icons = [":ContactsAppIcons"],
-    launch_images = [":ContactsLaunchImages"],
-)
-
-filegroup(
-    name = "ContactsAppIcons",
-    srcs = glob(["Assets.xcassets/AppIcon.appiconset/**"]),
-)
-
-filegroup(
-    name = "ContactsLaunchImages",
-    srcs = glob(["Assets.xcassets/LaunchImage.launchimage/**"]),
+    minimum_os_version = "11.4",
 )
 
 objc_library(
@@ -37,10 +27,8 @@ objc_library(
     srcs = glob(["src/*.m"]),
     hdrs = glob(["src/*.h"]),
     sdk_frameworks = ["CoreGraphics"],
-    deps = [
-        ":ContactsJava",
-        "//resources",
-    ],
+    deps = [":ContactsJava"],
+    data = ["//resources"],
 )
 
 j2objc_library(

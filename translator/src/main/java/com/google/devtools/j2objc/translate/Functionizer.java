@@ -379,9 +379,14 @@ public class Functionizer extends UnitTreeVisitor {
           // Take out of the header, only needed for reflection.
           node.setHasDeclaration(false);
         }
+      } else if (ElementUtil.isEnum(declaringClass)
+          && ElementUtil.getName(element).equals("values")) {
+        // Keep enum values method because it is used via native reflection in java.lang.Enum.
+        setFunctionCaller(node, element);
       } else {
         // Static methods and constructors, no reflection.
-        if (options.emitWrapperMethods() && !ElementUtil.isPrivateInnerType(declaringClass)
+        if (options.emitWrapperMethods()
+            && !ElementUtil.isPrivateInnerType(declaringClass)
             && !isPrivate) {
           setFunctionCaller(node, element);
         } else {
@@ -525,7 +530,7 @@ public class Functionizer extends UnitTreeVisitor {
   private void addDisallowedConstructors(TypeDeclaration node) {
     TypeElement typeElement = node.getTypeElement();
     TypeElement superClass = ElementUtil.getSuperclass(typeElement);
-    if (ElementUtil.isPrivateInnerType(typeElement) || ElementUtil.isAbstract(typeElement)
+    if (ElementUtil.isPrivateInnerType(typeElement)
         || superClass == null
         // If we're not emitting constructors we don't need to disallow anything unless our
         // superclass is NSObject.

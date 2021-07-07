@@ -36,9 +36,12 @@ static BOOL printStats = NO;
 }
 
 vm_size_t usedMemory(void) {
-  struct task_basic_info info;
-  mach_msg_type_number_t size = sizeof(info);
-  kern_return_t kerr = task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&info, &size);
+  mach_task_basic_info_data_t info;
+  mach_msg_type_number_t size = MACH_TASK_BASIC_INFO_COUNT;
+  kern_return_t kerr = task_info(mach_task_self(),
+                                 MACH_TASK_BASIC_INFO,
+                                 (task_info_t)&info,
+                                 &size);
   return (kerr == KERN_SUCCESS) ? info.resident_size : 0; // size in bytes
 }
 
@@ -91,6 +94,32 @@ NSString *memUsage() {
     CFTimeInterval elapsedTime = CACurrentMediaTime() - self.startTime;
     NSLog(@"    %.3f secs%@", elapsedTime, memUsage());
   }
+}
+
++ (const J2ObjcClassInfo *)__metadata {
+  static J2ObjcMethodInfo methods[] = {
+    { NULL, NULL, 0x1, -1, -1, -1, -1, -1, -1 },
+    { NULL, "V", 0x1, 0, 1, 2, -1, -1, -1 },
+    { NULL, "V", 0x1, 3, 4, 2, -1, -1, -1 },
+    { NULL, "V", 0x1, 5, 1, 2, -1, -1, -1 },
+    { NULL, "V", 0x1, 6, 1, 2, -1, -1, -1 },
+  };
+  #pragma clang diagnostic push
+  #pragma clang diagnostic ignored "-Wobjc-multiple-method-names"
+  #pragma clang diagnostic ignored "-Wundeclared-selector"
+  methods[0].selector = @selector(init);
+  methods[1].selector = @selector(testRunStartedWithOrgJunitRunnerDescription:);
+  methods[2].selector = @selector(testRunFinishedWithOrgJunitRunnerResult:);
+  methods[3].selector = @selector(testStartedWithOrgJunitRunnerDescription:);
+  methods[4].selector = @selector(testFinishedWithOrgJunitRunnerDescription:);
+  #pragma clang diagnostic pop
+  static const void *ptrTable[] = {
+    "testRunStarted", "LOrgJunitRunnerDescription;", "LJavaLangException;", "testRunFinished",
+    "LOrgJunitRunnerResult;", "testStarted", "testFinished" };
+  static const J2ObjcClassInfo _JRETestRunListener = {
+    "JRETestRunListener", NULL, ptrTable, methods, NULL, 7, 0x1, 5, 0, -1, -1, -1, -1, -1
+  };
+  return &_JRETestRunListener;
 }
 
 @end

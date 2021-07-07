@@ -27,6 +27,15 @@
 #include <stdarg.h>
 #include "J2ObjC_types.h"
 
+// OpenJDK conditionals for MacOS-specific code. However, we define for
+// iOS as well, since OpenJDK was never built for iOS and MacOSX and iOS
+// have very similar APIs.
+#ifdef __APPLE__
+#ifndef _ALLBSD_SOURCE
+#define _ALLBSD_SOURCE 1
+#endif
+#endif
+
 /* "cardinal indices and sizes" */
 typedef jint            jsize;
 
@@ -177,6 +186,7 @@ struct JNINativeInterface {
   jboolean      (*IsAssignableFrom)(JNIEnv*, jclass, jclass);
   jint          (*Throw)(JNIEnv*, jthrowable);
   jint          (*ThrowNew)(JNIEnv *, jclass, const char *);
+  jint          (*EnsureLocalCapacity)(JNIEnv *, jint);
   void          (*ExceptionClear)(JNIEnv *);
 
   jobject       (*NewGlobalRef)(JNIEnv*, jobject);
@@ -515,6 +525,9 @@ struct _JNIEnv {
 
     jint ThrowNew(jclass clazz, const char* message)
     { return functions->ThrowNew(this, clazz, message); }
+
+    jint EnsureLocalCapacity(jint capacity)
+    { return functions->EnsureLocalCapacity(this, capacity); }
 
     void ExceptionClear()
     { functions->ExceptionClear(this); }

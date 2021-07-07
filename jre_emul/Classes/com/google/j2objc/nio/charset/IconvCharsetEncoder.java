@@ -90,6 +90,7 @@ public class IconvCharsetEncoder extends CharsetEncoder {
     }
     size_t inRawBytes = inSize * BYTES_PER_CHAR;
 
+    (void)nil_chk(outBuf);
     jint outSize = [outBuf remaining];
     IOSByteArray *outArray = nil;
     char *outRaw = NULL;
@@ -118,6 +119,7 @@ public class IconvCharsetEncoder extends CharsetEncoder {
     }
 
     if (inRawBytes > 0) {
+      (void)nil_chk(inBuf);
       [inBuf positionWithInt:[inBuf position] - ((jint)inRawBytes / BYTES_PER_CHAR)];
     }
     jint encodedBytes = outSize - (jint)outRawBytes;
@@ -129,8 +131,8 @@ public class IconvCharsetEncoder extends CharsetEncoder {
       }
     }
 
-    [inArray release];
-    [outArray release];
+    RELEASE_(inArray);
+    RELEASE_(outArray);
     return result;
   ]-*/;
 

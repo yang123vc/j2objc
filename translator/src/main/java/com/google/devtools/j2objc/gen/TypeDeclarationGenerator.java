@@ -112,6 +112,9 @@ public class TypeDeclarationGenerator extends TypeGenerator {
     printNativeEnum();
 
     printTypeDocumentation();
+    if (options.defaultNonnull()) {
+      println("NS_ASSUME_NONNULL_BEGIN");
+    }
     if (typeElement.getKind().isInterface()) {
       printf("@protocol %s", typeName);
     } else {
@@ -129,6 +132,9 @@ public class TypeDeclarationGenerator extends TypeGenerator {
     }
     printInnerDeclarations();
     println("\n@end");
+    if (options.defaultNonnull()) {
+      println("NS_ASSUME_NONNULL_END");
+    }
 
     if (ElementUtil.isPackageInfo(typeElement)) {
       printOuterDeclarations();
@@ -234,7 +240,7 @@ public class TypeDeclarationGenerator extends TypeGenerator {
    * Prints the list of static variable and/or enum constant accessor methods.
    */
   protected void printStaticAccessors() {
-    if (options.staticAccessorMethods()) {
+    if (options.staticAccessorMethods() && !options.classProperties()) {
       for (VariableDeclarationFragment fragment : getStaticFields()) {
         VariableElement var = fragment.getVariableElement();
         TypeMirror type = var.asType();
@@ -292,10 +298,10 @@ public class TypeDeclarationGenerator extends TypeGenerator {
         lastDeclaration = declaration;
         JavadocGenerator.printDocComment(getBuilder(), declaration.getJavadoc());
         printIndent();
-        if (ElementUtil.isWeakReference(varElement) && !ElementUtil.isVolatile(varElement)) {
-          // We must add this even without -use-arc because the header may be
-          // included by a file compiled with ARC.
-          print("__unsafe_unretained ");
+        if (!ElementUtil.isVolatile(varElement)) {
+          if (ElementUtil.isWeakReference(varElement)) {
+            print("WEAK_ ");
+          }
         }
         String objcType = getDeclarationType(varElement);
         needsAsterisk = objcType.endsWith("*");
@@ -333,7 +339,7 @@ public class TypeDeclarationGenerator extends TypeGenerator {
         if (options.nullability()) {
           print(", nonnull");
         }
-        // TODO(user): use nameTable.getSwiftName() when it is implemented.
+        // TODO(antoniocortes): use nameTable.getSwiftName() when it is implemented.
         printf(") %s *%s NS_SWIFT_NAME(%s);", typeName, accessorName, accessorName);
       }
     }

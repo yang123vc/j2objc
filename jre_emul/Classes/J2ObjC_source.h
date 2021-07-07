@@ -36,11 +36,9 @@
 #undef I
 
 __attribute__ ((unused)) static inline id cast_chk(id __unsafe_unretained p, Class clazz) {
-#if !defined(J2OBJC_DISABLE_CAST_CHECKS)
   if (__builtin_expect(p && ![p isKindOfClass:clazz], 0)) {
     JreThrowClassCastException(p, clazz);
   }
-#endif
   return p;
 }
 
@@ -48,11 +46,9 @@ __attribute__ ((unused)) static inline id cast_chk(id __unsafe_unretained p, Cla
 // parameter. This check is necessary for interface and array types and is
 // faster than a conformsToProtocol check for interfaces.
 __attribute__((always_inline)) inline id cast_check(id __unsafe_unretained p, IOSClass *cls) {
-#if !defined(J2OBJC_DISABLE_CAST_CHECKS)
   if (__builtin_expect(p && ![cls isInstance:p], 0)) {
     JreThrowClassCastExceptionWithIOSClass(p, cls);
   }
-#endif
   return p;
 }
 
@@ -93,7 +89,7 @@ typedef struct J2ObjcNameMapping {
  * Defines a mapping between Java and iOS names, using a custom data segment.
  */
 #define J2OBJC_NAME_MAPPING(CLASS, JAVANAME, IOSNAME) \
-  static J2ObjcNameMapping CLASS##_mapping __attribute__((used,\
+  static J2ObjcNameMapping CLASS##_mapping __attribute__((used, no_sanitize("address"), \
   section("__DATA,__j2objc_aliases"))) = { JAVANAME, IOSNAME };
 
 /*!
@@ -118,7 +114,7 @@ typedef struct J2ObjcResourceDefinition {
  * exceed 16 characters.
  */
 #define J2OBJC_RESOURCE(BUF, LEN, HASH) \
-  static J2ObjcResourceDefinition BUF##_resource __attribute__((used,\
+  static J2ObjcResourceDefinition BUF##_resource __attribute__((used, no_sanitize("address"), \
   section("__DATA,__j2objcresource"))) = { QUOTE(BUF), BUF, LEN, HASH };
 
 FOUNDATION_EXPORT jint JreIndexOfStr(NSString *str, NSString **values, jint size);
@@ -338,7 +334,7 @@ SHIFT_ASSIGN_OPERATORS_DEFN(Long, jlong, uint64_t, 0x3f)
 #undef SHIFT_ASSIGN_OPERATORS_DEFN
 
 #define BIT_OPERATOR_DEFN(NAME, TYPE, OPNAME, OP) \
-  __attribute__((always_inline)) inline TYPE Bit##OPNAME##AssignVolatile##NAME( \
+  __attribute__((always_inline)) inline TYPE JreBit##OPNAME##AssignVolatile##NAME( \
       volatile_##TYPE *pLhs, TYPE rhs) { \
     TYPE result = __c11_atomic_load(pLhs, __ATOMIC_SEQ_CST) OP rhs; \
     __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST); \
@@ -357,6 +353,35 @@ BIT_OPERATORS_DEFN(Int, jint)
 BIT_OPERATORS_DEFN(Long, jlong)
 #undef BIT_OPERATOR_DEFN
 #undef BIT_OPERATORS_DEFN
+
+#define JRE_HANDLE_DIV_BY_ZERO(NAME, TYPE, OP) \
+  __attribute__((always_inline)) inline TYPE Jre##NAME(TYPE op1, TYPE op2) { \
+    if (op2 == 0) { \
+      JreThrowArithmeticExceptionWithNSString(@"/ by zero"); \
+    } \
+    return op1 OP op2; \
+  }
+
+JRE_HANDLE_DIV_BY_ZERO(IntDiv, jint, /);
+JRE_HANDLE_DIV_BY_ZERO(LongDiv, jlong, /);
+JRE_HANDLE_DIV_BY_ZERO(IntMod, jint, %);
+JRE_HANDLE_DIV_BY_ZERO(LongMod, jlong, %);
+
+// Support for the "==" and "!=" operators. Objective C coalescing of
+// string literals only happens with linked bundles, so the same literal string in
+// an app and an app extention or dynamic library will have different addresses.
+// Support for the "==" and "!=" operators. Objective C coalescing of
+// string literals only happens with linked bundles, so the same literal string in
+// an app and an app extention or dynamic library will have different addresses.
+__attribute__((always_inline)) inline jboolean JreObjectEqualsEquals(id objA, id objB) {
+  return objA == objB ||
+         ([objA isKindOfClass:[NSString class]] ? [(NSString *)objA isEqual:objB] : false);
+}
+
+__attribute__((always_inline)) inline jboolean JreStringEqualsEquals(NSString *strA,
+                                                                     NSString *strB) {
+  return strA == strB || [strA isEqualToString:strB];
+}
 
 #pragma pop_macro("I")
 
