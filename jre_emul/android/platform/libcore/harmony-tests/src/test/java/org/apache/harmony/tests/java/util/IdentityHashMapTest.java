@@ -17,7 +17,6 @@
 
 package org.apache.harmony.tests.java.util;
 
-import com.google.j2objc.util.ReflectionUtil;
 import libcore.java.util.SpliteratorTester;
 import org.apache.harmony.testframework.serialization.SerializationTest;
 import org.apache.harmony.testframework.serialization.SerializationTest.SerializableAssert;
@@ -402,13 +401,64 @@ public class IdentityHashMapTest extends junit.framework.TestCase {
     }
 
     /**
+     * java.util.IdentityHashMap#equals(java.lang.Object)
+     */
+    public void test_equalsLjava_lang_Object() {
+        IdentityHashMap mapOne = new IdentityHashMap();
+        IdentityHashMap mapTwo = new IdentityHashMap();
+        IdentityHashMap mapThree = new IdentityHashMap();
+        IdentityHashMap mapFour = new IdentityHashMap();
+
+        /*
+        String one = "one";
+        // J2ObjC: use toLowerCase to ensure a new reference is constructed.
+        String alsoOne = one.toLowerCase(java.util.Locale.ENGLISH);
+        String two = "two";
+        // J2ObjC: use toLowerCase to ensure a new reference is constructed.
+        String alsoTwo = two.toLowerCase(java.util.Locale.ENGLISH);
+         */
+
+        // J2ObjC: use Integer instead of String. Numbers above 128 are used to
+        // avoid Integer's cache.
+        Integer one = 1001;
+        Integer alsoOne = new Integer(one); // use the new operator to ensure a
+        // new reference is constructed
+        Integer two = 1002;
+        Integer alsoTwo = new Integer(two); // use the new operator to ensure a
+        // new reference is constructed
+
+        mapOne.put(one, two);
+        mapFour.put(one, two);
+
+        // these two are not equal to the above two
+        mapTwo.put(alsoOne, two);
+        mapThree.put(one, alsoTwo);
+
+        assertEquals("failure of equality of IdentityHashMaps", mapOne, mapFour);
+        assertTrue("failure of non-equality of IdentityHashMaps one and two",
+                !mapOne.equals(mapTwo));
+        assertTrue("failure of non-equality of IdentityHashMaps one and three",
+                !mapOne.equals(mapThree));
+        assertTrue("failure of non-equality of IdentityHashMaps two and three",
+                !mapTwo.equals(mapThree));
+
+        HashMap hashMapTwo = new HashMap();
+        HashMap hashMapThree = new HashMap();
+        hashMapTwo.put(alsoOne, two);
+        hashMapThree.put(one, alsoTwo);
+
+        assertTrue(
+                "failure of non-equality of IdentityHashMaps one and Hashmap two",
+                !mapOne.equals(hashMapTwo));
+        assertTrue(
+                "failure of non-equality of IdentityHashMaps one and Hashmap three",
+                !mapOne.equals(hashMapThree));
+    }
+
+    /**
      * java.util.IdentityHashMap#Serialization()
      */
     public void test_Serialization() throws Exception {
-        if (ReflectionUtil.isJreReflectionStripped()) {
-            return;
-        }
-
         IdentityHashMap<String, String> map = new IdentityHashMap<String, String>();
         map.put(ID, "world");
         // BEGIN Android-added

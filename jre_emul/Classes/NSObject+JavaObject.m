@@ -123,14 +123,14 @@ static void doWait(id obj, long long timeout) {
   }
   JavaLangThread *javaThread = JavaLangThread_currentThread();
   int result = OBJC_SYNC_SUCCESS;
-  if (!javaThread->interrupted_) {
+  if (![javaThread isInterrupted]) {
     assert(javaThread->blocker_ == nil);
     javaThread->blocker_ = obj;
     result = objc_sync_wait(obj, timeout);
     javaThread->blocker_ = nil;
   }
-  jboolean wasInterrupted = javaThread->interrupted_;
-  javaThread->interrupted_ = false;
+  // Check if the thread was interrupted after the wait and also clears the interrupted bit.
+  bool wasInterrupted = [JavaLangThread interrupted];
   if (wasInterrupted) {
     @throw AUTORELEASE([[JavaLangInterruptedException alloc] init]);
   }
@@ -186,6 +186,7 @@ static void doWait(id obj, long long timeout) {
   };
   #pragma clang diagnostic push
   #pragma clang diagnostic ignored "-Wobjc-multiple-method-names"
+  #pragma clang diagnostic ignored "-Wundeclared-selector"
   methods[0].selector = @selector(init);
   methods[1].selector = @selector(java_getClass);
   methods[2].selector = @selector(hash);

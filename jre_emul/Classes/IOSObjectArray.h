@@ -24,7 +24,8 @@
 
 #import "IOSArray.h"
 
-#pragma clang system_header
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Wnullability-completeness"
 
 @class IOSClass;
 @class IOSObjectArray;
@@ -33,14 +34,8 @@
  * An emulation class that represents a Java object array.  Like a Java array,
  * an IOSObjectArray is fixed-size but its elements are mutable.
  */
-@interface IOSObjectArray : IOSArray <NSFastEnumeration> {
- @package
-  /**
-   * Determines whether elements are retained.
-   * This field is read-only, visible only for performance reasons. DO NOT MODIFY!
-   */
-  jboolean isRetained_;
-
+NS_ASSUME_NONNULL_BEGIN
+@interface IOSObjectArray<__covariant ObjectType> : IOSArray <ObjectType> {
  @public
   /**
    * The type of elements in this array.
@@ -52,18 +47,18 @@
    * The elements of this array.
    */
   // Ensure alignment for java.util.concurrent.atomic.AtomicReferenceArray.
-  id __strong buffer_[0] __attribute__((aligned(__alignof__(volatile_id))));
+  ObjectType __strong buffer_[0] __attribute__((aligned(__alignof__(volatile_id))));
 }
 
-@property (readonly) IOSClass *elementType;
+@property(readonly) IOSClass *elementType;
 
 /** Create an array from a C object array, length, and type. */
-+ (instancetype)newArrayWithObjects:(const id *)objects
++ (instancetype)newArrayWithObjects:(const _Nonnull ObjectType *_Nonnull)objects
                               count:(NSUInteger)count
                                type:(IOSClass *)type;
 
 /** Create an autoreleased array from a C object array, length, and type. */
-+ (instancetype)arrayWithObjects:(const id *)objects
++ (instancetype)arrayWithObjects:(const _Nonnull ObjectType *_Nonnull)objects
                            count:(NSUInteger)count
                             type:(IOSClass *)type;
 
@@ -73,18 +68,18 @@
 /** Create an autoreleased empty array with a type and length. */
 + (instancetype)arrayWithLength:(NSUInteger)length type:(IOSClass *)type;
 
-/** Create an empty multidimensional array. */
+/** Create an autoreleased empty multidimensional array. */
 + (instancetype)arrayWithDimensions:(NSUInteger)dimensionCount
-                            lengths:(const jint *)dimensionLengths
+                            lengths:(const int32_t *)dimensionLengths
                                type:(IOSClass *)type;
 
-/** Create an autoreleased empty multidimensional array. */
+/** Create an empty multidimensional array. */
 + (instancetype)newArrayWithDimensions:(NSUInteger)dimensionCount
-                               lengths:(const jint *)dimensionLengths
+                               lengths:(const int32_t *)dimensionLengths
                                   type:(IOSClass *)type;
 
-/** Create an array with the elements from an NSArray. */
-+ (instancetype)arrayWithArray:(IOSObjectArray *)array;
+/** Create an autoreleased array with the elements from an NSArray. */
++ (instancetype)arrayWithArray:(IOSObjectArray<ObjectType> *)array;
 
 /** Create an autoreleased array with the elements from an NSArray. */
 + (instancetype)arrayWithNSArray:(NSArray *)array type:(IOSClass *)type;
@@ -94,7 +89,7 @@
  * @throws IndexOutOfBoundsException
  * if out out range
  */
-- (id)objectAtIndex:(NSUInteger)index;
+- (ObjectType)objectAtIndex:(NSUInteger)index;
 
 /**
  * Sets element at a specified index.
@@ -102,7 +97,7 @@
  * if index is out of range
  * @return the replacement object.
  */
-- (id)replaceObjectAtIndex:(NSUInteger)index withObject:(id)value;
+- (ObjectType)replaceObjectAtIndex:(NSUInteger)index withObject:(id)value;
 
 /**
  * Copies the array contents into a specified buffer, up to the specified
@@ -110,7 +105,7 @@
  * @throws IndexOutOfBoundsException
  * if the specified length is greater than the array size.
  */
-- (void)getObjects:(NSObject **)buffer length:(NSUInteger)length;
+- (void)getObjects:(NSObject *_Nonnull *_Nonnull)buffer length:(NSUInteger)length;
 
 @end
 
@@ -120,10 +115,10 @@
  * if index is out of range
  * @return the element at index.
  */
-__attribute__((always_inline)) inline id IOSObjectArray_Get(
-    __unsafe_unretained IOSObjectArray *array, jint index) {
+__attribute__((always_inline)) inline id _Nullable IOSObjectArray_Get(
+    __unsafe_unretained IOSObjectArray *_Nonnull array, int32_t index) {
   IOSArray_checkIndex(array->size_, index);
-  return array->buffer_[index];
+  return ALWAYS_RETAINED_AUTORELEASED_RETURN_VALUE(array->buffer_[index]);
 }
 
 /**
@@ -132,7 +127,8 @@ __attribute__((always_inline)) inline id IOSObjectArray_Get(
  * if index is out of range
  * @return the replacement object.
  */
-FOUNDATION_EXPORT id IOSObjectArray_Set(IOSObjectArray *array, NSUInteger index, id value);
+FOUNDATION_EXPORT id _Nullable IOSObjectArray_Set(IOSObjectArray *_Nonnull array, NSUInteger index,
+                                                  id _Nullable value);
 
 /**
  * Sets element at a specified index, same as IOSObjectArray_Set(), but this function
@@ -141,22 +137,28 @@ FOUNDATION_EXPORT id IOSObjectArray_Set(IOSObjectArray *array, NSUInteger index,
  * if index is out of range
  * @return the replacement object.
  */
-FOUNDATION_EXPORT id IOSObjectArray_SetAndConsume(
-    IOSObjectArray *array, NSUInteger index, id __attribute__((ns_consumed)) value);
+FOUNDATION_EXPORT id _Nullable IOSObjectArray_SetAndConsume(IOSObjectArray *_Nonnull array,
+                                                            NSUInteger index,
+                                                            id _Nullable
+                                                            __attribute__((ns_consumed)) value);
 
 // Internal only. Provides a pointer to an element with the array itself.
 // Used for translating certain compound expressions.
 typedef struct JreArrayRef {
-  __unsafe_unretained IOSObjectArray *arr;
-  __strong id *pValue;
+  __unsafe_unretained IOSObjectArray *_Nonnull arr;
+  __strong id _Nonnull *_Nullable pValue;
 } JreArrayRef;
 
 // Internal only functions.
 __attribute__((always_inline)) inline JreArrayRef IOSObjectArray_GetRef(
-    __unsafe_unretained IOSObjectArray *array, jint index) {
+    __unsafe_unretained IOSObjectArray *_Nonnull array, int32_t index) {
   IOSArray_checkIndex(array->size_, index);
-  return (JreArrayRef){ .arr = array, .pValue = &array->buffer_[index] };
+  return (JreArrayRef){.arr = array, .pValue = &array->buffer_[index]};
 }
-FOUNDATION_EXPORT id IOSObjectArray_SetRef(JreArrayRef ref, id value);
+FOUNDATION_EXPORT id _Nullable IOSObjectArray_SetRef(JreArrayRef ref, id _Nullable value);
 
-#endif // IOSObjectArray_H
+NS_ASSUME_NONNULL_END
+
+#pragma clang diagnostic pop
+
+#endif  // IOSObjectArray_H

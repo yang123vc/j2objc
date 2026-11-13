@@ -20,7 +20,6 @@ import com.google.common.io.Files;
 import com.google.devtools.j2objc.types.Import;
 import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.UnicodeUtils;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -135,7 +134,7 @@ public abstract class ObjectiveCSourceFileGenerator extends AbstractSourceGenera
   protected void printForwardDeclarations(Set<Import> forwardDecls) {
     Set<String> forwardStmts = new TreeSet<>();
     for (Import imp : forwardDecls) {
-      forwardStmts.add(createForwardDeclaration(imp.getTypeName(), imp.isInterface()));
+      forwardStmts.add(createForwardDeclaration(imp));
     }
     if (!forwardStmts.isEmpty()) {
       newline();
@@ -145,8 +144,26 @@ public abstract class ObjectiveCSourceFileGenerator extends AbstractSourceGenera
     }
   }
 
-  private String createForwardDeclaration(String typeName, boolean isInterface) {
-    return UnicodeUtils.format("@%s %s;", isInterface ? "protocol" : "class", typeName);
+  private String createForwardDeclaration(Import imp) {
+    // Type-specific forward declaration.
+    if (imp.getForwardDeclaration() != null) {
+      // Empty forward declaration can be ignored.
+      if (imp.getForwardDeclaration().isEmpty()) {
+        return "";
+      } else {
+        return UnicodeUtils.format("%s;", imp.getForwardDeclaration());
+      }
+    } else if (imp.isInterface()) {
+      // Obj-C protocols do not support parameters.
+      return UnicodeUtils.format("@protocol %s;", imp.getTypeName());
+    } else {
+      String params = "";
+      if ((unit.options().asObjCGenericDecl() || imp.hasGenerateObjectiveCGenerics())
+          && !imp.getParameterNamesForObjectiveCGenerics().isEmpty()) {
+        params = "<" + String.join(", ", imp.getParameterNamesForObjectiveCGenerics()) + ">";
+      }
+      return UnicodeUtils.format("@class %s%s;", imp.getTypeName(), params);
+    }
   }
 
   private static List<GeneratedType> getOrderedGeneratedTypes(GenerationUnit generationUnit) {
@@ -156,8 +173,9 @@ public abstract class ObjectiveCSourceFileGenerator extends AbstractSourceGenera
     for (GeneratedType generatedType : generatedTypes) {
       String name = generatedType.getTypeName();
       if (name != null) {
-        Object dupe = typeMap.put(name, generatedType);
-        assert dupe == null : "Duplicate type name: " + name;
+        if (typeMap.put(name, generatedType) != null) {
+          throw new AssertionError("Duplicate type name: " + name);
+        }
       }
     }
 
@@ -188,5 +206,35 @@ public abstract class ObjectiveCSourceFileGenerator extends AbstractSourceGenera
     }
     typeHierarchy.remove(generatedType.getTypeName());
     orderedTypes.add(generatedType);
+  }
+
+  /**
+   * Returns the output path for the given type, minus its suffix. Normally, the output path is the
+   * same for an outer and its inner types. However, when separate headers are enabled, the inner
+   * types are given their own header files. For example, if the outer type is "Foo.h" with an inner
+   * type "Foo.Bar", the header file for the inner type would be "<header_directory>/Foo_Bar.h"
+   * (when generating inner type names for Objective-C, inner types are separated by an underscore).
+   */
+  protected String getHeaderPath(GeneratedType generatedType, String outputPath) {
+    if (!unit.options().generateSeparateHeaders()) {
+      return outputPath;
+    }
+
+    // Extract outer type name from output path.
+    String relativeOuterHeader = outputPath.substring(outputPath.lastIndexOf('/') + 1);
+    int relativeOuterHeaderLength =
+        relativeOuterHeader.endsWith(".h")
+            ? relativeOuterHeader.length() - 2
+            : relativeOuterHeader.length();
+    String simpleOuterTypeName = relativeOuterHeader.substring(0, relativeOuterHeaderLength);
+
+    // Extract inner type's suffix and return
+    String innerTypeName = generatedType.getTypeName();
+    int outerPathOffset = innerTypeName.lastIndexOf(simpleOuterTypeName);
+    if (outerPathOffset == -1) {
+      return outputPath;
+    }
+    String relativeInnerHeader = innerTypeName.substring(outerPathOffset);
+    return outputPath.substring(0, outputPath.lastIndexOf('/') + 1) + relativeInnerHeader;
   }
 }

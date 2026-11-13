@@ -14,6 +14,7 @@
 
 package com.google.devtools.j2objc.ast;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -23,11 +24,13 @@ public class CastExpression extends Expression {
 
   private ChildLink<Type> type = ChildLink.create(Type.class, this);
   private ChildLink<Expression> expression = ChildLink.create(Expression.class, this);
+  private boolean needsCastChk = true;
 
   public CastExpression(CastExpression other) {
     super(other);
     type.copyFrom(other.getType());
     expression.copyFrom(other.getExpression());
+    needsCastChk = other.needsCastChk;
   }
 
   public CastExpression(TypeMirror typeMirror, Expression expression) {
@@ -52,6 +55,7 @@ public class CastExpression extends Expression {
     return type.get();
   }
 
+  @CanIgnoreReturnValue
   public CastExpression setType(Type newType) {
     type.set(newType);
     return this;
@@ -61,8 +65,19 @@ public class CastExpression extends Expression {
     return expression.get();
   }
 
+  @CanIgnoreReturnValue
   public CastExpression setExpression(Expression newExpression) {
     expression.set(newExpression);
+    return this;
+  }
+
+  public boolean needsCastChk() {
+    return needsCastChk;
+  }
+
+  @CanIgnoreReturnValue
+  public CastExpression setNeedsCastChk(boolean value) {
+    needsCastChk = value;
     return this;
   }
 

@@ -32,7 +32,7 @@ public class NumberMethodRewriterTest extends GenerationTest {
       + "  public float floatValue() { return 0.0f; }"
       + "  public int intValue() { return 0; }"
       + "  public long longValue() { return 0L; }}", "A", "A.m");
-    assertTranslatedLines(translation, "- (jboolean)isEqual:(id)obj {", "return self == obj;");
+    assertTranslatedLines(translation, "- (bool)isEqual:(id)obj {", "return self == obj;");
     assertTranslatedLines(translation, "- (NSUInteger)hash {", "return (NSUInteger)self;");
   }
 
@@ -46,7 +46,90 @@ public class NumberMethodRewriterTest extends GenerationTest {
       + "  public long longValue() { return 0L; }"
       + "  public boolean equals(Object obj) { return this == obj; }"
       + "  public int hashCode() { return 0; }}", "A", "A.m");
-    assertOccurrences(translation, "- (jboolean)isEqual:(id)obj", 1);
+    assertOccurrences(translation, "- (bool)isEqual:(id)obj", 1);
     assertOccurrences(translation, "- (NSUInteger)hash", 1);
+  }
+
+  // Verify methods are not added if defined in a superclass that is a Number subclass.
+  // https://github.com/google/j2objc/issues/1645
+  public void testNumberMethodsAlreadyAdded() throws IOException {
+    String testNumberTypeSource = addSourceFile(
+      "public abstract class TestNumberType extends Number {"
+      + "  public boolean equals(Object obj) { return this == obj; }"
+      + "  public int hashCode() { return 0; }}", "TestNumberType.java");
+    String aSource = addSourceFile(
+      "public class A extends TestNumberType {"
+      + "  public double doubleValue() { return 0.0; }"
+      + "  public float floatValue() { return 0.0f; }"
+      + "  public int intValue() { return 0; }"
+      + "  public long longValue() { return 0L; }}", "A.java");
+    runPipeline(testNumberTypeSource, aSource);
+    String testNumberGen = getTranslatedFile("TestNumberType.m");
+    assertOccurrences(testNumberGen, "- (bool)isEqual:(id)obj", 1);
+    assertOccurrences(testNumberGen, "- (NSUInteger)hash", 1);
+    String subClassGen = getTranslatedFile("A.m");
+    assertNotInTranslation(subClassGen, "- (bool)isEqual:(id)obj");
+    assertNotInTranslation(subClassGen, "- (NSUInteger)hash");
+  }
+
+  public void testLongConstructor() throws IOException {
+    String translation = translateSourceFile(
+        "class A extends Number { "
+            + "  private final long value;"
+            + "  public A(long value) { this.value = value; }"
+            + "  A valueOf(long value) { return new A(value); }"
+            + "  public double doubleValue() { return 0.0; }"
+            + "  public float floatValue() { return 0.0f; }"
+            + "  public int intValue() { return 0; }"
+            + "  public long longValue() { return 0L; }}", "A", "A.m");
+
+    assertInTranslation(translation, "- (instancetype)initWithLongLong:(int64_t)value {");
+    assertInTranslation(translation, "void A_initWithLongLong_(A *self, int64_t value) {");
+    assertInTranslation(translation, "A *new_A_initWithLongLong_(int64_t value) {");
+    assertInTranslation(translation, "A *create_A_initWithLongLong_(int64_t value) {");
+    assertTranslatedLines(translation,
+        "- (A *)valueOfWithLong:(int64_t)value {",
+        "return create_A_initWithLongLong_(value);",
+        "}");
+  }
+
+  public void testLongSuperConstructor() throws IOException {
+    String translation =
+        translateSourceFile(
+            "import java.math.*;"
+                + "class A extends BigDecimal { "
+                + "  public A(long value) { super(value); }"
+                + "  public A(long value, MathContext context) { super(value, context); }"
+                + "}",
+            "A",
+            "A.m");
+
+    // Verify that long constructor uses longlong type.
+    assertTranslatedLines(
+        translation,
+        "- (instancetype)initWithLongLong:(int64_t)value {",
+        "  A_initWithLongLong_(self, value);",
+        "  return self;",
+        "}");
+    assertTranslatedLines(
+        translation,
+        "void A_initWithLongLong_(A *self, int64_t value) {",
+        "  JavaMathBigDecimal_initWithLongLong_(self, value);",
+        "}");
+
+    // Verify that the other constructor is not affected (long used instead of longlong).
+    assertTranslatedLines(
+        translation,
+        "- (instancetype)initWithLong:(int64_t)value",
+        "    withJavaMathMathContext:(JavaMathMathContext *)context {",
+        "  A_initWithLong_withJavaMathMathContext_(self, value, context);",
+        "  return self;",
+        "}");
+    assertTranslatedLines(
+        translation,
+        "void A_initWithLong_withJavaMathMathContext_(A *self, int64_t value, JavaMathMathContext"
+            + " *context) {",
+        "  JavaMathBigDecimal_initWithLong_withJavaMathMathContext_(self, value, context);",
+        "}");
   }
 }

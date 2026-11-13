@@ -32,6 +32,13 @@
 #define FD jint
 
 /*
+ * Prototypes for functions in io_util_md.c called from io_util.c,
+ * FileDescriptor.c, FileInputStream.c, FileOutputStream.c,
+ * UnixFileSystem_md.c
+ */
+FD handleOpen(const char *path, int oflag, int mode);
+
+/*
  * Macros to set/get fd from the java.io.FileDescriptor.  These
  * macros rely on having an appropriately defined 'this' object
  * within the scope in which they're used.
@@ -68,9 +75,18 @@
 #define SET_HANDLE(fd) return (jlong)-1
 
 /*
+ * Retry the operation if it is interrupted
+ */
+#define RESTARTABLE(_cmd, _result) do { \
+    do { \
+        _result = _cmd; \
+    } while((_result == -1) && (errno == EINTR)); \
+} while(0)
+
+/*
  * IO helper function(s)
  */
-void fileClose(JNIEnv *env, jobject this, jfieldID fid);
+void fileClose(JNIEnv *env, jobject this_, jfieldID fid);
 
 #ifdef MACOSX
 jstring newStringPlatform(JNIEnv *env, const char* str);

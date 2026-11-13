@@ -22,6 +22,7 @@ import com.strobel.decompiler.languages.java.ast.MemberReferenceExpression;
 import com.strobel.decompiler.languages.java.ast.PrimitiveExpression;
 import com.strobel.decompiler.languages.java.ast.TypeDeclaration;
 import java.io.IOException;
+import java.lang.reflect.GenericSignatureFormatError;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -49,11 +50,13 @@ public class PackageInfoLookup {
 
     private final String objectiveCName;
     private final boolean parametersAreNonnullByDefault;
+    private final boolean nullMarked;
     private final ReflectionSupport.Level reflectionSupportLevel;
 
     private PackageData(PackageDataBuilder builder) {
       this.objectiveCName = builder.objectiveCName;
       this.parametersAreNonnullByDefault = builder.parametersAreNonnullByDefault;
+      this.nullMarked = builder.nullMarked;
       this.reflectionSupportLevel = builder.reflectionSupportLevel;
     }
   }
@@ -63,6 +66,7 @@ public class PackageInfoLookup {
     private boolean isEmpty = true;
     private String objectiveCName = null;
     private boolean parametersAreNonnullByDefault = false;
+    private boolean nullMarked = false;
     private ReflectionSupport.Level reflectionSupportLevel;
 
     private void setObjectiveCName(String objectiveCName) {
@@ -72,6 +76,11 @@ public class PackageInfoLookup {
 
     private void setParametersAreNonnullByDefault() {
       parametersAreNonnullByDefault = true;
+      isEmpty = false;
+    }
+
+    private void setNullMarked() {
+      nullMarked = true;
       isEmpty = false;
     }
 
@@ -91,6 +100,10 @@ public class PackageInfoLookup {
 
   public boolean hasParametersAreNonnullByDefault(String packageName) {
     return getPackageData(packageName).parametersAreNonnullByDefault;
+  }
+
+  public boolean isNullMarked(String packageName) {
+    return getPackageData(packageName).nullMarked;
   }
 
   public ReflectionSupport.Level getReflectionSupportLevel(String packageName) {
@@ -119,7 +132,7 @@ public class PackageInfoLookup {
       if (classFile != null) {
         return parseDataFromClassFile(classFile);
       }
-    } catch (IOException e) {
+    } catch (IOException | NoClassDefFoundError | GenericSignatureFormatError e) {
       // Continue with no package-info data.
     }
     return EMPTY_DATA;
@@ -179,6 +192,12 @@ public class PackageInfoLookup {
       builder.setParametersAreNonnullByDefault();
     }
 
+    // @NullMarked
+    if (pkgInfo.contains("@NullMarked")
+        || pkgInfo.contains("@org.jspecify.annotations.NullMarked")) {
+      builder.setNullMarked();
+    }
+
     // @ReflectionSupportLevel
     if (hasAnnotation(pkgInfo, "com.google.j2objc.annotations.ReflectionSupport")) {
       Pattern p = Pattern.compile(REFLECTION_SUPPORT_REGEX);
@@ -211,6 +230,8 @@ public class PackageInfoLookup {
         }
       } else if (signature.equals("Ljavax/annotation/ParametersAreNonnullByDefault;")) {
         builder.setParametersAreNonnullByDefault();
+      } else if (signature.equals("Lorg/jspecify/annotations/NullMarked;")) {
+        builder.setNullMarked();
       } else if (signature.equals("Lcom/google/j2objc/annotations/ReflectionSupport;")) {
         for (Expression expr : annotation.getArguments()) {
           if (expr instanceof MemberReferenceExpression) {

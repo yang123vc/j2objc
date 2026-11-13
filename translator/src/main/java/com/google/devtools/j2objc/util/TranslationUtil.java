@@ -29,7 +29,6 @@ import com.google.devtools.j2objc.ast.FieldAccess;
 import com.google.devtools.j2objc.ast.FunctionInvocation;
 import com.google.devtools.j2objc.ast.InfixExpression;
 import com.google.devtools.j2objc.ast.PackageDeclaration;
-import com.google.devtools.j2objc.ast.ParenthesizedExpression;
 import com.google.devtools.j2objc.ast.PostfixExpression;
 import com.google.devtools.j2objc.ast.PrefixExpression;
 import com.google.devtools.j2objc.ast.SimpleName;
@@ -48,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
+import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
@@ -153,15 +153,21 @@ public final class TranslationUtil {
     return isJUnit3TestClass(type) || isJUnit4TestClass(type);
   }
 
-  private boolean isJUnit3TestClass(TypeElement type) {
+  public boolean isJUnit3TestClass(TypeElement type) {
     TypeElement testType = typeUtil.resolveJavaType("junit.framework.Test");
     return testType != null && typeUtil.isAssignable(type.asType(), testType.asType());
   }
 
   private boolean isJUnit4TestClass(TypeElement type) {
-    AnnotationMirror annotation =
-        ElementUtil.getQualifiedNamedAnnotation(type, "org.junit.runner.RunWith");
-    return annotation != null;
+    if (ElementUtil.hasQualifiedNamedAnnotation(type, "org.junit.runner.RunWith")) {
+      return true;
+    }
+    for (Element e : type.getEnclosedElements()) {
+      if (ElementUtil.hasQualifiedNamedAnnotation(e, "org.junit.Test")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private ReflectionSupport.Level getReflectionSupportLevelOnPackage(PackageElement node) {
@@ -218,10 +224,6 @@ public final class TranslationUtil {
   public static boolean isAssigned(Expression node) {
     TreeNode parent = node.getParent();
 
-    while (parent instanceof ParenthesizedExpression) {
-        parent = parent.getParent();
-    }
-
     if (parent instanceof PostfixExpression) {
       PostfixExpression.Operator op = ((PostfixExpression) parent).getOperator();
       if (op == PostfixExpression.Operator.INCREMENT
@@ -241,7 +243,7 @@ public final class TranslationUtil {
   }
 
   /**
-   * Reterns whether the expression might have any side effects. If true, it
+   * Returns whether the expression might have any side effects. If true, it
    * would be unsafe to prune the given node from the tree.
    */
   public static boolean hasSideEffect(Expression expr) {
@@ -278,8 +280,6 @@ public final class TranslationUtil {
           }
         }
         return false;
-      case PARENTHESIZED_EXPRESSION:
-        return hasSideEffect(((ParenthesizedExpression) expr).getExpression());
       case PREFIX_EXPRESSION:
         {
           PrefixExpression preExpr = (PrefixExpression) expr;
@@ -302,13 +302,17 @@ public final class TranslationUtil {
   public String getOperatorFunctionModifier(Expression expr) {
     VariableElement var = TreeUtil.getVariableElement(expr);
     if (var == null) {
-      assert TreeUtil.trimParentheses(expr) instanceof ArrayAccess
+      assert expr instanceof ArrayAccess
           : "Expression cannot be resolved to a variable or array access.";
       return "Array";
     }
     String modifier = "";
     if (ElementUtil.isVolatile(var)) {
       modifier += "Volatile";
+    } else if (!ElementUtil.isWeakReference(var)
+        && var.getKind().isField()
+        && options.useStrictFieldAssign()) {
+      modifier += "StrictField";
     }
     if (!ElementUtil.isWeakReference(var) && (var.getKind().isField() || options.useARC())) {
       modifier += "Strong";

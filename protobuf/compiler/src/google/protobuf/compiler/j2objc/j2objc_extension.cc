@@ -33,7 +33,6 @@
 //  Sanjay Ghemawat, Jeff Dean, Cyrus Najmabadi, and others.
 
 #include <google/protobuf/compiler/j2objc/j2objc_extension.h>
-
 #include <google/protobuf/compiler/j2objc/j2objc_field.h>
 #include <google/protobuf/compiler/j2objc/j2objc_helpers.h>
 
@@ -43,24 +42,23 @@ namespace compiler {
 namespace j2objc {
 
 namespace {
-  string ContainingClassName(const FieldDescriptor *descriptor) {
-    const Descriptor *scope = descriptor->extension_scope();
-    if (scope != NULL) {
-      return ClassName(scope);
-    } else {
-      return ClassName(descriptor->file());
-    }
+std::string ContainingClassName(const FieldDescriptor* descriptor) {
+  const Descriptor* scope = descriptor->extension_scope();
+  if (scope != nullptr) {
+    return ClassName(scope);
+  } else {
+    return ClassName(descriptor->file());
   }
+}
 }  // namespace
 
 ExtensionGenerator::ExtensionGenerator(const FieldDescriptor* descriptor)
-  : descriptor_(descriptor) {
-}
+    : descriptor_(descriptor) {}
 
-ExtensionGenerator::~ExtensionGenerator() {
-}
+ExtensionGenerator::~ExtensionGenerator() = default;
 
-void ExtensionGenerator::CollectSourceImports(std::set<string>* imports) const {
+void ExtensionGenerator::CollectSourceImports(
+    std::set<std::string>* imports) const {
   imports->insert("com/google/protobuf/GeneratedMessage_PackagePrivate.h");
   // Imports needed for metadata of enum and message types.
   CollectSourceImportsForField(imports, descriptor_);
@@ -69,6 +67,8 @@ void ExtensionGenerator::CollectSourceImports(std::set<string>* imports) const {
 void ExtensionGenerator::GenerateMembersHeader(io::Printer* printer) const {
   printer->Print(
       "\n"
+      // TODO(anjulij): remove when lite is supported
+      "// in j2ojbc_extension \n"
       "inline ComGoogleProtobufGeneratedMessage_GeneratedExtension"
       " *$classname$_get_$name$(void);\n"
       "/*! INTERNAL ONLY - Use accessor function from above. */\n"
@@ -80,16 +80,35 @@ void ExtensionGenerator::GenerateMembersHeader(io::Printer* printer) const {
       ContainingClassName(descriptor_));
 }
 
+void ExtensionGenerator::GenerateCompanionHeader(io::Printer* printer) const {
+  printer->Print(
+      "@property (nonnull, readonly) "
+      "ComGoogleProtobufGeneratedMessage_GeneratedExtension "
+      "*$property_name$;\n",
+      "property_name", PropertyName(descriptor_));
+}
+
+void ExtensionGenerator::GenerateCompanionSource(io::Printer* printer) const {
+  printer->Print(
+      "+ (nonnull ComGoogleProtobufGeneratedMessage_GeneratedExtension *)"
+      "$property_name$ {\n"
+      "  return $classname$_$name$;\n"
+      "}\n",
+      "property_name", PropertyName(descriptor_), "classname",
+      ContainingClassName(descriptor_), "name",
+      UnderscoresToCamelCase(descriptor_));
+}
+
 void ExtensionGenerator::GenerateSourceDefinition(io::Printer* printer) const {
   printer->Print(
       "ComGoogleProtobufGeneratedMessage_GeneratedExtension"
-          " *$classname$_$name$;\n",
-      "name", UnderscoresToCamelCase(descriptor_),
-      "classname", ContainingClassName(descriptor_));
+      " *$classname$_$name$;\n",
+      "name", UnderscoresToCamelCase(descriptor_), "classname",
+      ContainingClassName(descriptor_));
 }
 
 void ExtensionGenerator::GenerateFieldData(io::Printer* printer) const {
-  std::map<string, string> vars;
+  std::map<std::string, std::string> vars;
   vars["field_name"] = descriptor_->name();
   vars["capitalized_name"] = UnderscoresToCapitalizedCamelCase(descriptor_);
   vars["field_number"] = SimpleItoa(descriptor_->number());
@@ -99,43 +118,43 @@ void ExtensionGenerator::GenerateFieldData(io::Printer* printer) const {
   vars["default_value"] = DefaultValue(descriptor_);
   vars["containing_type_name"] = ClassName(descriptor_->containing_type());
   vars["options_data"] = GetFieldOptionsData(descriptor_);
-  printer->Print(vars,
+  printer->Print(
+      vars,
       "{\n"
       "  .name = \"$field_name$\",\n"
-      "  .javaName = \"$capitalized_name$\",\n"
       "  .number = $field_number$,\n"
       "  .flags = $flags$,\n"
       "  .type = ComGoogleProtobufDescriptors_FieldDescriptor_Type_Enum_"
-          "$field_type$,\n"
+      "$field_type$,\n"
       "  .defaultValue.value$default_value_type$ = $default_value$,\n"
       "  .hasBitIndex = 0,\n"
-      "  .offset = 0,\n"
-      "  .objcType = NULL,\n"
-      "  .containingType = \"$containing_type_name$\",\n"
-      "  .optionsData = $options_data$,\n"
-      "},\n");
+      "  .offset = 0,\n");
+  GenerateClassReference(printer);
+  printer->Print(vars,
+                 "  .containingType = \"$containing_type_name$\",\n"
+                 "  .optionsData = $options_data$,\n"
+                 "},\n");
 }
 
-void ExtensionGenerator::GenerateNonStaticFieldData(
-      io::Printer *printer, const string& arr_name, uint32_t idx) const {
-  GenerateObjcClass(printer, descriptor_, arr_name, idx);
+void ExtensionGenerator::GenerateClassReference(io::Printer* printer) const {
+  GenerateObjcClassRef(printer, descriptor_);
 }
 
 void ExtensionGenerator::GenerateSourceInitializer(io::Printer* printer) const {
   printer->Print(
       "$classname$_$name$ = "
-          "[[ComGoogleProtobufGeneratedMessage_GeneratedExtension alloc] "
-          "initWithFieldData:&extensionFields[$num$]];\n",
-      "classname", ContainingClassName(descriptor_),
-      "name", UnderscoresToCamelCase(descriptor_),
-      "num", SimpleItoa(descriptor_->index()));
+      "[[ComGoogleProtobufGeneratedMessage_GeneratedExtension alloc] "
+      "initWithFieldData:&extensionFields[$num$]];\n",
+      "classname", ContainingClassName(descriptor_), "name",
+      UnderscoresToCamelCase(descriptor_), "num",
+      SimpleItoa(descriptor_->index()));
 }
 
 void ExtensionGenerator::GenerateRegistrationCode(io::Printer* printer) const {
   printer->Print(
       "CGPExtensionRegistryAdd(extensionRegistry, $classname$_get_$name$());\n",
-      "classname", ContainingClassName(descriptor_),
-      "name", UnderscoresToCamelCase(descriptor_));
+      "classname", ContainingClassName(descriptor_), "name",
+      UnderscoresToCamelCase(descriptor_));
 }
 
 }  // namespace j2objc

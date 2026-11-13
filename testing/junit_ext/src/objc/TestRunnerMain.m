@@ -1,4 +1,4 @@
-
+#import "J2ObjCTestRunnerAppDelegate.h"
 #import "com/google/j2objc/testing/JUnitTestRunner.h"
 
 #include "java/lang/Thread.h"
@@ -42,7 +42,7 @@ void installSignalHandler() {
 @implementation JUnitXCTestCase
 
 - (void)testAll {
-  XCTAssertEqual([ComGoogleJ2objcTestingJUnitTestRunner mainWithNSStringArray:nil], 0);
+  XCTAssertEqual(ComGoogleJ2objcTestingJUnitTestRunner_runWithNSStringArray_(nil), 0);
 }
 
 @end
@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
   installSignalHandler();
   @autoreleasepool {
     @try {
-      UIApplicationMain(argc, argv, nil, nil);
+      UIApplicationMain(argc, argv, nil, NSStringFromClass([J2ObjCTestRunnerAppDelegate class]));
     }
     @catch (JavaLangThrowable *e) {
       JavaLangThread *currentThread = JavaLangThread_currentThread();

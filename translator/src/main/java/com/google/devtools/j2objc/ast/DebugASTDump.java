@@ -154,12 +154,6 @@ public class DebugASTDump extends TreeVisitor {
   }
 
   @Override
-  public boolean visit(NameQualifiedType node) {
-    printName(node.getName());
-    return true;
-  }
-
-  @Override
   public boolean visit(PackageDeclaration node) {
     printName(node.getName());
     return true;
@@ -186,6 +180,12 @@ public class DebugASTDump extends TreeVisitor {
   @Override
   public boolean visit(QualifiedType node) {
     printType(node.getTypeMirror());
+    return true;
+  }
+
+  @Override
+  public boolean visit(RecordDeclaration node) {
+    printName(node.getName());
     return true;
   }
 

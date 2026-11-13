@@ -56,11 +56,9 @@ NSString *JreClassPackageName(const J2ObjcClassInfo *metadata);
 // Field and method lookup functions.
 const J2ObjcFieldInfo *JreFindFieldInfo(const J2ObjcClassInfo *metadata, const char *fieldName);
 // Find a field declared in the given class
-JavaLangReflectField *FindDeclaredField(
-    IOSClass *iosClass, NSString *name, jboolean publicOnly);
+JavaLangReflectField *FindDeclaredField(IOSClass *iosClass, NSString *name, bool publicOnly);
 // Find a field declared in the given class or its hierarchy
-JavaLangReflectField *FindField(
-    IOSClass *iosClass, NSString *name, jboolean publicOnly);
+JavaLangReflectField *FindField(IOSClass *iosClass, NSString *name, bool publicOnly);
 // Find a method or constructor declared in the given class.
 JavaLangReflectMethod *JreMethodWithNameAndParamTypes(
     IOSClass *iosClass, NSString *name, IOSObjectArray *paramTypes);
@@ -72,13 +70,15 @@ JavaLangReflectConstructor *JreConstructorForSelector(IOSClass *iosClass, SEL se
 JavaLangReflectMethod *JreMethodWithNameAndParamTypesInherited(
     IOSClass *iosClass, NSString *name, IOSObjectArray *types);
 JavaLangReflectMethod *JreMethodForSelectorInherited(IOSClass *iosClass, SEL selector);
+// Returns a string representation of the metadata.
+NSString *JreMetadataToString(const J2ObjcClassInfo *metadata);
 
 // J2ObjcMethodInfo accessor functions.
 NSString *JreMethodGenericString(const J2ObjcMethodInfo *metadata, const void **ptrTable);
 
 __attribute__((always_inline)) inline const char *JreMethodJavaName(
     const J2ObjcMethodInfo *metadata, const void **ptrTable) {
-  const char *javaName = JrePtrAtIndex(ptrTable, metadata->javaNameIdx);
+  const char *javaName = (const char *)JrePtrAtIndex(ptrTable, metadata->javaNameIdx);
   return javaName ? javaName : sel_getName(metadata->selector);
 }
 

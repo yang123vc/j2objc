@@ -34,11 +34,11 @@ public class ArrayAccessTest extends GenerationTest {
     assertEquals(3, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSIntArray *arr = [IOSIntArray arrayWithInts:(jint[]){ 1, 2 } count:2];", result);
+        "IOSIntArray *arr = [IOSIntArray arrayWithInts:(int32_t[]){ 1, 2 } count:2];", result);
     result = generateStatement(stmts.get(1));
-    assertEquals("jint one = IOSIntArray_Get(arr, 0);", result);
+    assertEquals("int32_t one = IOSIntArray_Get(arr, 0);", result);
     result = generateStatement(stmts.get(2));
-    assertEquals("jint two = IOSIntArray_Get(arr, 1);", result);
+    assertEquals("int32_t two = IOSIntArray_Get(arr, 1);", result);
   }
 
   public void testSetElementWithLiteral() {
@@ -55,26 +55,26 @@ public class ArrayAccessTest extends GenerationTest {
         "int[] arr = { 1, 2 }; arr[0] = 2 * 5; arr[1] = 6 / 3;");
     assertEquals(3, stmts.size());
     String result = generateStatement(stmts.get(1));
-    assertEquals("*IOSIntArray_GetRef(arr, 0) = 2 * 5;", result);
+    assertEquals("*IOSIntArray_GetRef(arr, 0) = JreIntTimes(2, 5);", result);
     result = generateStatement(stmts.get(2));
-    assertEquals("*IOSIntArray_GetRef(arr, 1) = 6 / 3;", result);
+    assertEquals("*IOSIntArray_GetRef(arr, 1) = JreIntDiv(6, 3);", result);
   }
 
   public void testPrefixOperator() {
     List<Statement> stmts = translateStatements("int[] arr = { 1, 2 }; ++arr[0]; --arr[1];");
     assertEquals(3, stmts.size());
     String result = generateStatement(stmts.get(1));
-    assertEquals("++(*IOSIntArray_GetRef(arr, 0));", result);
+    assertEquals("JrePreIncInt(IOSIntArray_GetRef(arr, 0));", result);
     result = generateStatement(stmts.get(2));
-    assertEquals("--(*IOSIntArray_GetRef(arr, 1));", result);
+    assertEquals("JrePreDecInt(IOSIntArray_GetRef(arr, 1));", result);
   }
 
   public void testPostfixOperator() {
     List<Statement> stmts = translateStatements("int[] arr = { 1, 2 }; arr[0]++; arr[1]--;");
     assertEquals(3, stmts.size());
     String result = generateStatement(stmts.get(1));
-    assertEquals("(*IOSIntArray_GetRef(arr, 0))++;", result);
+    assertEquals("JrePostIncInt(IOSIntArray_GetRef(arr, 0));", result);
     result = generateStatement(stmts.get(2));
-    assertEquals("(*IOSIntArray_GetRef(arr, 1))--;", result);
+    assertEquals("JrePostDecInt(IOSIntArray_GetRef(arr, 1));", result);
   }
 }

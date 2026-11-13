@@ -16,8 +16,8 @@ package com.google.j2objc.util.logging;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.logging.Formatter;
 import java.util.logging.Handler;
+import java.util.logging.SimpleFormatter;
 import java.util.logging.LogRecord;
 
 /*-[
@@ -92,6 +92,17 @@ import java.util.logging.LogRecord;
 #pragma clang diagnostic pop
 ]-*/
 
+/*-[
+// Static, unused reference to java.lang.reflect.GenericDeclaration's backing interface.
+// Normally apps don't reflect on protocols, but this is necessary to support GSON,
+// which does.
+#include "java/lang/reflect/GenericDeclaration.h"
+__attribute__((unused)) void generic_declaration_class_reference(void) {
+  static IOSClass *cls;
+  cls = JavaLangReflectGenericDeclaration_class_();
+}
+]-*/
+
 /**
  * Handler implementation that calls iOS asl_log(), or os_log() if supported by the OS.
  *
@@ -99,7 +110,7 @@ import java.util.logging.LogRecord;
  */
 public class IOSLogHandler extends Handler {
 
-  static class IOSLogFormatter extends Formatter {
+  static class IOSLogFormatter extends SimpleFormatter {
 
     /**
      * Very simple formatter, since asl_log adds its own text.
@@ -155,8 +166,18 @@ public class IOSLogHandler extends Handler {
   #endif
   ]-*/;
 
-  private void publishWithAsl(LogRecord record) {
+  private String getLogMessage(LogRecord record) {
     StringBuilder sb = new StringBuilder(getFormatter().format(record));
+    if (record.getThrown() != null) {
+      sb.append('\n');
+      StringWriter stringWriter = new StringWriter();
+      record.getThrown().printStackTrace(new PrintWriter(stringWriter));
+      sb.append(stringWriter.toString());
+    }
+    return sb.toString();
+  }
+
+  private void publishWithAsl(LogRecord record) {
     int aslLevel;
     switch (record.getLevel().intValue()) {
       case 1000:       // Level.SEVERE
@@ -172,14 +193,7 @@ public class IOSLogHandler extends Handler {
       default:
         aslLevel = 6;  // ASL_LEVEL_INFO
     }
-
-    if (record.getThrown() != null) {
-      sb.append('\n');
-      StringWriter stringWriter = new StringWriter();
-      record.getThrown().printStackTrace(new PrintWriter(stringWriter));
-      sb.append(stringWriter.toString());
-    }
-    aslLog(sb.toString(), aslLevel);
+    aslLog(getLogMessage(record), aslLevel);
   }
 
   private native void aslLog(String logMessage, int aslLevel) /*-[
@@ -209,8 +223,7 @@ public class IOSLogHandler extends Handler {
   ]-*/;
 
   private void publishWithOSLog(LogRecord record) {
-    StringBuilder sb = new StringBuilder(getFormatter().format(record));
-    osLog(sb.toString(), record.getLevel().intValue());
+    osLog(getLogMessage(record), record.getLevel().intValue());
   }
 
   private native void osLog(String logMessage, int logLevel) /*-[

@@ -37,14 +37,14 @@ public class JavaToIOSMethodTranslatorTest extends GenerationTest {
         + "  try { Example e = (Example) super.clone(); e.i = i; return e; } "
         + "  catch (CloneNotSupportedException e) { return null; }}}",
         "Example", "Example.h");
-    assertTranslation(translation, "- (Example *)copy__ OBJC_METHOD_FAMILY_NONE;");
+    assertInTranslation(translation, "- (Example *)copy__ OBJC_METHOD_FAMILY_NONE;");
     translation = getTranslatedFile("Example.m");
-    assertTranslation(translation,
-        "return (Example *) cast_chk([self java_clone], [Example class]);");
-    assertTranslation(translation, "- (id)copyWithZone:(NSZone *)zone {");
-    assertTranslation(translation,
-        "Example *e = (Example *) cast_chk([super java_clone], [Example class]);");
-    assertTranslation(translation, "((Example *) nil_chk(e))->i_ = i_");
+    assertInTranslation(
+        translation, "return (Example *) cast_chk([self java_clone], [Example class]);");
+    assertInTranslation(translation, "- (id)copyWithZone:(NSZone *)zone {");
+    assertInTranslation(
+        translation, "Example *e = (Example *) cast_chk([super java_clone], [Example class]);");
+    assertInTranslation(translation, "((Example *) nil_chk(e))->i_ = i_");
   }
 
   public void testStringValueOfBoolean() throws IOException {
@@ -65,8 +65,9 @@ public class JavaToIOSMethodTranslatorTest extends GenerationTest {
     String translation = translateSourceFile(
         "class Test { public String toString(boolean value) { return String.valueOf(value); } }",
         "Test", "Test.m");
-    assertTranslatedLines(translation,
-        "- (NSString *)toStringWithBoolean:(jboolean)value {",
+    assertTranslatedLines(
+        translation,
+        "- (NSString *)toStringWithBoolean:(bool)value {",
         "return NSString_java_valueOfBool_(value);");
   }
 
@@ -91,7 +92,7 @@ public class JavaToIOSMethodTranslatorTest extends GenerationTest {
     List<Statement> stmts = translateStatements(source);
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
-    assertEquals("jint test = ((jint) [@\"foo\" hash]);", result);
+    assertEquals("int32_t test = (int32_t) [@\"foo\" hash];", result);
   }
 
   public void testClassGetSuperclass() throws IOException {
@@ -142,7 +143,7 @@ public class JavaToIOSMethodTranslatorTest extends GenerationTest {
     List<Statement> stmts = translateStatements(source);
     assertEquals(9, stmts.size());
     String result = generateStatement(stmts.get(1));
-    assertEquals("jint idx = [s java_indexOf:'g'];", result);
+    assertEquals("int32_t idx = [s java_indexOf:'g'];", result);
     result = generateStatement(stmts.get(2));
     assertEquals("idx = [s java_indexOfString:@\"brillig\"];", result);
     result = generateStatement(stmts.get(3));
@@ -173,7 +174,7 @@ public class JavaToIOSMethodTranslatorTest extends GenerationTest {
     List<Statement> stmts = translateStatements(source);
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
-    assertTranslation(result, "[clazz newInstance]");
+    assertInTranslation(result, "[clazz newInstance]");
   }
 
   // Verify that a method named cloned in a class that doesn't
@@ -188,9 +189,9 @@ public class JavaToIOSMethodTranslatorTest extends GenerationTest {
         + "  return e;"
         + "}}",
         "Example", "Example.h");
-    assertTranslation(translation, "- (id)java_clone;");
+    assertInTranslation(translation, "- (id)java_clone;");
     translation = getTranslatedFile("Example.m");
-    assertTranslation(translation, "- (id)java_clone {");
+    assertInTranslation(translation, "- (id)java_clone {");
   }
 
   // Verify that if a Cloneable class doesn't have a clone method,
@@ -198,8 +199,8 @@ public class JavaToIOSMethodTranslatorTest extends GenerationTest {
     String translation = translateSourceFile(
         "public class Example implements Cloneable { int i; }",
         "Example", "Example.m");
-    assertTranslation(translation, "- (id)copyWithZone:(NSZone *)zone {");
-    assertTranslation(translation, "return [[self java_clone] retain];");
+    assertInTranslation(translation, "- (id)copyWithZone:(NSZone *)zone {");
+    assertInTranslation(translation, "return [[self java_clone] retain];");
   }
 
   public void testCloneRenamingWithSuperClone() throws IOException {
@@ -212,14 +213,16 @@ public class JavaToIOSMethodTranslatorTest extends GenerationTest {
         + "    try { Inner inner = (Inner) super.clone(); inner.i = i; return inner; } "
         + "    catch (CloneNotSupportedException e) { return null; }}}}",
         "Example", "Example.h");
-    assertTranslation(translation, "- (Example *)copy__ OBJC_METHOD_FAMILY_NONE;");
+    assertInTranslation(translation, "- (Example *)copy__ OBJC_METHOD_FAMILY_NONE;");
     translation = getTranslatedFile("Example.m");
-    assertTranslation(translation,
-        "return (Example *) cast_chk([self java_clone], [Example class]);");
-    assertTranslation(translation, "- (id)copyWithZone:(NSZone *)zone {");
-    assertTranslation(translation, "Example_Inner *inner = "
-        + "(Example_Inner *) cast_chk([super java_clone], [Example_Inner class]);");
-    assertTranslation(translation, "((Example_Inner *) nil_chk(inner))->i_ = i_;");
+    assertInTranslation(
+        translation, "return (Example *) cast_chk([self java_clone], [Example class]);");
+    assertInTranslation(translation, "- (id)copyWithZone:(NSZone *)zone {");
+    assertInTranslation(
+        translation,
+        "Example_Inner *inner = "
+            + "(Example_Inner *) cast_chk([super java_clone], [Example_Inner class]);");
+    assertInTranslation(translation, "((Example_Inner *) nil_chk(inner))->i_ = i_;");
   }
 
   // Ensure using the builder pattern does not invoke O(2^N) running time.
@@ -252,11 +255,11 @@ public class JavaToIOSMethodTranslatorTest extends GenerationTest {
             "Test",
             "Test.h");
     // Verify interface.
-    assertTranslation(hFile, "testWithNSString:(NSString * __nonnull)s;");
+    assertInTranslation(hFile, "testWithNSString:(NSString * _Nonnull)s;");
     assertNotInTranslation(hFile, "copyWithZone");
     // Verify implementation.
     String mFile = getTranslatedFile("Test.m");
-    assertTranslation(mFile, "- (void)testWithNSString:(NSString *)s {");
-    assertTranslation(mFile, "- (id)copyWithZone:(NSZone *)zone {");
+    assertInTranslation(mFile, "- (void)testWithNSString:(NSString *)s {");
+    assertInTranslation(mFile, "- (id)copyWithZone:(NSZone *)zone {");
   }
 }

@@ -200,7 +200,7 @@
  * concurrent collection is thread-safe, but not governed by a
  * single exclusion lock.  In the particular case of
  * ConcurrentHashMap, it safely permits any number of
- * concurrent reads as well as a tunable number of concurrent
+ * concurrent reads as well as a large number of concurrent
  * writes.  "Synchronized" classes can be useful when you need
  * to prevent all access to a collection via a single lock, at
  * the expense of poorer scalability.  In other cases in which
@@ -262,7 +262,6 @@
  *
  * </ul>
  *
- *
  * The methods of all classes in {@code java.util.concurrent} and its
  * subpackages extend these guarantees to higher-level
  * synchronization.  In particular:
@@ -305,7 +304,4 @@
  *
  * @since 1.5
  */
-@ReflectionSupport(value = ReflectionSupport.Level.FULL)
 package java.util.concurrent;
-
-import com.google.j2objc.annotations.ReflectionSupport;

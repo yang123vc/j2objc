@@ -12,9 +12,10 @@
  * limitations under the License.
  */
 
-import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.ExtensionRegistry;
-
+import com.google.protobuf.InvalidProtocolBufferException;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import protos.GroupFe;
 import protos.GroupRe;
 import protos.MessageData;
@@ -26,9 +27,6 @@ import protos.MessageDataOrBuilder;
 import protos.MessageFields;
 import protos.MessageSet;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-
 /**
  * Tests for correct behavior of message and group fields.
  */
@@ -39,6 +37,28 @@ public class MessagesTest extends ProtobufTest {
     MessageFields.registerAllExtensions(registry);
     MessageData msg = MessageData.parseFrom(ALL_MESSAGES_BYTES, registry);
     checkFields(msg);
+  }
+
+  public void testParseFromByteString() throws Exception {
+    ExtensionRegistry registry = ExtensionRegistry.newInstance();
+    MessageFields.registerAllExtensions(registry);
+    MessageData filledMsg = getFilledMessage();
+    MessageData msg = MessageData.parseFrom(filledMsg.toByteString(), registry);
+    checkFields(msg);
+  }
+
+  // b/297559868: verify invalid binary proto throws exception when parsed.
+  // In this case, a Base64-encoded string was mistakenly passed as a proto,
+  // causing a crash instead of a thrown exception.
+  public void testParseFromInvalidByteArray() throws Exception {
+    ExtensionRegistry registry = ExtensionRegistry.newInstance();
+    MessageFields.registerAllExtensions(registry);
+    try {
+      MessageData.parseFrom(INVALID_MESSAGES_BYTES, registry);
+      fail("InvalidProtocolBufferException should have been thrown");
+    } catch (InvalidProtocolBufferException e) {
+      // success
+    }
   }
 
   public void testParseReversedMessageSets() throws Exception {
@@ -69,6 +89,28 @@ public class MessagesTest extends ProtobufTest {
     checkFields(msg);
   }
 
+  public void testMergeFromByteArray() throws Exception {
+    ExtensionRegistry registry = ExtensionRegistry.newInstance();
+    MessageFields.registerAllExtensions(registry);
+    MessageData filledMsg = getFilledMessage();
+    MessageData.Builder builder =
+        MessageData.newBuilder().mergeFrom(filledMsg.toByteArray(), registry);
+    MessageData msg = builder.build();
+    checkFields(builder);
+    checkFields(msg);
+  }
+
+  public void testMergeFromByteString() throws Exception {
+    ExtensionRegistry registry = ExtensionRegistry.newInstance();
+    MessageFields.registerAllExtensions(registry);
+    MessageData filledMsg = getFilledMessage();
+    MessageData.Builder builder =
+        MessageData.newBuilder().mergeFrom(filledMsg.toByteString(), registry);
+    MessageData msg = builder.build();
+    checkFields(builder);
+    checkFields(msg);
+  }
+
   public void testSerialization() throws Exception {
     MessageData msg = getFilledMessage();
 
@@ -94,6 +136,18 @@ public class MessagesTest extends ProtobufTest {
     byte[] bytes = group.toByteArray();
     byte[] expected = asBytes(new int[] { 0x08, 0x01 });
     checkBytes(expected, bytes);
+  }
+
+  public void testRemoveRepeatedMessageField() throws Exception {
+    MessageData data = MessageData.newBuilder()
+        .addMsgR(SubMsg.newBuilder().setUintF(40).build())
+        .addMsgR(SubMsg.newBuilder().setUintF(41).build())
+        .addMsgR(SubMsg.newBuilder().setUintF(42).build())
+        .removeMsgR(1)
+        .build();
+    assertEquals(2, data.getMsgRCount());
+    assertEquals(40, data.getMsgR(0).getUintF());
+    assertEquals(42, data.getMsgR(1).getUintF());
   }
 
   public void testMergeExistingMessageFields() throws Exception {
@@ -267,4 +321,8 @@ public class MessagesTest extends ProtobufTest {
     0x04, 0x0A, 0x02, 0x08, 0x35, 0xFA, 0x3F, 0x04, 0x0A, 0x02, 0x08, 0x3F, 0x83, 0x40, 0x08, 0x36,
     0x84, 0x40, 0x83, 0x40, 0x08, 0x40, 0x84, 0x40
   });
+
+  // Invalid "proto" bytes from b/297559868.
+  private static final byte[] INVALID_MESSAGES_BYTES =
+      asBytes(new int[] {0x7b, 0x1b, 0x5e, 0xae, 0x76, 0xa5});
 }

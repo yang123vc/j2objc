@@ -37,7 +37,7 @@ public class ObjectiveCSegmentedHeaderGeneratorTest extends GenerationTest {
         "#define INCLUDE_ALL_Test 1",
         "#endif",
         "#undef RESTRICT_Test");
-    assertTranslation(translation, "#pragma pop_macro(\"INCLUDE_ALL_Test\")");
+    assertInTranslation(translation, "#pragma pop_macro(\"INCLUDE_ALL_Test\")");
     assertTranslatedLines(translation,
         "#if !defined (Test_) && (INCLUDE_ALL_Test || defined(INCLUDE_Test))",
         "#define Test_");
@@ -89,9 +89,10 @@ public class ObjectiveCSegmentedHeaderGeneratorTest extends GenerationTest {
 
     String translation = translateSourceFile("class Test {}", "Test", "Test.h");
 
-    assertTranslation(translation, "#pragma clang diagnostic push");
-    assertTranslation(translation, "#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"");
-    assertTranslation(translation, "#pragma clang diagnostic pop");
+    assertInTranslation(translation, "#pragma clang diagnostic push");
+    assertInTranslation(
+        translation, "#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"");
+    assertInTranslation(translation, "#pragma clang diagnostic pop");
   }
 
   public void testForwardDeclarationForTypeInSameIncludeAsSuperclass() throws IOException {
@@ -104,7 +105,7 @@ public class ObjectiveCSegmentedHeaderGeneratorTest extends GenerationTest {
         "#include \"Foo.h\"");
     // Forward declaration for Foo_Bar is needed because the include of Foo.h
     // is restricted to only the Foo type.
-    assertTranslation(translation, "@class Foo_Bar");
+    assertInTranslation(translation, "@class Foo_Bar");
   }
 
   public void testCombinedJarVariableNames() throws IOException {
@@ -140,16 +141,16 @@ public class ObjectiveCSegmentedHeaderGeneratorTest extends GenerationTest {
         + "public static final int INCLUDE_ALL = 2;"
         + "static class Inner { public static final int RESTRICT = 3; } }", "Test", "Test.h");
     assertTranslatedLines(translation,
-        "inline jint Test_get_INCLUDE(void);",
+        "inline int32_t Test_get_INCLUDE(void);",
         "#define Test_INCLUDE 1",
-        "J2OBJC_STATIC_FIELD_CONSTANT(Test, INCLUDE, jint)");
+        "J2OBJC_STATIC_FIELD_CONSTANT(Test, INCLUDE, int32_t)");
     assertTranslatedLines(translation,
-        "inline jint Test_get_INCLUDE_ALL(void);",
+        "inline int32_t Test_get_INCLUDE_ALL(void);",
         "#define Test_INCLUDE_ALL 2",
-        "J2OBJC_STATIC_FIELD_CONSTANT(Test, INCLUDE_ALL, jint)");
+        "J2OBJC_STATIC_FIELD_CONSTANT(Test, INCLUDE_ALL, int32_t)");
     assertTranslatedLines(translation,
-        "inline jint Test_Inner_get_RESTRICT(void);",
+        "inline int32_t Test_Inner_get_RESTRICT(void);",
         "#define Test_Inner_RESTRICT 3",
-        "J2OBJC_STATIC_FIELD_CONSTANT(Test_Inner, RESTRICT, jint)");
+        "J2OBJC_STATIC_FIELD_CONSTANT(Test_Inner, RESTRICT, int32_t)");
   }
 }

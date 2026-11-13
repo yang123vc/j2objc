@@ -14,7 +14,11 @@
 
 package com.google.devtools.j2objc;
 
+import static com.google.common.io.FileWriteMode.APPEND;
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Ascii;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableSet;
@@ -33,6 +37,7 @@ import com.google.devtools.j2objc.util.PackagePrefixes;
 import com.google.devtools.j2objc.util.SourceVersion;
 import com.google.devtools.j2objc.util.Version;
 import java.io.File;
+import java.io.FileFilter;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.UnsupportedCharsetException;
@@ -56,17 +61,23 @@ import java.util.regex.Pattern;
  *
  * @author Tom Ball
  */
+@SuppressWarnings("SystemExitOutsideMain")
 public class Options {
 
   private List<String> processorPathEntries = new ArrayList<>();
   private OutputLanguageOption language = OutputLanguageOption.OBJECTIVE_C;
   private MemoryManagementOption memoryManagementOption = null;
-  private boolean emitLineDirectives = false;
+  private boolean strictFieldAssign = false;
+  private boolean strictFieldLoad = false;
+  private boolean retainAutoreleaseReturns = false;
+  private boolean arcAutoreleaseReturns = false;
+  private EmitLineDirectivesOption emitLineDirectives = EmitLineDirectivesOption.NONE;
   private boolean warningsAsErrors = false;
   private boolean deprecatedDeclarations = false;
   private HeaderMap headerMap = new HeaderMap();
   private boolean stripGwtIncompatible = false;
   private boolean segmentedHeaders = true;
+  private boolean separateHeaders = false;
   private boolean jsniWarnings = true;
   private boolean buildClosure = false;
   private EnumSet<MetadataSupport> includedMetadata =
@@ -80,17 +91,30 @@ public class Options {
   private String processors = null;
   private boolean disallowInheritedConstructors = true;
   private boolean nullability = false;
+  private boolean swiftEnums = true;
+  private boolean swiftNaming = false;
+  private boolean nullMarked = false;
   private TimingLevel timingLevel = TimingLevel.NONE;
   private boolean dumpAST = false;
-  private String lintArgument = null;
+  private String lintArgument = "-Xlint:none"; // Disable all lint warnings by default.
   private boolean reportJavadocWarnings = false;
   private boolean translateBootclasspath = false;
   private boolean translateClassfiles = false;
   private String annotationsJar = null;
   private CombinedOutput globalCombinedOutput = null;
-  private String bootclasspath = null;
+  private String bootclasspath = "";
   private boolean emitKytheMappings = false;
   private boolean emitSourceHeaders = true;
+  private boolean injectLogSites = false;
+  private boolean allVersions = false;
+  private boolean asObjCGenericDecl = false;
+  private boolean ignoreJarWarnings = false;
+  private boolean linkSourcePathHeaders = false;
+  private boolean javacWarnings = true;
+  private boolean stripReflectionErrors = false;
+  private boolean linkProtocols = false;
+  private boolean addTextSegmentAttribute = false;
+  private boolean suppressHeaderClangTidyWarnings = false;
 
   private Mappings mappings = new Mappings();
   private FileUtil fileUtil = new FileUtil();
@@ -101,13 +125,13 @@ public class Options {
 
   private SourceVersion sourceVersion = null;
 
-  private static File proGuardUsageFile = null;
+  private File proGuardUsageFile = null;
 
-  private static String fileHeader;
+  private static final String FILE_HEADER;
   private static final String FILE_HEADER_KEY = "file-header";
-  private static String usageMessage;
-  private static String helpMessage;
-  private static String xhelpMessage;
+  private static final String USAGE_MESSAGE;
+  private static final String HELP_MESSAGE;
+  private static final String XHELP_MESSAGE;
   private static final String USAGE_MSG_KEY = "usage-message";
   private static final String HELP_MSG_KEY = "help-message";
   private static final String X_HELP_MSG_KEY = "x-help-message";
@@ -195,6 +219,23 @@ public class Options {
   }
 
   /**
+   * Different ways that #line debug directives can be emitted.
+   */
+  private enum EmitLineDirectivesOption {
+    // Don't emit #line directives.
+    NONE,
+
+    // Emit #line directives using the unmodified source file path of the compilation unit; this may
+    // be an absolute path or a relative path.
+    NORMAL,
+
+    // Emit #line directives using the source file path of the compilation unit converted to a
+    // relative path, relative to the current working directory; if the file is not in a
+    // subdirectory of the current working directory then the emitted path is the same as NORMAL.
+    RELATIVE,
+  }
+
+  /**
    * Class that holds the information needed to generate combined output, so that all output goes to
    * a single, named .h/.m file set.
    */
@@ -222,6 +263,8 @@ public class Options {
       ImmutableSet.of("--patch-module", "--system", "--add-reads");
   private final List<String> platformModuleSystemOptions = new ArrayList<>();
 
+  private static final Logger logger = Logger.getLogger("com.google.devtools.j2objc");
+  private boolean logLevelSet = false;
 
   static {
     // Load string resources.
@@ -233,14 +276,14 @@ public class Options {
       System.err.println("unable to access tool properties: " + e);
       System.exit(1);
     }
-    fileHeader = properties.getProperty(FILE_HEADER_KEY);
-    Preconditions.checkNotNull(fileHeader);
-    usageMessage = properties.getProperty(USAGE_MSG_KEY);
-    Preconditions.checkNotNull(usageMessage);
-    helpMessage = properties.getProperty(HELP_MSG_KEY);
-    Preconditions.checkNotNull(helpMessage);
-    xhelpMessage = properties.getProperty(X_HELP_MSG_KEY);
-    Preconditions.checkNotNull(xhelpMessage);
+    FILE_HEADER = properties.getProperty(FILE_HEADER_KEY);
+    Preconditions.checkNotNull(FILE_HEADER);
+    USAGE_MESSAGE = properties.getProperty(USAGE_MSG_KEY);
+    Preconditions.checkNotNull(USAGE_MESSAGE);
+    HELP_MESSAGE = properties.getProperty(HELP_MSG_KEY);
+    Preconditions.checkNotNull(HELP_MESSAGE);
+    XHELP_MESSAGE = properties.getProperty(X_HELP_MSG_KEY);
+    Preconditions.checkNotNull(XHELP_MESSAGE);
 
     Logger rootLogger = Logger.getLogger("");
     for (Handler handler : rootLogger.getHandlers()) {
@@ -259,23 +302,22 @@ public class Options {
   /**
    * Set all log handlers in this package with a common level.
    */
-  private void setLogLevel(Level level) {
-    Logger.getLogger("com.google.devtools.j2objc").setLevel(level);
+  @VisibleForTesting
+  void setLogLevel(Level level) {
+    logger.setLevel(level);
+    logLevelSet = true;
   }
 
   public boolean isVerbose() {
-    return Logger.getLogger("com.google.devtools.j2objc").getLevel().equals(Level.FINEST);
+    return logger.getLevel().equals(Level.FINEST);
   }
 
   /**
-   * Load the options from a command-line, returning the arguments that were
-   * not option-related (usually files).  If help is requested or an error is
-   * detected, the appropriate status method is invoked and the app terminates.
-   * @throws IOException
+   * Load the options from a command-line, returning the arguments that were not option-related
+   * (usually files). If help is requested or an error is detected, the appropriate status method is
+   * invoked and the app terminates.
    */
   public List<String> load(String[] args) throws IOException {
-    setLogLevel(Level.WARNING);
-
     mappings.addJreMappings();
 
     // Create a temporary directory as the sourcepath's first entry, so that
@@ -284,6 +326,10 @@ public class Options {
 
     ArgProcessor processor = new ArgProcessor();
     processor.processArgs(args);
+    processor.logExpandedArgs(args);
+    if (!logLevelSet) {
+      setLogLevel(Level.WARNING);
+    }
     postProcessArgs();
 
     return processor.sourceFiles;
@@ -291,12 +337,17 @@ public class Options {
 
   private class ArgProcessor {
 
-    private List<String> sourceFiles = new ArrayList<>();
+    private final List<String> sourceFiles = new ArrayList<>();
+    private boolean printArgs = false;
 
     private void processArgs(String[] args) throws IOException {
       Iterator<String> iter = Arrays.asList(args).iterator();
       while (iter.hasNext()) {
         processArg(iter);
+      }
+      if (printArgs) {
+        System.err.print("j2objc ");
+        System.err.println(String.join(" ", args));
       }
     }
 
@@ -324,11 +375,12 @@ public class Options {
       } else if (arg.startsWith("@")) {
         processArgsFile(arg.substring(1));
       } else if (arg.equals("-classpath") || arg.equals("-cp")) {
-        fileUtil.getClassPathEntries().addAll(getPathArgument(getArgValue(args, arg), true));
+        fileUtil.getClassPathEntries().addAll(getPathArgument(getArgValue(args, arg), true, true));
       } else if (arg.equals("-sourcepath")) {
-        fileUtil.getSourcePathEntries().addAll(getPathArgument(getArgValue(args, arg), false));
+        fileUtil.getSourcePathEntries()
+            .addAll(getPathArgument(getArgValue(args, arg), false, false));
       } else if (arg.equals("-processorpath")) {
-        processorPathEntries.addAll(getPathArgument(getArgValue(args, arg), true));
+        processorPathEntries.addAll(getPathArgument(getArgValue(args, arg), true, false));
       } else if (arg.equals("-d")) {
         fileUtil.setOutputDirectory(new File(getArgValue(args, arg)));
       } else if (arg.equals("--mapping")) {
@@ -338,7 +390,7 @@ public class Options {
       } else if (arg.equals("--output-header-mapping")) {
         headerMap.setOutputMappingFile(new File(getArgValue(args, arg)));
       } else if (arg.equals("--dead-code-report")) {
-        proGuardUsageFile = new File(getArgValue(args, arg));
+        addDeadCodeReport(getArgValue(args, arg));
       } else if (arg.equals("--prefix")) {
         addPrefixOption(getArgValue(args, arg));
       } else if (arg.equals("--prefixes")) {
@@ -368,12 +420,28 @@ public class Options {
         headerMap.setIncludeGeneratedSources();
       } else if (arg.equals("-Xpublic-hdrs")) {
         fileUtil.setHeaderOutputDirectory(new File(getArgValue(args, arg)));
+      } else if (arg.equals("-Xlink-protocols")) {
+        linkProtocols = true;
+      } else if (arg.equals("--suppress-header-clang-tidy-warnings")) {
+        suppressHeaderClangTidyWarnings = true;
       } else if (arg.equals("-use-arc")) {
         checkMemoryManagementOption(MemoryManagementOption.ARC);
+      } else if (arg.equals("-Xstrict-field-assign")) {
+        strictFieldAssign = true;
+      } else if (arg.equals("-Xstrict-field-load")) {
+        strictFieldAssign = true;
+        strictFieldLoad = true;
+      } else if (arg.equals("-Xretain-autorelease-returns")) {
+        retainAutoreleaseReturns = true;
+      } else if (arg.equals("-Xarc-autorelease-returns")) {
+        retainAutoreleaseReturns = true;
+        arcAutoreleaseReturns = true;
       } else if (arg.equals("-g")) {
-        emitLineDirectives = true;
+        emitLineDirectives = EmitLineDirectivesOption.NORMAL;
       } else if (arg.equals("-g:none")) {
-        emitLineDirectives = false;
+        emitLineDirectives = EmitLineDirectivesOption.NONE;
+      } else if (arg.equals("-g:relative")) {
+        emitLineDirectives = EmitLineDirectivesOption.RELATIVE;
       } else if (arg.equals("-Werror")) {
         warningsAsErrors = true;
       } else if (arg.equals("--generate-deprecated")) {
@@ -385,7 +453,7 @@ public class Options {
       } else if (arg.startsWith(TIMING_INFO_ARG + ':')) {
         String timingArg = arg.substring(TIMING_INFO_ARG.length() + 1);
         try {
-          timingLevel = TimingLevel.valueOf(timingArg.toUpperCase());
+          timingLevel = TimingLevel.valueOf(Ascii.toUpperCase(timingArg));
         } catch (IllegalArgumentException e) {
           usage("invalid --timing-info argument");
         }
@@ -397,6 +465,10 @@ public class Options {
         // TODO(tball): remove flag when all client builds stop using it.
       } else if (arg.equals("-Xno-jsni-warnings")) {
         jsniWarnings = false;
+      } else if (arg.equals("-Xignore-jar-warnings")) {
+        ignoreJarWarnings = true;
+      } else if (arg.equals("-Xlink-source-path-headers")) {
+        linkSourcePathHeaders = true;
       } else if (arg.equals("-encoding")) {
         try {
           fileUtil.setFileEncoding(getArgValue(args, arg));
@@ -407,8 +479,44 @@ public class Options {
         stripGwtIncompatible = true;
       } else if (arg.equals("--strip-reflection")) {
         includedMetadata = EnumSet.of(MetadataSupport.ENUM_CONSTANTS);
+      } else if (arg.equals("--no-strip-reflection")) {
+        includedMetadata =
+            EnumSet.of(
+                MetadataSupport.FULL, MetadataSupport.ENUM_CONSTANTS, MetadataSupport.NAME_MAPPING);
+      } else if (arg.equals("-Xstrip-reflection-errors:")) {
+        String subArg = arg.substring(arg.indexOf(':') + 1);
+        switch (subArg) {
+          case "true":
+            {
+              setStripReflectionErrors(true);
+              break;
+            }
+          case "false":
+            {
+              break;
+            }
+          default:
+            {
+              usage("invalid -Xstrip-reflection-warnings argument: " + subArg);
+            }
+        }
       } else if (arg.equals("-Xstrip-enum-constants")) {
         includedMetadata.remove(MetadataSupport.ENUM_CONSTANTS);
+      } else if (arg.startsWith("-Xjavac-warnings:")) {
+        String subArg = arg.substring(arg.indexOf(':') + 1);
+        switch (subArg) {
+          case "true": {
+            javacWarnings = true;
+            break;
+          }
+          case "false": {
+            javacWarnings = false;
+            break;
+          }
+          default: {
+            usage("invalid -Xjavac-warnings argument: " + subArg);
+          }
+        }
       } else if (arg.startsWith("--reflection:")) {
         includedMetadata.remove(MetadataSupport.FULL);
         String[] subArgs = arg.substring(arg.indexOf(':') + 1).split(",", -1);
@@ -445,6 +553,8 @@ public class Options {
         }
       } else if (arg.equals("--no-wrapper-methods")) {
         emitWrapperMethods = false;
+      } else if (arg.equals("--wrapper-methods")) {
+        emitWrapperMethods = true;
       } else if (arg.equals("--no-segmented-headers")) {
         segmentedHeaders = false;
       } else if (arg.equals("--build-closure")) {
@@ -455,20 +565,34 @@ public class Options {
         extractUnsequencedModifications = false;
       } else if (arg.equals("--doc-comments")) {
         docCommentsEnabled = true;
+      } else if (arg.equals("--no-doc-comments")) {
+        docCommentsEnabled = false;
       } else if (arg.equals("--doc-comment-warnings")) {
         reportJavadocWarnings = true;
       } else if (arg.equals("--static-accessor-methods")) {
         staticAccessorMethods = true;
       } else if (arg.equals("--class-properties")) {
         setClassProperties(true);
+      } else if (arg.equals("--no-class-properties")) {
+        setClassProperties(false);
       } else if (arg.equals("--swift-friendly")) {
         setSwiftFriendly(true);
+      } else if (arg.equals("--swift-enums")) {
+        setSwiftEnums(true);
+      } else if (arg.equals("--no-swift-enums")) {
+        setSwiftEnums(false);
+      } else if (arg.equals("--swift-naming")) {
+        setSwiftNaming(true);
       } else if (arg.equals("-processor")) {
         processors = getArgValue(args, arg);
       } else if (arg.equals("--allow-inherited-constructors")) {
         disallowInheritedConstructors = false;
       } else if (arg.equals("--nullability")) {
         nullability = true;
+      } else if (arg.equals("--no-nullability")) {
+        nullability = false;
+      } else if (arg.equals("-Xnull-marked")) {
+        nullMarked = true;
       } else if (arg.startsWith("-Xlint")) {
         lintArgument = arg;
       } else if (arg.equals("-Xtranslate-bootclasspath")) {
@@ -483,15 +607,32 @@ public class Options {
         emitKytheMappings = true;
       } else if (arg.equals("-Xno-source-headers")) {
         emitSourceHeaders = false;
-      } else if (arg.equals("-Xexternal-annotation-file")) {
+      } else if (arg.equals("-Xprint-args")) {
+        printArgs = true;
+      } else if (arg.equals("-Xseparate-headers")) {
+        separateHeaders = true;
+      } else if (arg.equals("-external-annotation-file")) {
         addExternalAnnotationFile(getArgValue(args, arg));
+      } else if (arg.equals("--reserved-names")) {
+        NameTable.addReservedNames(getArgValue(args, arg));
+      } else if (arg.equals("--objc-generics")) {
+        asObjCGenericDecl = true;
+      } else if (arg.equals("--no-objc-generics")) {
+        asObjCGenericDecl = false;
       } else if (arg.equals("-version")) {
         version();
       } else if (arg.startsWith("-h") || arg.equals("--help")) {
         help(false);
       } else if (arg.equals("-X")) {
         xhelp();
-      }  else if (arg.equals("-source")) {
+      } else if (arg.equals("-XDinjectLogSites=true")) {
+        injectLogSites = true;
+      } else if (arg.equals("-XDallVersions")) {
+        // For internal use only when adding new version support.
+        allVersions = true;
+      } else if (arg.equals("-Xj2objc-text-segment")) {
+        addTextSegmentAttribute = true;
+      } else if (arg.equals("-source")) {
         String s = getArgValue(args, arg);
         // Handle aliasing of version numbers as supported by javac.
         try {
@@ -503,8 +644,9 @@ public class Options {
         // Dummy out passed target argument, since we don't care about target.
         getArgValue(args, arg);  // ignore
       } else if (PLATFORM_MODULE_SYSTEM_OPTIONS.contains(arg)) {
-        SourceVersion.setMaxSupportedVersion(SourceVersion.JAVA_11);
         addPlatformModuleSystemOptions(arg, getArgValue(args, arg));
+      } else if (arg.equals("--enable-preview")) {
+        addPlatformModuleSystemOptions(arg);
       } else if (arg.startsWith(BATCH_PROCESSING_MAX_FLAG)) {
         // Ignore, batch processing isn't used with javac front-end.
       } else if (obsoleteFlags.contains(arg)) {
@@ -517,6 +659,22 @@ public class Options {
       } else {
         sourceFiles.add(arg);
       }
+    }
+
+    private void logExpandedArgs(String[] args) throws IOException {
+      StringBuilder sb = new StringBuilder();
+      for (String arg : args) {
+        if (sb.length() > 0) {
+          sb.append(' ');
+        }
+        if (arg.startsWith("@")) {
+          File f = new File(arg.substring(1));
+          sb.append(Files.asCharSource(f, fileUtil.getCharset()).read());
+        } else {
+          sb.append(arg);
+        }
+      }
+      logger.fine(sb.toString());
     }
   }
 
@@ -573,17 +731,45 @@ public class Options {
     if (sourceVersion == null) {
       sourceVersion = SourceVersion.defaultVersion();
     }
-    SourceVersion maxVersion = SourceVersion.getMaxSupportedVersion();
-    if (sourceVersion.version() > maxVersion.version()) {
-      ErrorUtil.warning("Java " + sourceVersion.version() + " source version is not "
-          + "supported, using Java " + maxVersion.version() + ".");
-      sourceVersion = maxVersion;
+
+    if (allVersions) {
+      // Warn if using known but unsupported version.
+      if (sourceVersion.version() > SourceVersion.getMaxSupportedVersion().version()) {
+        ErrorUtil.warning("Using unsupported version: " + sourceVersion.version());
+      }
+    } else {
+      SourceVersion maxVersion = SourceVersion.getMaxSupportedVersion();
+      if (sourceVersion.version() > maxVersion.version()) {
+        ErrorUtil.warning(
+            "Java "
+                + sourceVersion.version()
+                + " is not installed, using Java "
+                + maxVersion.version()
+                + " as source version.");
+        sourceVersion = maxVersion;
+      }
     }
     if (sourceVersion.version() > 8) {
       // Allow the modularized JRE to read the J2ObjC annotations (they are in the unnamed module).
       addPlatformModuleSystemOptions("--add-reads", "java.base=ALL-UNNAMED");
     } else {
       platformModuleSystemOptions.clear();
+    }
+    if (sourceVersion.version() >= 11) {
+      // Enable access to the javac packages.
+      String[] javacPackages = {
+        "java.compiler/javax.lang.model.element",
+        "java.compiler/javax.lang.model.type",
+        "java.compiler/javax.lang.model.util",
+        "jdk.compiler/com.sun.tools.javac.api",
+        "jdk.compiler/com.sun.tools.javac.code",
+        "jdk.compiler/com.sun.tools.javac.parser",
+        "jdk.compiler/com.sun.tools.javac.tree",
+        "jdk.compiler/com.sun.tools.javac.util"
+      };
+      for (String pkg : javacPackages) {
+        addPlatformModuleSystemOptions("--add-exports", pkg + "=ALL-UNNAMED");
+      }
     }
   }
 
@@ -615,18 +801,18 @@ public class Options {
 
   public static void usage(String invalidUseMsg) {
     System.err.println("j2objc: " + invalidUseMsg);
-    System.err.println(usageMessage);
+    System.err.println(USAGE_MESSAGE);
     System.exit(1);
   }
 
   public static void help(boolean errorExit) {
-    System.err.println(helpMessage);
+    System.err.println(HELP_MESSAGE);
     // javac exits with 2, but any non-zero value works.
     System.exit(errorExit ? 2 : 0);
   }
 
   public static void xhelp() {
-    System.err.println(xhelpMessage);
+    System.err.println(XHELP_MESSAGE);
     System.exit(0);
   }
 
@@ -635,7 +821,8 @@ public class Options {
     System.exit(0);
   }
 
-  private List<String> getPathArgument(String argument, boolean expandAarFiles) {
+  private List<String> getPathArgument(String argument, boolean expandAarFiles,
+      boolean expandWildcard) {
     List<String> entries = new ArrayList<>();
     for (String entry : Splitter.on(File.pathSeparatorChar).split(argument)) {
       if (entry.startsWith("~/")) {
@@ -644,6 +831,17 @@ public class Options {
         entry = System.getProperty("user.home") + entry.substring(1);
       }
       File f = new File(entry);
+      if (f.getName().equals("*") && expandWildcard) {
+        File parent = f.getParentFile() == null ? new File(".") : f.getParentFile();
+        FileFilter jarFilter = file -> file.getName().endsWith(".jar");
+        File[] files = parent.listFiles(jarFilter);
+        if (files != null) {
+          for (File jar : files) {
+            entries.add(jar.toString());
+          }
+        }
+        continue;
+      }
       if (entry.endsWith(".aar") && expandAarFiles) {
         // Extract classes.jar from Android library AAR file.
         f = fileUtil().extractClassesJarFromAarFile(f);
@@ -693,17 +891,75 @@ public class Options {
     return memoryManagementOption;
   }
 
+  public boolean useStrictFieldAssign() {
+    return strictFieldAssign;
+  }
+
+  @VisibleForTesting
+  public void setStrictFieldAssign(boolean b) {
+    strictFieldAssign = b;
+    if (!b && strictFieldLoad) {
+      strictFieldLoad = false;
+    }
+  }
+
+  public boolean useStrictFieldLoad() {
+    return strictFieldLoad;
+  }
+
+  @VisibleForTesting
+  public void setStrictFieldLoad(boolean b) {
+    if (b && !strictFieldAssign) {
+      strictFieldAssign = true;
+    }
+    strictFieldLoad = b;
+  }
+
+  public boolean useRetainAutoreleaseReturns() {
+    return retainAutoreleaseReturns;
+  }
+
+  @VisibleForTesting
+  public void setRetainAutoreleaseReturns(boolean b) {
+    retainAutoreleaseReturns = b;
+    if (!b) {
+      arcAutoreleaseReturns = false;
+    }
+  }
+
+  public boolean useARCAutoreleaseReturns() {
+    return arcAutoreleaseReturns;
+  }
+
+  @VisibleForTesting
+  public void setARCAutoreleaseReturns(boolean b) {
+    arcAutoreleaseReturns = b;
+    if (b) {
+      retainAutoreleaseReturns = true;
+    }
+  }
+
   @VisibleForTesting
   public void setMemoryManagementOption(MemoryManagementOption option) {
     memoryManagementOption = option;
   }
 
   public boolean emitLineDirectives() {
-    return emitLineDirectives;
+    return emitLineDirectives != EmitLineDirectivesOption.NONE;
   }
 
+  @VisibleForTesting
   public void setEmitLineDirectives(boolean b) {
-    emitLineDirectives = b;
+    emitLineDirectives = b ? EmitLineDirectivesOption.NORMAL : EmitLineDirectivesOption.NONE;
+  }
+
+  public boolean emitRelativeLineDirectives() {
+    return emitLineDirectives == EmitLineDirectivesOption.RELATIVE;
+  }
+
+  @VisibleForTesting
+  public void setEmitRelativeLineDirectives() {
+    emitLineDirectives = EmitLineDirectivesOption.RELATIVE;
   }
 
   public boolean treatWarningsAsErrors() {
@@ -724,27 +980,40 @@ public class Options {
   }
 
   public static String getUsageMessage() {
-    return usageMessage;
+    return USAGE_MESSAGE;
   }
 
   public static String getHelpMessage() {
-    return helpMessage;
+    return HELP_MESSAGE;
   }
 
   public static String getFileHeader() {
-    return fileHeader;
+    return FILE_HEADER;
   }
 
-  public static void setProGuardUsageFile(File newProGuardUsageFile) {
+  public void setProGuardUsageFile(File newProGuardUsageFile) {
     proGuardUsageFile = newProGuardUsageFile;
   }
 
-  public static File getProGuardUsageFile() {
+  public File getProGuardUsageFile() {
     return proGuardUsageFile;
   }
 
+  /**
+   * Appends a dead code report to the proGuardUsageFile. If that file
+   * doesn't exist, it's created first.
+   */
+  public void addDeadCodeReport(String path) throws IOException {
+    if (proGuardUsageFile == null) {
+      proGuardUsageFile = File.createTempFile("dead_code_report", "cfg");
+    }
+    File f = new File(path);
+    String newReport = Files.asCharSource(f, UTF_8).read();
+    Files.asCharSink(proGuardUsageFile, UTF_8, APPEND).write(newReport);
+  }
+
   public List<String> getBootClasspath() {
-    return getPathArgument(bootclasspath, false);
+    return getPathArgument(bootclasspath, false, false);
   }
 
   public Mappings getMappings() {
@@ -775,6 +1044,16 @@ public class Options {
   @VisibleForTesting
   public void setSegmentedHeaders(boolean b) {
     segmentedHeaders = b;
+  }
+
+  public boolean generateSeparateHeaders() {
+    return separateHeaders;
+  }
+
+  @VisibleForTesting
+  public void setSeparateHeaders(boolean b) {
+    separateHeaders = b;
+    segmentedHeaders = false; // unnecessary with separate headers.
   }
 
   public boolean jsniWarnings() {
@@ -909,6 +1188,7 @@ public class Options {
   public void setSwiftFriendly(boolean b) {
     setClassProperties(b);
     setNullability(b);
+    setSwiftEnums(b);
   }
 
   public boolean nullability() {
@@ -918,6 +1198,33 @@ public class Options {
   @VisibleForTesting
   public void setNullability(boolean b) {
     nullability = b;
+  }
+
+  public boolean swiftEnums() {
+    return swiftEnums;
+  }
+
+  @VisibleForTesting
+  public void setSwiftEnums(boolean b) {
+    swiftEnums = b;
+  }
+
+  public boolean swiftNaming() {
+    return swiftNaming;
+  }
+
+  @VisibleForTesting
+  public void setSwiftNaming(boolean b) {
+    swiftNaming = b;
+  }
+
+  public boolean nullMarked() {
+    return nullability && nullMarked;
+  }
+
+  @VisibleForTesting
+  public void setNullMarked(boolean b) {
+    nullMarked = b;
   }
 
   public String lintArgument() {
@@ -967,11 +1274,6 @@ public class Options {
     externalAnnotations.addExternalAnnotationFile(file);
   }
 
-  @VisibleForTesting
-  public void addExternalAnnotationFileContents(String fileContents) throws IOException {
-    externalAnnotations.addExternalAnnotationFileContents(fileContents);
-  }
-
   // Unreleased experimental project.
   public boolean translateClassfiles() {
     return translateClassfiles;
@@ -992,5 +1294,71 @@ public class Options {
 
   public List<String> getPlatformModuleSystemOptions() {
     return platformModuleSystemOptions;
+  }
+
+  public boolean injectLogSites() {
+    return injectLogSites;
+  }
+
+  @VisibleForTesting
+  public void setInjectLogSites(boolean b) {
+    injectLogSites = b;
+  }
+
+  public boolean asObjCGenericDecl() {
+    return asObjCGenericDecl;
+  }
+
+  @VisibleForTesting
+  public void setAsObjCGenericDecl(boolean b) {
+    asObjCGenericDecl = b;
+  }
+
+  public boolean ignoreJarWarnings() {
+    return ignoreJarWarnings;
+  }
+
+  public boolean linkSourcePathHeaders() {
+    return linkSourcePathHeaders;
+  }
+
+  @VisibleForTesting
+  public void setLinkSourcePathHeaders(boolean b) {
+    linkSourcePathHeaders = b;
+  }
+
+  public boolean javacWarnings() {
+    return javacWarnings;
+  }
+
+  @VisibleForTesting
+  public void setStripReflectionErrors(boolean b) {
+    stripReflectionErrors = b;
+  }
+
+  public boolean stripReflectionErrors() {
+    return stripReflectionErrors;
+  }
+
+  public boolean linkProtocols() {
+    return linkProtocols;
+  }
+
+  @VisibleForTesting
+  public void setLinkProtocols(boolean b) {
+    linkProtocols = b;
+  }
+
+  public boolean suppressHeaderClangTidyWarnings() {
+    return suppressHeaderClangTidyWarnings;
+  }
+
+  public boolean addTextSegmentAttribute() {
+    return addTextSegmentAttribute;
+  }
+
+  @VisibleForTesting
+  public void setAddTextSegmentAttribute(boolean b) {
+    addTextSegmentAttribute = b;
   }
 }

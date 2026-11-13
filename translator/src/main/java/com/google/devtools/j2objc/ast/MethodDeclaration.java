@@ -30,9 +30,12 @@ public class MethodDeclaration extends BodyDeclaration {
   private boolean isConstructor = false;
   private boolean hasDeclaration = true;
   private boolean isUnavailable = false;
+  private boolean isOptional = false;
   private ChildList<SingleVariableDeclaration> parameters =
       ChildList.create(SingleVariableDeclaration.class, this);
   private ChildLink<Block> body = ChildLink.create(Block.class, this);
+
+  private boolean isPseudoProperty = false;
 
   public MethodDeclaration() {}
 
@@ -43,6 +46,7 @@ public class MethodDeclaration extends BodyDeclaration {
     isConstructor = other.isConstructor();
     hasDeclaration = other.hasDeclaration();
     isUnavailable = other.isUnavailable();
+    isOptional = other.isOptional();
     parameters.copyFrom(other.getParameters());
     body.copyFrom(other.getBody());
   }
@@ -105,6 +109,14 @@ public class MethodDeclaration extends BodyDeclaration {
     return this;
   }
 
+  public boolean isOptional() {
+    return isOptional;
+  }
+
+  public void setOptional(boolean value) {
+    isOptional = value;
+  }
+
   public TypeMirror getReturnTypeMirror() {
     return executableElement.getReturnType();
   }
@@ -124,6 +136,14 @@ public class MethodDeclaration extends BodyDeclaration {
   public MethodDeclaration setBody(Block newBody) {
     body.set(newBody);
     return this;
+  }
+
+  public void setIsPseudoProperty(boolean isPseudoProperty) {
+    this.isPseudoProperty = isPseudoProperty;
+  }
+
+  public boolean isPseudoProperty() {
+    return isPseudoProperty;
   }
 
   @Override

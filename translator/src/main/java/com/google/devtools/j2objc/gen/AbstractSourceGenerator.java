@@ -18,7 +18,7 @@ import com.google.devtools.j2objc.ast.TreeNode;
 
 /**
  * This is a base class for all generator types, containing a SourceBuilder and
- * prividing convenient access to it.
+ * providing convenient access to it.
  *
  * @author Tom Ball, Keith Stanger
  */
@@ -84,5 +84,10 @@ public abstract class AbstractSourceGenerator {
 
   protected String reindent(String code) {
     return builder.reindent(code);
+  }
+
+  @Override
+  public String toString() {
+    return builder.toString();
   }
 }

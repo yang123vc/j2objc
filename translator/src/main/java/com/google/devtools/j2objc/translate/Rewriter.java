@@ -20,6 +20,8 @@ import com.google.devtools.j2objc.ast.AbstractTypeDeclaration;
 import com.google.devtools.j2objc.ast.AnnotationTypeDeclaration;
 import com.google.devtools.j2objc.ast.Assignment;
 import com.google.devtools.j2objc.ast.Block;
+import com.google.devtools.j2objc.ast.BodyDeclaration;
+import com.google.devtools.j2objc.ast.CastExpression;
 import com.google.devtools.j2objc.ast.CatchClause;
 import com.google.devtools.j2objc.ast.CompilationUnit;
 import com.google.devtools.j2objc.ast.EnumDeclaration;
@@ -34,12 +36,13 @@ import com.google.devtools.j2objc.ast.MethodDeclaration;
 import com.google.devtools.j2objc.ast.MethodInvocation;
 import com.google.devtools.j2objc.ast.NullLiteral;
 import com.google.devtools.j2objc.ast.PackageDeclaration;
-import com.google.devtools.j2objc.ast.ParenthesizedExpression;
 import com.google.devtools.j2objc.ast.PropertyAnnotation;
 import com.google.devtools.j2objc.ast.QualifiedName;
+import com.google.devtools.j2objc.ast.RecordDeclaration;
 import com.google.devtools.j2objc.ast.SimpleName;
 import com.google.devtools.j2objc.ast.SingleVariableDeclaration;
 import com.google.devtools.j2objc.ast.Statement;
+import com.google.devtools.j2objc.ast.SuperMethodInvocation;
 import com.google.devtools.j2objc.ast.ThrowStatement;
 import com.google.devtools.j2objc.ast.TreeNode;
 import com.google.devtools.j2objc.ast.TreeNode.Kind;
@@ -57,6 +60,7 @@ import com.google.devtools.j2objc.util.ElementUtil;
 import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.TypeUtil;
 import com.google.j2objc.annotations.AutoreleasePool;
+import com.google.j2objc.annotations.Property;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -76,6 +80,7 @@ import javax.lang.model.type.TypeMirror;
  *
  * @author Tom Ball
  */
+@SuppressWarnings("UngroupedOverloads")
 public class Rewriter extends UnitTreeVisitor {
 
   public Rewriter(CompilationUnit unit) {
@@ -129,29 +134,6 @@ public class Rewriter extends UnitTreeVisitor {
     InfixExpression.Operator op = node.getOperator();
     if (typeUtil.isString(node.getTypeMirror()) && op == InfixExpression.Operator.PLUS) {
       rewriteStringConcat(node);
-    } else if (op == InfixExpression.Operator.CONDITIONAL_AND) {
-      // Avoid logical-op-parentheses compiler warnings.
-      if (node.getParent() instanceof InfixExpression) {
-        InfixExpression parent = (InfixExpression) node.getParent();
-        if (parent.getOperator() == InfixExpression.Operator.CONDITIONAL_OR) {
-          ParenthesizedExpression.parenthesizeAndReplace(node);
-        }
-      }
-    } else if (op == InfixExpression.Operator.AND) {
-      // Avoid bitwise-op-parentheses compiler warnings.
-      if (node.getParent() instanceof InfixExpression
-          && ((InfixExpression) node.getParent()).getOperator() == InfixExpression.Operator.OR) {
-        ParenthesizedExpression.parenthesizeAndReplace(node);
-      }
-    }
-
-    // Avoid lower precedence compiler warnings.
-    if (op == InfixExpression.Operator.AND || op == InfixExpression.Operator.OR) {
-      for (Expression operand : node.getOperands()) {
-        if (operand instanceof InfixExpression) {
-          ParenthesizedExpression.parenthesizeAndReplace(operand);
-        }
-      }
     }
   }
 
@@ -241,32 +223,47 @@ public class Rewriter extends UnitTreeVisitor {
    */
   @Override
   public void endVisit(PropertyAnnotation node) {
-    FieldDeclaration field = (FieldDeclaration) node.getParent();
-    TypeMirror fieldType = field.getTypeMirror();
+    TreeNode parent = node.getParent();
+
     String getter = node.getGetter();
     String setter = node.getSetter();
-    if (field.getFragments().size() > 1) {
-      if (getter != null) {
-        ErrorUtil.error(field, "@Property getter declared for multiple fields");
-        return;
-      }
-      if (setter != null) {
-        ErrorUtil.error(field, "@Property setter declared for multiple fields");
-        return;
-      }
+
+    TypeMirror fieldType;
+    if (parent instanceof FieldDeclaration) {
+      FieldDeclaration field = (FieldDeclaration) parent;
+      fieldType = field.getTypeMirror();
+    } else if (parent instanceof MethodDeclaration) {
+      MethodDeclaration field = (MethodDeclaration) parent;
+      fieldType = field.getReturnTypeMirror();
+      field.setIsPseudoProperty(true);
     } else {
-      // Check that specified accessors exist.
-      TypeElement enclosingType = TreeUtil.getEnclosingTypeElement(node);
-      if (getter != null) {
-        if (ElementUtil.findMethod(enclosingType, getter) == null) {
-          ErrorUtil.error(field, "Non-existent getter specified: " + getter);
+      AbstractTypeDeclaration type = (AbstractTypeDeclaration) parent;
+      for (BodyDeclaration body : type.getBodyDeclarations()) {
+        if (!(body instanceof MethodDeclaration)) {
+          continue;
+        }
+
+        MethodDeclaration method = (MethodDeclaration) body;
+        if (method.getParameters().isEmpty()
+            && !method.isConstructor()
+            && !TypeUtil.isVoid(method.getReturnTypeMirror())
+            && !ElementUtil.hasAnnotation(method.getExecutableElement(), Property.Suppress.class)) {
+          method.setIsPseudoProperty(true);
         }
       }
-      if (setter != null) {
-        if (ElementUtil.findMethod(
-            enclosingType, setter, TypeUtil.getQualifiedName(fieldType)) == null) {
-          ErrorUtil.error(field, "Non-existent setter specified: " + setter);
-        }
+      return;
+    }
+    // Check that specified accessors exist.
+    TypeElement enclosingType = TreeUtil.getEnclosingTypeElement(node);
+    if (getter != null) {
+      if (ElementUtil.findMethod(enclosingType, getter) == null) {
+        ErrorUtil.error(parent, "Non-existent getter specified: " + getter);
+      }
+    }
+    if (setter != null) {
+      if (ElementUtil.findMethod(
+          enclosingType, setter, TypeUtil.getQualifiedName(fieldType)) == null) {
+        ErrorUtil.error(parent, "Non-existent setter specified: " + setter);
       }
     }
   }
@@ -286,6 +283,11 @@ public class Rewriter extends UnitTreeVisitor {
     checkForNullabilityAnnotation(node);
   }
 
+  @Override
+  public void endVisit(RecordDeclaration node) {
+    checkForNullabilityAnnotation(node);
+  }
+
   private void checkForNullabilityAnnotation(AbstractTypeDeclaration node) {
     if (ElementUtil.hasAnnotation(node.getTypeElement(), ParametersAreNonnullByDefault.class)) {
       unit.setHasNullabilityAnnotations();
@@ -294,8 +296,7 @@ public class Rewriter extends UnitTreeVisitor {
 
   @Override
   public void endVisit(PackageDeclaration node) {
-    String pkgName = node.getName().toString();
-    if (options.getPackageInfoLookup().hasParametersAreNonnullByDefault(pkgName)) {
+    if (elementUtil.areParametersNonnullByDefault(node.getPackageElement(), options)) {
       unit.setHasNullabilityAnnotations();
     }
   }
@@ -398,5 +399,37 @@ public class Rewriter extends UnitTreeVisitor {
     // resource initializer) has been moved outside of the try node.
     block.accept(this);
     return false;
+  }
+
+  @Override
+  public void endVisit(MethodInvocation node) {
+    maybeAddGenericCastExpression(node, node.getExecutableElement());
+  }
+
+  @Override
+  public void endVisit(SuperMethodInvocation node) {
+    maybeAddGenericCastExpression(node, node.getExecutableElement());
+  }
+
+  private void maybeAddGenericCastExpression(Expression node, ExecutableElement method) {
+    TypeMirror returnType = method.getReturnType();
+    if (TypeUtil.isTypeVariable(returnType)) {
+      returnType = node.getTypeMirror();
+    }
+    if (options.asObjCGenericDecl()
+        && TypeUtil.isArray(returnType)
+        && !ElementUtil.isPrivate(method)) {
+
+      // Check for when the method return value should be ignored.
+      final Kind parentKind = node.getParent().getKind();
+      if (parentKind.equals(Kind.EXPRESSION_STATEMENT)
+          || parentKind.equals(Kind.LAMBDA_EXPRESSION)) {
+        return;
+      }
+
+      // Add a cast to the actual type, since the method is declared as a generic type.
+      CastExpression cast = new CastExpression(returnType, node.copy());
+      node.replaceWith(cast);
+    }
   }
 }

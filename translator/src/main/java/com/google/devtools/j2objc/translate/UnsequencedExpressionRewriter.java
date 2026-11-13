@@ -14,6 +14,7 @@
 
 package com.google.devtools.j2objc.translate;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.MultimapBuilder;
@@ -35,13 +36,13 @@ import com.google.devtools.j2objc.ast.ForStatement;
 import com.google.devtools.j2objc.ast.IfStatement;
 import com.google.devtools.j2objc.ast.InfixExpression;
 import com.google.devtools.j2objc.ast.MethodDeclaration;
-import com.google.devtools.j2objc.ast.ParenthesizedExpression;
 import com.google.devtools.j2objc.ast.PostfixExpression;
 import com.google.devtools.j2objc.ast.PrefixExpression;
 import com.google.devtools.j2objc.ast.ReturnStatement;
 import com.google.devtools.j2objc.ast.SimpleName;
 import com.google.devtools.j2objc.ast.Statement;
 import com.google.devtools.j2objc.ast.SuperConstructorInvocation;
+import com.google.devtools.j2objc.ast.SwitchExpression;
 import com.google.devtools.j2objc.ast.SwitchStatement;
 import com.google.devtools.j2objc.ast.SynchronizedStatement;
 import com.google.devtools.j2objc.ast.ThrowStatement;
@@ -54,7 +55,6 @@ import com.google.devtools.j2objc.ast.VariableDeclarationStatement;
 import com.google.devtools.j2objc.ast.WhileStatement;
 import com.google.devtools.j2objc.types.GeneratedVariableElement;
 import com.google.devtools.j2objc.util.ElementUtil;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import javax.lang.model.element.ExecutableElement;
@@ -126,9 +126,9 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
     currentMethod = null;
   }
 
-  private List<VariableAccess> getUnsequencedAccesses() {
+  private ImmutableList<VariableAccess> getUnsequencedAccesses() {
     if (!hasModification) {
-      return Collections.emptyList();
+      return ImmutableList.of();
     }
     ListMultimap<VariableElement, VariableAccess> accessesByVar =
         MultimapBuilder.hashKeys().arrayListValues().build();
@@ -146,7 +146,7 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
         orderedUnsequencedAccesses.add(access);
       }
     }
-    return orderedUnsequencedAccesses;
+    return ImmutableList.copyOf(orderedUnsequencedAccesses);
   }
 
   private void extractUnsequenced(Statement stmt) {
@@ -173,7 +173,7 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
       if (topConditional != null) {
         // Conditional expressions require special handling when extracting the
         // access because execution of the access may not be guaranteed.
-        // Here we collect all accesses that are decendant of the conditional
+        // Here we collect all accesses that are descendant of the conditional
         // expression and pass them to an appropriate extraction method.
         int j = i + 1;
         for (; j < toExtract.size(); j++) {
@@ -196,7 +196,16 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
         VariableElement newVar = GeneratedVariableElement.newLocalVar(
             "unseq$" + count++, access.expression.getTypeMirror(), currentMethod);
         stmtList.add(new VariableDeclarationStatement(newVar, access.expression.copy()));
-        access.expression.replaceWith(new SimpleName(newVar));
+        if (access.expression.getParent() instanceof CommaExpression commaExpression
+            && commaExpression.getExpressions().getLast() != access.expression) {
+          // If it this is not the last expression in a comma expression remove it instead
+          // of replacing it with a variable reference.
+          // TODO(b/457799703): This is probably better done as a general cleanup pass that removes
+          // constructs that don't have any effect like this one.
+          access.expression.remove();
+        } else {
+          access.expression.replaceWith(new SimpleName(newVar));
+        }
       }
     }
   }
@@ -312,9 +321,7 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
         Expression ifExpr = new Assignment(
             new SimpleName(conditionalVar), conditionalFromSubBranches(subBranches, op));
         if (op == InfixExpression.Operator.CONDITIONAL_OR) {
-          ifExpr = new PrefixExpression(
-              boolType, PrefixExpression.Operator.NOT,
-              ParenthesizedExpression.parenthesize(ifExpr));
+          ifExpr = new PrefixExpression(boolType, PrefixExpression.Operator.NOT, ifExpr);
         }
         newIf.setExpression(ifExpr);
         stmtList.add(newIf);
@@ -388,7 +395,7 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
 
   private Set<TreeNode> getAncestors(TreeNode node) {
     Set<TreeNode> ancestors = Sets.newHashSet();
-    while (node != currentTopNode) {
+    while (node != null && node != currentTopNode) {
       ancestors.add(node);
       node = node.getParent();
     }
@@ -399,7 +406,7 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
       VariableAccess modification, Set<TreeNode> modificationAncestors, VariableAccess access) {
     TreeNode commonAncestor = currentTopNode;
     TreeNode node = access.expression;
-    while (node != currentTopNode) {
+    while (node != null && node != currentTopNode) {
       if (modificationAncestors.contains(node)) {
         commonAncestor = node;
         break;
@@ -408,8 +415,9 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
     }
     // If either access is executed in a conditional branch that does not
     // contain the other access, then they are not unsequenced.
-    if (isWithinConditionalBranch(modification.expression, commonAncestor)
-        || isWithinConditionalBranch(access.expression, commonAncestor)) {
+    if (isConditional(commonAncestor)
+        && (isWithinConditionalBranch(modification.expression, commonAncestor)
+            || isWithinConditionalBranch(access.expression, commonAncestor))) {
       return false;
     } else if (commonAncestor instanceof CommaExpression) {
       return false;
@@ -531,6 +539,18 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
   }
 
   @Override
+  @SuppressWarnings("UngroupedOverloads")
+  public boolean visit(SwitchExpression node) {
+    Expression expr = node.getExpression();
+    newExpression(expr);
+    expr.accept(this);
+    for (Statement stmt : node.getStatements()) {
+      stmt.accept(this);
+    }
+    return false;
+  }
+
+  @Override
   public boolean visit(SwitchStatement node) {
     visitAndExtract(node.getExpression(), node);
     for (Statement stmt : node.getStatements()) {
@@ -554,9 +574,9 @@ public class UnsequencedExpressionRewriter extends UnitTreeVisitor {
 
   private IfStatement createLoopTermination(Expression loopCondition) {
     IfStatement newIf = new IfStatement();
-    newIf.setExpression(new PrefixExpression(
-        typeUtil.getBoolean(), PrefixExpression.Operator.NOT,
-        ParenthesizedExpression.parenthesize(loopCondition.copy())));
+    newIf.setExpression(
+        new PrefixExpression(
+            typeUtil.getBoolean(), PrefixExpression.Operator.NOT, loopCondition.copy()));
     newIf.setThenStatement(new BreakStatement());
     return newIf;
   }

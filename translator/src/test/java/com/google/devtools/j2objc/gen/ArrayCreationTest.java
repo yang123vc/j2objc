@@ -18,7 +18,6 @@ package com.google.devtools.j2objc.gen;
 
 import com.google.devtools.j2objc.GenerationTest;
 import com.google.devtools.j2objc.ast.Statement;
-
 import java.util.List;
 
 /**
@@ -98,8 +97,10 @@ public class ArrayCreationTest extends GenerationTest {
     List<Statement> stmts = translateStatements("boolean[] foo = { true, false };");
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
-    assertEquals("IOSBooleanArray *foo = "
-        + "[IOSBooleanArray arrayWithBooleans:(jboolean[]){ true, false } count:2];", result);
+    assertEquals(
+        "IOSBooleanArray *foo = "
+            + "[IOSBooleanArray arrayWithBooleans:(bool[]){ true, false } count:2];",
+        result);
   }
 
   public void testByteArrayCreationNoDimension() {
@@ -107,7 +108,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSByteArray *foo = [IOSByteArray arrayWithBytes:(jbyte[]){ 1, -2 } count:2];", result);
+        "IOSByteArray *foo = [IOSByteArray arrayWithBytes:(int8_t[]){ 1, -2 } count:2];", result);
   }
 
   public void testCharArrayCreationNoDimension() {
@@ -115,7 +116,8 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSCharArray *foo = [IOSCharArray arrayWithChars:(jchar[]){ 'A', 'z' } count:2];", result);
+        "IOSCharArray *foo = [IOSCharArray arrayWithChars:(unichar[]){ 'A', 'z' } count:2];",
+        result);
   }
 
   public void testDoubleArrayCreationNoDimension() {
@@ -123,7 +125,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals("IOSDoubleArray *foo = "
-        + "[IOSDoubleArray arrayWithDoubles:(jdouble[]){ 123.45, 3.1416 } count:2];", result);
+        + "[IOSDoubleArray arrayWithDoubles:(double[]){ 123.45, 3.1416 } count:2];", result);
   }
 
   public void testFloatArrayCreationNoDimension() {
@@ -131,7 +133,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals("IOSFloatArray *foo = "
-        + "[IOSFloatArray arrayWithFloats:(jfloat[]){ 123.45f, -0.0001f } count:2];", result);
+        + "[IOSFloatArray arrayWithFloats:(float[]){ 123.45f, -0.0001f } count:2];", result);
   }
 
   public void testIntArrayCreationNoDimension() {
@@ -139,7 +141,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSIntArray *foo = [IOSIntArray arrayWithInts:(jint[]){ -123, 1280000 } count:2];",
+        "IOSIntArray *foo = [IOSIntArray arrayWithInts:(int32_t[]){ -123, 1280000 } count:2];",
         result);
   }
 
@@ -148,7 +150,8 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSLongArray *foo = [IOSLongArray arrayWithLongs:(jlong[]){ 123 * 456, 456789 } count:2];",
+        "IOSLongArray *foo = [IOSLongArray arrayWithLongs:(int64_t[]){ JreIntTimes(123, 456), 456789"
+            + " } count:2];",
         result);
   }
 
@@ -157,7 +160,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSShortArray *foo = [IOSShortArray arrayWithShorts:(jshort[]){ 24, 42 } count:2];",
+        "IOSShortArray *foo = [IOSShortArray arrayWithShorts:(int16_t[]){ 24, 42 } count:2];",
         result);
   }
 
@@ -165,8 +168,10 @@ public class ArrayCreationTest extends GenerationTest {
     List<Statement> stmts = translateStatements("boolean[] foo = new boolean[] { true, false };");
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
-    assertEquals("IOSBooleanArray *foo = "
-        + "[IOSBooleanArray arrayWithBooleans:(jboolean[]){ true, false } count:2];", result);
+    assertEquals(
+        "IOSBooleanArray *foo = "
+            + "[IOSBooleanArray arrayWithBooleans:(bool[]){ true, false } count:2];",
+        result);
   }
 
   public void testByteArrayCreation() {
@@ -174,7 +179,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSByteArray *foo = [IOSByteArray arrayWithBytes:(jbyte[]){ 1, -2 } count:2];", result);
+        "IOSByteArray *foo = [IOSByteArray arrayWithBytes:(int8_t[]){ 1, -2 } count:2];", result);
   }
 
   public void testCharArrayCreation() {
@@ -182,7 +187,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSCharArray *foo = [IOSCharArray arrayWithChars:(jchar[]){ 'A', 'z' } count:2];",
+        "IOSCharArray *foo = [IOSCharArray arrayWithChars:(unichar[]){ 'A', 'z' } count:2];",
         result);
   }
 
@@ -191,7 +196,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals("IOSDoubleArray *foo = "
-        + "[IOSDoubleArray arrayWithDoubles:(jdouble[]){ 123.45, 3.1416 } count:2];", result);
+        + "[IOSDoubleArray arrayWithDoubles:(double[]){ 123.45, 3.1416 } count:2];", result);
   }
 
   public void testFloatArrayCreation() {
@@ -200,7 +205,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals("IOSFloatArray *foo = "
-        + "[IOSFloatArray arrayWithFloats:(jfloat[]){ 123.45f, -0.0001f } count:2];", result);
+        + "[IOSFloatArray arrayWithFloats:(float[]){ 123.45f, -0.0001f } count:2];", result);
   }
 
   public void testIntArrayCreation() {
@@ -208,7 +213,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSIntArray *foo = [IOSIntArray arrayWithInts:(jint[]){ -123, 1280000 } count:2];",
+        "IOSIntArray *foo = [IOSIntArray arrayWithInts:(int32_t[]){ -123, 1280000 } count:2];",
         result);
   }
 
@@ -217,7 +222,8 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSLongArray *foo = [IOSLongArray arrayWithLongs:(jlong[]){ 123 * 456, 456789 } count:2];",
+        "IOSLongArray *foo = [IOSLongArray arrayWithLongs:(int64_t[]){ JreIntTimes(123, 456), 456789"
+            + " } count:2];",
         result);
   }
 
@@ -226,7 +232,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSShortArray *foo = [IOSShortArray arrayWithShorts:(jshort[]){ 24, 42 } count:2];",
+        "IOSShortArray *foo = [IOSShortArray arrayWithShorts:(int16_t[]){ 24, 42 } count:2];",
         result);
   }
 
@@ -235,7 +241,7 @@ public class ArrayCreationTest extends GenerationTest {
     assertEquals(1, stmts.size());
     String result = generateStatement(stmts.get(0));
     assertEquals(
-        "IOSObjectArray *foo = [IOSIntArray arrayWithDimensions:3 lengths:(jint[]){ 2, 3, 4 }];",
+        "IOSObjectArray *foo = [IOSIntArray arrayWithDimensions:3 lengths:(int32_t[]){ 2, 3, 4 }];",
         result);
   }
 }

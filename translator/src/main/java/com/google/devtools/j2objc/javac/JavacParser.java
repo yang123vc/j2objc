@@ -14,7 +14,6 @@
 
 package com.google.devtools.j2objc.javac;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.ast.CompilationUnit;
@@ -62,7 +61,7 @@ public class JavacParser extends Parser {
 
   private StandardJavaFileManager fileManager;
 
-  public JavacParser(Options options){
+  public JavacParser(Options options) {
     super(options);
   }
 
@@ -114,7 +113,12 @@ public class JavacParser extends Parser {
     try {
       JavacEnvironment parserEnv = createEnvironment(path, source);
       JavacTask task = parserEnv.task();
-      CompilationUnitTree unit = task.parse().iterator().next();
+      Iterator<? extends CompilationUnitTree> it = task.parse().iterator();
+      if (!it.hasNext()) {
+        processDiagnostics(parserEnv.diagnostics());
+        return null;
+      }
+      CompilationUnitTree unit = it.next();
       task.analyze();
       processDiagnostics(parserEnv.diagnostics());
       return TreeConverter.convertCompilationUnit(options, parserEnv, unit);
@@ -178,6 +182,10 @@ public class JavacParser extends Parser {
       javacOptions.add("-proc:only");
     } else {
       javacOptions.add("-proc:none");
+    }
+    // Disable javac warnings, as all sources j2objc transpiles are separately compiled by javac.
+    if (options.javacWarnings()) {
+      javacOptions.add("-nowarn");
     }
     javacOptions.addAll(options.getPlatformModuleSystemOptions());
     return javacOptions;
@@ -350,7 +358,6 @@ public class JavacParser extends Parser {
    * Extract the name of a Java source's package, or null if not found. This method is only used
    * before javac parsing to determine the main type name.
    */
-  @VisibleForTesting
   static String packageName(String source) {
     try (StringReader r = new StringReader(source)) {
       StreamTokenizer tokenizer = new StreamTokenizer(r);
@@ -364,7 +371,9 @@ public class JavacParser extends Parser {
             case ';':
               return sb.length() > 0 ? sb.toString() : null;
             case '.':
-              sb.append('.');
+            case '_':
+            case '$':
+              sb.append((char) tokenizer.ttype);
               break;
             case StreamTokenizer.TT_WORD:
               sb.append(tokenizer.sval);

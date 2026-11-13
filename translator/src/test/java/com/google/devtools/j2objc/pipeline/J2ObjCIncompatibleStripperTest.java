@@ -33,7 +33,7 @@ public class J2ObjCIncompatibleStripperTest extends GenerationTest {
         + " @J2ObjCIncompatible void strippedMethod() {} }", "Test.java");
     runPipeline("Test.java");
     String translation = getTranslatedFile("Test.h");
-    assertTranslation(translation, "@interface Test");
+    assertInTranslation(translation, "@interface Test");
     assertNotInTranslation(translation, "Garbage");
     assertNotInTranslation(translation, "strippedMethod");
   }
@@ -63,7 +63,7 @@ public class J2ObjCIncompatibleStripperTest extends GenerationTest {
     assertNotInTranslation(translation, "Garbage");
     assertNotInTranslation(translation, "foo");
     translation = getTranslatedFile("Test.m");
-    assertTranslation(translation, "return JavaUtilArrays_asListWithNSObjectArray_(objs);");
+    assertInTranslation(translation, "return JavaUtilArrays_asListWithNSObjectArray_(objs);");
   }
 
   public void testAnnotationImportIsPreserved() throws IOException {
@@ -75,6 +75,25 @@ public class J2ObjCIncompatibleStripperTest extends GenerationTest {
     runPipeline("Test.java");
     String translation = getTranslatedFile("Test.h");
     // Mainly testing that the source compiles after stripping.
-    assertTranslation(translation, "@protocol Test");
+    assertInTranslation(translation, "@protocol Test");
+  }
+
+  // b/243018798: verify that enum constant is stripped when marked as incompatible.
+  public void testEnumConstantStripped() throws Exception {
+    addSourceFile(
+        "enum Test { "
+            + "  @com.google.j2objc.annotations.J2ObjCIncompatible"
+            + "  A,"
+            + "  B;"
+            + "}",
+        "Test.java");
+    runPipeline("Test.java");
+    String translation = getTranslatedFile("Test.h");
+
+    // Verify A was stripped out ...
+    assertNotInTranslation(translation, "Test_Enum_A");
+
+    // ... but B wasn't.
+    assertInTranslation(translation, "Test_Enum_B");
   }
 }

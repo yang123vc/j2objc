@@ -26,6 +26,7 @@ id JreStrAppend(__unsafe_unretained id *lhs, const char *types, ...);
 id JreStrAppendStrong(__strong id *lhs, const char *types, ...);
 id JreStrAppendVolatile(volatile_id *lhs, const char *types, ...);
 id JreStrAppendVolatileStrong(volatile_id *lhs, const char *types, ...);
+id JreStrAppendStrictFieldStrong(__strong id *lhs, const char *types, ...);
 id JreStrAppendArray(JreArrayRef lhs, const char *types, ...);
 
 CF_EXTERN_C_END
@@ -43,23 +44,23 @@ CF_EXTERN_C_END
  * @param FIELD The name of the static variable prefixed with an underscore.
  * @param TYPE The type of the static variable.
  */
-#define J2OBJC_STATIC_FIELD_BASIC_GETTER(CLASS, FIELD, TYPE) \
-  __attribute__((always_inline)) inline TYPE CLASS##_get##FIELD() { \
-    CLASS##_initialize(); \
-    return CLASS##FIELD; \
+#define J2OBJC_STATIC_FIELD_BASIC_GETTER(CLASS, FIELD, TYPE)            \
+  __attribute__((always_inline)) inline TYPE CLASS##_get##FIELD(void) { \
+    CLASS##_initialize();                                               \
+    return CLASS##FIELD;                                                \
   }
 #define J2OBJC_STATIC_FIELD_PRIMITIVE_REF_GETTER(CLASS, FIELD, TYPE) \
-  __attribute__((always_inline)) inline TYPE *CLASS##_getRef##FIELD() { \
+  __attribute__((always_inline)) inline TYPE *CLASS##_getRef##FIELD(void) { \
     CLASS##_initialize(); \
     return &CLASS##FIELD; \
   }
 #define J2OBJC_STATIC_FIELD_PRIMITIVE_VOLATILE_GETTER(CLASS, FIELD, TYPE) \
-  __attribute__((always_inline)) inline TYPE CLASS##_get##FIELD() { \
+  __attribute__((always_inline)) inline TYPE CLASS##_get##FIELD(void) { \
     CLASS##_initialize(); \
     return __c11_atomic_load(&CLASS##FIELD, __ATOMIC_SEQ_CST); \
   }
 #define J2OBJC_STATIC_FIELD_OBJ_VOLATILE_GETTER(CLASS, FIELD, TYPE) \
-  __attribute__((always_inline)) inline TYPE CLASS##_get##FIELD() { \
+  __attribute__((always_inline)) inline TYPE CLASS##_get##FIELD(void) { \
     CLASS##_initialize(); \
     return JreLoadVolatileId(&CLASS##FIELD); \
   }
@@ -131,9 +132,7 @@ CF_EXTERN_C_END
  */
 // Java constants do not cause static initialization.
 #define J2OBJC_STATIC_FIELD_CONSTANT(CLASS, FIELD, TYPE) \
-  __attribute__((always_inline)) inline TYPE CLASS##_get_##FIELD() { \
-    return CLASS##_##FIELD; \
-  }
+  __attribute__((always_inline)) inline TYPE CLASS##_get_##FIELD(void) { return CLASS##_##FIELD; }
 #define J2OBJC_STATIC_FIELD_PRIMITIVE(CLASS, FIELD, TYPE) \
   J2OBJC_STATIC_FIELD_BASIC_GETTER(CLASS, _##FIELD, TYPE) \
   J2OBJC_STATIC_FIELD_PRIMITIVE_SETTER(CLASS, _##FIELD, TYPE) \
@@ -161,10 +160,10 @@ CF_EXTERN_C_END
  * @param CLASS The enum class.
  * @param CONSTANT The name of the enum constant.
  */
-#define J2OBJC_ENUM_CONSTANT(CLASS, CONSTANT) \
-  __attribute__((always_inline)) inline CLASS *CLASS##_get_##CONSTANT() { \
-    CLASS##_initialize(); \
-    return CLASS##_values_[CLASS##_Enum_##CONSTANT]; \
+#define J2OBJC_ENUM_CONSTANT(CLASS, CONSTANT)                                 \
+  __attribute__((always_inline)) inline CLASS *CLASS##_get_##CONSTANT(void) { \
+    CLASS##_initialize();                                                     \
+    return CLASS##_values_[CLASS##_Enum_##CONSTANT];                          \
   }
 
 #define BOXED_INC_AND_DEC_INNER(CNAME, VALUE_METHOD, TYPE, OPNAME, OP) \
@@ -265,7 +264,7 @@ CF_EXTERN_C_END
  * @define BOXED_COMPOUND_ASSIGN
  * @param CNAME The capitalized name of the primitive type (eg. "Int").
  * @param VALUE_METHOD The method on the boxed type that returns the value.
- * @param TYPE The primitive type name (eg. "jint").
+ * @param TYPE The primitive type name (eg. "int32_t").
  * @param BOXED_TYPE The boxed type name (eg. "JavaLangInteger").
  * @param RTYPE The type of the right hand side of the assignment.
  * @param OPNAME The name of the operator, used to construct the function name.
@@ -323,17 +322,22 @@ CF_EXTERN_C_END
     BOXED_COMPOUND_ASSIGN(CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, TYPE, BitXor, BITXOR_OP, TYPE)
 #define BOXED_SHIFT_ASSIGN_32(CNAME, VALUE_METHOD, TYPE, BOXED_TYPE) \
     BOXED_COMPOUND_ASSIGN( \
-        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, jlong, LShift, LSHIFT_32_OP, jint) \
+        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, int64_t, LShift, LSHIFT_32_OP, int32_t) \
     BOXED_COMPOUND_ASSIGN( \
-        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, jlong, RShift, RSHIFT_32_OP, jint) \
+        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, int64_t, RShift, RSHIFT_32_OP, int32_t) \
     BOXED_COMPOUND_ASSIGN( \
-        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, jlong, URShift, RSHIFT_32_OP, uint32_t)
+        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, int64_t, URShift, RSHIFT_32_OP, uint32_t)
 #define BOXED_SHIFT_ASSIGN_64(CNAME, VALUE_METHOD, TYPE, BOXED_TYPE) \
     BOXED_COMPOUND_ASSIGN( \
-        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, jlong, LShift, LSHIFT_64_OP, jlong) \
+        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, int64_t, LShift, LSHIFT_64_OP, int64_t) \
     BOXED_COMPOUND_ASSIGN( \
-        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, jlong, RShift, RSHIFT_64_OP, jlong) \
+        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, int64_t, RShift, RSHIFT_64_OP, int64_t) \
     BOXED_COMPOUND_ASSIGN( \
-        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, jlong, URShift, RSHIFT_64_OP, uint64_t)
+        CNAME, VALUE_METHOD, TYPE, BOXED_TYPE, int64_t, URShift, RSHIFT_64_OP, uint64_t)
+
+// This macro defines a custom-named text segmment attribute. Its main purpose is to
+// separate j2objc-translpiled code from the rest of the app code, so that developers
+// can measure how much of the app's size is due to transpiled Java code.
+#define J2OBJC_TEXT_SEGMENT __attribute__((section("__TEXT,__j2objc_text")))
 
 #endif  // _J2OBJC_HEADER_H_

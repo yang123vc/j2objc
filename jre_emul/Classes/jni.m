@@ -21,6 +21,7 @@
 //
 
 #include "jni.h"
+#import <Foundation/Foundation.h>
 
 #include "IOSArray.h"
 #include "IOSClass.h"
@@ -28,6 +29,7 @@
 #include "IOSPrimitiveArray.h"
 #include "IOSReflection.h"
 #include "java/lang/ClassNotFoundException.h"
+#include "java/lang/Error.h"
 #include "java/lang/InstantiationException.h"
 #include "java/lang/Throwable.h"
 #include "java/lang/reflect/Constructor.h"
@@ -38,6 +40,8 @@
 #include "java/nio/DirectByteBuffer.h"
 
 #define null_chk(p) (void)nil_chk(p)
+
+static NSString *JNI_EXCEPTION_KEY = @"JNI_EXCEPTION_KEY";
 
 static IOSClass *IOSClass_forName(const char *name) {
   NSString *nameString = [NSString stringWithUTF8String:name];
@@ -125,7 +129,15 @@ NSString *JNIFormatMethodSignature(JNIMethodSignature sig) {
   return result;
 }
 
-static void *GetPrimitiveArrayCritical(JNIEnv *, jarray, jboolean *);
+static jthrowable JNIGetCurrentThreadException(JNIEnv *env) {
+  NSMutableDictionary *threadDictionary = [[NSThread currentThread] threadDictionary];
+  return threadDictionary[JNI_EXCEPTION_KEY];
+}
+
+static void JNISetCurrentThreadException(JNIEnv *env, jthrowable exception) {
+  NSMutableDictionary *threadDictionary = [[NSThread currentThread] threadDictionary];
+  threadDictionary[JNI_EXCEPTION_KEY] = exception;
+}
 
 static jclass FindClass(JNIEnv *env, const char *name) {
   return IOSClass_forName(name);
@@ -134,18 +146,6 @@ static jclass FindClass(JNIEnv *env, const char *name) {
 static jsize GetArrayLength(JNIEnv *env, jarray array) {
   (void)nil_chk(array);
   return ((IOSArray *)array)->size_;
-}
-
-static jboolean *GetBooleanArrayElements(JNIEnv *env, jbooleanArray array, jboolean *isCopy) {
-  return GetPrimitiveArrayCritical(env, array, isCopy);
-}
-
-static jbyte *GetByteArrayElements(JNIEnv *env, jbyteArray array, jboolean *isCopy) {
-  return GetPrimitiveArrayCritical(env, array, isCopy);
-}
-
-static jchar *GetCharArrayElements(JNIEnv *env, jcharArray array, jboolean *isCopy) {
-  return GetPrimitiveArrayCritical(env, array, isCopy);
 }
 
 static void *GetDirectBufferAddress(JNIEnv *env, jobject buf) {
@@ -158,20 +158,43 @@ static jlong GetDirectBufferCapacity(JNIEnv *env, jobject buf) {
   return (jlong) ((JavaNioBuffer *) buf)->capacity_;
 }
 
+#define GET_ARRAY_BUFFER_ELEMENTS(ARRAY, IS_COPY) \
+  (void)nil_chk(ARRAY); \
+  if (IS_COPY) { \
+    *IS_COPY = false; \
+  } \
+  return ARRAY->buffer_;
+
+static jboolean *GetBooleanArrayElements(JNIEnv *env, jbooleanArray array, jboolean *isCopy) {
+  GET_ARRAY_BUFFER_ELEMENTS(array, isCopy)
+}
+
+static jbyte *GetByteArrayElements(JNIEnv *env, jbyteArray array, jboolean *isCopy) {
+  GET_ARRAY_BUFFER_ELEMENTS(array, isCopy)
+}
+
+static jchar *GetCharArrayElements(JNIEnv *env, jcharArray array, jboolean *isCopy) {
+  GET_ARRAY_BUFFER_ELEMENTS(array, isCopy)
+}
+
+static jshort *GetShortArrayElements(JNIEnv *env, jshortArray array, jboolean *isCopy) {
+  GET_ARRAY_BUFFER_ELEMENTS(array, isCopy)
+}
+
 static jdouble *GetDoubleArrayElements(JNIEnv *env, jdoubleArray array, jboolean *isCopy) {
-  return GetPrimitiveArrayCritical(env, array, isCopy);
+  GET_ARRAY_BUFFER_ELEMENTS(array, isCopy)
 }
 
 static jfloat *GetFloatArrayElements(JNIEnv *env, jfloatArray array, jboolean *isCopy) {
-  return GetPrimitiveArrayCritical(env, array, isCopy);
+  GET_ARRAY_BUFFER_ELEMENTS(array, isCopy)
 }
 
 static jint *GetIntArrayElements(JNIEnv *env, jintArray array, jboolean *isCopy) {
-  return GetPrimitiveArrayCritical(env, array, isCopy);
+  GET_ARRAY_BUFFER_ELEMENTS(array, isCopy)
 }
 
 static jlong *GetLongArrayElements(JNIEnv *env, jlongArray array, jboolean *isCopy) {
-  return GetPrimitiveArrayCritical(env, array, isCopy);
+  GET_ARRAY_BUFFER_ELEMENTS(array, isCopy)
 }
 
 static jobject GetObjectArrayElement(JNIEnv *env, jobjectArray array, jsize index) {
@@ -188,12 +211,12 @@ static void *GetPrimitiveArrayCritical(JNIEnv *env, jarray array, jboolean *isCo
   if (isCopy) {
     *isCopy = false;
   }
-  // All primitive array types have buffer_ at same offset.
+  // Offset for long and double array buffers may be different due to pointer alignment.
+  if ([array isKindOfClass:[IOSLongArray class]] || [array isKindOfClass:[IOSDoubleArray class]]) {
+    return (void *) ((IOSLongArray *)array)->buffer_;
+  }
+  // All other primitive array types have buffer_ at same offset.
   return (void *) ((IOSByteArray *) array)->buffer_;
-}
-
-static jshort *GetShortArrayElements(JNIEnv *env, jshortArray array, jboolean *isCopy) {
-  return GetPrimitiveArrayCritical(env, array, isCopy);
 }
 
 static const jchar *GetStringChars(JNIEnv *env, jstring s, jboolean *isCopy) {
@@ -295,6 +318,10 @@ static jobject NewDirectByteBuffer(JNIEnv *env, void *address, jlong capacity) {
   return
       AUTORELEASE([[JavaNioDirectByteBuffer alloc] initWithLong:(jlong)address
                                                         withInt:(jint)capacity]);
+}
+
+static jboolean ExceptionCheck(JNIEnv *env) {
+  return JNIGetCurrentThreadException(env) ? JNI_TRUE : JNI_FALSE;
 }
 
 static jdoubleArray NewDoubleArray(JNIEnv *env, jsize length) {
@@ -434,6 +461,7 @@ SET_ARRAY_REGION_IMPL(Double, jdouble)
 
 static jint Throw(JNIEnv *env, jthrowable obj) {
   (void)nil_chk(obj);
+  JNISetCurrentThreadException(env, obj);
   @throw obj;
   return 0;
 }
@@ -442,18 +470,39 @@ static jint ThrowNew(JNIEnv *env, jclass clazz, const char *message) {
   (void)nil_chk(clazz);
   NSString *msg = [NSString stringWithUTF8String:message];
   id exc = [(JavaLangThrowable *) [((IOSClass *) clazz).objcClass alloc] initWithNSString:msg];
-  @throw AUTORELEASE(exc);
+  Throw(env, AUTORELEASE(exc));
   return 0;
 }
 
-static void ExceptionClear(JNIEnv *env) {
+static jint EnsureLocalCapacity(JNIEnv *env, jint capacity) {
   // no-op
+  return 0;
+}
+
+static jthrowable ExceptionOccurred(JNIEnv *env) {
+  return JNIGetCurrentThreadException(env);
+}
+
+static void ExceptionDescribe(JNIEnv *env) {
+  jthrowable exception = JNIGetCurrentThreadException(env);
+  if (exception) {
+    [exception printStackTrace];
+  }
+}
+
+static void ExceptionClear(JNIEnv *env) {
+  NSMutableDictionary *threadDictionary = [[NSThread currentThread] threadDictionary];
+  [threadDictionary removeObjectForKey:JNI_EXCEPTION_KEY];
+}
+
+static void FatalError(JNIEnv *env, const char *msg) {
+  ThrowNew(env, JavaLangError_class_(), msg);
 }
 
 static jfieldID GetFieldID(JNIEnv *env, jclass clazz, const char *name, const char *sig) {
   IOSClass *iosClass = (IOSClass *) clazz;
   JavaLangReflectField *field = FindField(iosClass, [NSString stringWithUTF8String:name], false);
-  return (jfieldID) field;
+  return (jfieldID) [field retain];
 }
 
 static jfieldID GetStaticFieldID(JNIEnv *env, jclass clazz, const char *name, const char *sig) {
@@ -470,7 +519,7 @@ static jmethodID GetMethodID(JNIEnv *env, jclass clazz, const char *name, const 
     result = [iosClass getDeclaredMethod:[NSString stringWithUTF8String:name]
                           parameterTypes:methodSig.paramTypes];
   }
-  return (jmethodID) result;
+  return (jmethodID) [result retain];
 }
 
 static jmethodID GetStaticMethodID(JNIEnv *env, jclass clazz, const char *name, const char *sig) {
@@ -478,7 +527,7 @@ static jmethodID GetStaticMethodID(JNIEnv *env, jclass clazz, const char *name, 
 }
 
 #define ALLOC_JARGS(JARGS, NUM_ARGS)           \
-  const size_t _max_stack_args = 16;           \
+  enum { _max_stack_args = 16 };               \
   jvalue _stack_args[_max_stack_args];         \
   jvalue *JARGS;                               \
   jboolean _free_jargs = false;                \
@@ -556,8 +605,13 @@ static jobject NewObject(JNIEnv *env, jclass clazz, jmethodID methodID, ...) {
 }
 
 static void CallMethodA(JNIEnv *env, jobject obj, jmethodID methodID, const jvalue *args, jvalue *result) {
-  [(JavaLangReflectMethod *)methodID
-      jniInvokeWithId:obj args:(const J2ObjcRawValue *)args result:(J2ObjcRawValue *)result];
+  @try {
+    [(JavaLangReflectMethod *)methodID
+        jniInvokeWithId:obj args:(const J2ObjcRawValue *)args result:(J2ObjcRawValue *)result];
+  } @catch (JavaLangThrowable *e) {
+    // Throw() saves the exception to the current thread's exception table.
+    Throw(env, e);
+  }
 }
 
 static void CallMethodV(JNIEnv *env, jobject obj, jmethodID methodID, va_list args, jvalue *result) {
@@ -568,6 +622,26 @@ static void CallMethodV(JNIEnv *env, jobject obj, jmethodID methodID, va_list ar
   ToArgsArray(paramTypes, jargs, args);
   CallMethodA(env, obj, methodID, jargs, result);
   DEALLOC_JARGS(jargs);
+}
+
+jobject CallObjectMethodV(JNIEnv *env, jobject obj, jmethodID methodID, va_list args) {
+  @autoreleasepool {
+    jvalue result;
+    CallMethodV(env, obj, methodID, args, &result);
+    return [result.l retain];
+  }
+}
+
+jobject CallObjectMethodA(JNIEnv *env, jobject obj, jmethodID methodID, const jvalue *args) {
+  @autoreleasepool {
+    jvalue result;
+    CallMethodA(env, obj, methodID, args, &result);
+    return [result.l retain];
+  }
+}
+
+jobject CallObjectMethod(JNIEnv *env, jobject obj, jmethodID methodID, ...) {
+  FORWARD_VARGS(jobject, CallObjectMethodV(env, obj, methodID, args));
 }
 
 #define DEFINE_CALL_METHOD_VARIANTS(RESULT_NAME, RESULT_TYPE, RESULT_CODE) \
@@ -585,7 +659,6 @@ static void CallMethodV(JNIEnv *env, jobject obj, jmethodID methodID, va_list ar
     FORWARD_VARGS(RESULT_TYPE, Call##RESULT_NAME##MethodV(env, obj, methodID, args)); \
   }
 
-DEFINE_CALL_METHOD_VARIANTS(Object, jobject, l)
 DEFINE_CALL_METHOD_VARIANTS(Boolean, jboolean, z)
 DEFINE_CALL_METHOD_VARIANTS(Byte, jbyte, b)
 DEFINE_CALL_METHOD_VARIANTS(Char, jchar, c)
@@ -682,6 +755,26 @@ void SetDoubleField(JNIEnv *env, jobject obj, jfieldID fieldID, jdouble value) {
   [(JavaLangReflectField *)fieldID setDoubleWithId:obj withDouble:value];
 }
 
+jobject CallStaticObjectMethodV(JNIEnv *env, jclass clazz, jmethodID methodID, va_list args) {
+  @autoreleasepool {
+    jvalue result;
+    CallMethodV(env, nil, methodID, args, &result);
+    return [result.l retain];
+  }
+}
+
+jobject CallStaticObjectMethodA(JNIEnv *env, jclass clazz, jmethodID methodID, const jvalue *args) {
+  @autoreleasepool {
+    jvalue result;
+    CallMethodA(env, nil, methodID, args, &result);
+    return [result.l retain];
+  }
+}
+
+jobject CallStaticObjectMethod(JNIEnv *env, jclass clazz, jmethodID methodID, ...) {
+  FORWARD_VARGS(jobject, CallObjectMethodV(env, nil, methodID, args));
+}
+
 #define DEFINE_CALL_STATIC_METHOD_VARIANTS(RESULT_NAME, RESULT_TYPE, RESULT_CODE) \
   RESULT_TYPE CallStatic##RESULT_NAME##MethodV(JNIEnv *env, jclass clazz, jmethodID methodID, va_list args) { \
     jvalue result; \
@@ -697,7 +790,6 @@ void SetDoubleField(JNIEnv *env, jobject obj, jfieldID fieldID, jdouble value) {
     FORWARD_VARGS(RESULT_TYPE, Call##RESULT_NAME##MethodV(env, nil, methodID, args)); \
   }
 
-DEFINE_CALL_STATIC_METHOD_VARIANTS(Object, jobject, l)
 DEFINE_CALL_STATIC_METHOD_VARIANTS(Boolean, jboolean, z)
 DEFINE_CALL_STATIC_METHOD_VARIANTS(Byte, jbyte, b)
 DEFINE_CALL_STATIC_METHOD_VARIANTS(Char, jchar, c)
@@ -803,7 +895,11 @@ static struct JNINativeInterface JNI_JNIEnvTable = {
   &IsAssignableFrom,
   &Throw,
   &ThrowNew,
+  &EnsureLocalCapacity,
+  &ExceptionOccurred,
+  &ExceptionDescribe,
   &ExceptionClear,
+  &FatalError,
   &NewGlobalRef,
   &NewLocalRef,
   &DeleteGlobalRef,
@@ -869,6 +965,7 @@ static struct JNINativeInterface JNI_JNIEnvTable = {
   &ReleasePrimitiveArrayCritical,
   &GetStringCritical,
   &ReleaseStringCritical,
+  &ExceptionCheck,
   &NewDirectByteBuffer,
   &GetDirectBufferAddress,
   &GetDirectBufferCapacity,

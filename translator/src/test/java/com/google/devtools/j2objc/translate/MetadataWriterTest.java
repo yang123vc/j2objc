@@ -15,7 +15,6 @@
 package com.google.devtools.j2objc.translate;
 
 import com.google.devtools.j2objc.GenerationTest;
-
 import java.io.IOException;
 
 /**
@@ -27,10 +26,11 @@ public class MetadataWriterTest extends GenerationTest {
 
   public void testMetadataHeaderGeneration() throws IOException {
     String translation = translateSourceFile("package foo; class Test {}", "Test", "foo/Test.m");
-    assertTranslation(translation, "+ (const J2ObjcClassInfo *)__metadata");
-    assertTranslation(translation,
+    assertInTranslation(translation, "+ (const J2ObjcClassInfo *)__metadata");
+    assertInTranslation(
+        translation,
         "static const J2ObjcClassInfo _FooTest = { \"Test\", \"foo\", NULL, methods, NULL, "
-        + Integer.toString(MetadataWriter.METADATA_VERSION));
+            + Integer.toString(MetadataWriter.METADATA_VERSION));
   }
 
   public void testConstructorsHaveNullJavaName() throws IOException {
@@ -39,7 +39,7 @@ public class MetadataWriterTest extends GenerationTest {
         "static J2ObjcMethodInfo methods[] = {",
         // The fourth field, "javaNameIdx", should be -1.
         "{ NULL, NULL, 0x0, -1, -1, -1, -1, -1, -1 },");
-    assertTranslation(translation, "methods[0].selector = @selector(init)");
+    assertInTranslation(translation, "methods[0].selector = @selector(init)");
   }
 
   public void testMethodMetadata() throws IOException {
@@ -59,38 +59,40 @@ public class MetadataWriterTest extends GenerationTest {
         + " abstract <V,X> void test11(V one, X two, T three);"
         + "}",
         "Test", "Test.m");
-    assertTranslation(translation, "{ NULL, \"LNSObject;\", 0x0, -1, -1, -1, -1, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"C\", 0x2, -1, -1, -1, -1, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"V\", 0x4, -1, -1, -1, -1, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"J\", 0x10, -1, -1, -1, -1, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"Z\", 0x20, -1, -1, -1, -1, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"LNSString;\", 0x80, 0, 1, -1, -1, -1, -1 }");
-    assertTranslation(translation, "{ NULL, \"V\", 0x100, -1, -1, -1, -1, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"V\", 0x400, -1, -1, 2, -1, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"LNSObject;\", 0x400, -1, -1, -1, 3, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"V\", 0x400, 4, 5, -1, 6, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"V\", 0x400, 7, 8, -1, 9, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"LNSObject;\", 0x0, -1, -1, -1, -1, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"C\", 0x2, -1, -1, -1, -1, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"V\", 0x4, -1, -1, -1, -1, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"J\", 0x10, -1, -1, -1, -1, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"Z\", 0x20, -1, -1, -1, -1, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"LNSString;\", 0x80, 0, 1, -1, -1, -1, -1 }");
+    assertInTranslation(translation, "{ NULL, \"V\", 0x100, -1, -1, -1, -1, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"V\", 0x400, -1, -1, 2, -1, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"LNSObject;\", 0x400, -1, -1, -1, 3, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"V\", 0x400, 4, 5, -1, 6, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"V\", 0x400, 7, 8, -1, 9, -1, -1 },");
     // Implicit default constructor
-    assertTranslation(translation, "methods[0].selector = @selector(init)");
-    assertTranslation(translation, "methods[1].selector = @selector(test1)");
-    assertTranslation(translation, "methods[2].selector = @selector(test2)");
-    assertTranslation(translation, "methods[3].selector = @selector(test3)");
-    assertTranslation(translation, "methods[4].selector = @selector(test4)");
-    assertTranslation(translation, "methods[5].selector = @selector(test5)");
-    assertTranslation(translation,
-        "methods[6].selector = @selector(test6WithNSString:withNSObjectArray:)");
-    assertTranslation(translation, "methods[7].selector = @selector(test7)");
-    assertTranslation(translation, "methods[8].selector = @selector(test8)");
-    assertTranslation(translation, "methods[9].selector = @selector(test9)");
-    assertTranslation(translation, "methods[10].selector = @selector(test10WithInt:withId:)");
-    assertTranslation(translation, "methods[11].selector = @selector(test11WithId:withId:withId:)");
+    assertInTranslation(translation, "methods[0].selector = @selector(init)");
+    assertInTranslation(translation, "methods[1].selector = @selector(test1)");
+    assertInTranslation(translation, "methods[2].selector = @selector(test2)");
+    assertInTranslation(translation, "methods[3].selector = @selector(test3)");
+    assertInTranslation(translation, "methods[4].selector = @selector(test4)");
+    assertInTranslation(translation, "methods[5].selector = @selector(test5)");
+    assertInTranslation(
+        translation, "methods[6].selector = @selector(test6WithNSString:withNSObjectArray:)");
+    assertInTranslation(translation, "methods[7].selector = @selector(test7)");
+    assertInTranslation(translation, "methods[8].selector = @selector(test8)");
+    assertInTranslation(translation, "methods[9].selector = @selector(test9)");
+    assertInTranslation(translation, "methods[10].selector = @selector(test10WithInt:withId:)");
+    assertInTranslation(
+        translation, "methods[11].selector = @selector(test11WithId:withId:withId:)");
 
-    assertTranslation(translation,
+    assertInTranslation(
+        translation,
         "static const void *ptrTable[] = { \"test6\", \"LNSString;[LNSObject;\", "
-        + "\"LJavaLangInterruptedException;LJavaLangError;\", \"()TT;\", \"test10\", "
-        + "\"ILNSObject;\", \"(ITT;)V\", \"test11\", \"LNSObject;LNSObject;LNSObject;\", "
-        + "\"<V:Ljava/lang/Object;X:Ljava/lang/Object;>(TV;TX;TT;)V\", "
-        + "\"<T:Ljava/lang/Object;>Ljava/lang/Object;\" };");
+            + "\"LJavaLangInterruptedException;LJavaLangError;\", \"()TT;\", \"test10\", "
+            + "\"ILNSObject;\", \"(ITT;)V\", \"test11\", \"LNSObject;LNSObject;LNSObject;\", "
+            + "\"<V:Ljava/lang/Object;X:Ljava/lang/Object;>(TV;TX;TT;)V\", "
+            + "\"<T:Ljava/lang/Object;>Ljava/lang/Object;\" };");
   }
 
   public void testFieldMetadata() throws IOException {
@@ -106,9 +108,10 @@ public class MetadataWriterTest extends GenerationTest {
         "  { \"field2_\", \"LNSObject;\", .constantValue.asLong = 0, 0x0, -1, -1, -1, -1 },",
         "  { \"field3_\", \"LJavaLangRunnable;\", .constantValue.asLong = 0, 0x0, -1, -1, 0, -1 },",
         "};");
-    assertTranslation(translation,
+    assertInTranslation(
+        translation,
         "static const void *ptrTable[] = { \"TT;\", "
-        + "\"<T::Ljava/lang/Runnable;>Ljava/lang/Object;\" };");
+            + "\"<T::Ljava/lang/Runnable;>Ljava/lang/Object;\" };");
   }
 
   public void testAnnotationMetadata() throws IOException {
@@ -118,16 +121,21 @@ public class MetadataWriterTest extends GenerationTest {
         + " int num() default 5;"
         + "}",
         "Test", "Test.m");
-    assertTranslation(translation, "{ NULL, \"LNSString;\", 0x401, -1, -1, -1, -1, -1, -1 },");
-    assertTranslation(translation, "{ NULL, \"I\", 0x401, -1, -1, -1, -1, -1, -1 },");
-    assertTranslation(translation, "methods[0].selector = @selector(foo)");
-    assertTranslation(translation, "methods[1].selector = @selector(num)");
+    assertInTranslation(translation, "{ NULL, \"LNSString;\", 0x401, -1, -1, -1, -1, -1, -1 },");
+    assertInTranslation(translation, "{ NULL, \"I\", 0x401, -1, -1, -1, -1, -1, -1 },");
+    assertInTranslation(translation, "methods[0].selector = @selector(foo)");
+    assertInTranslation(translation, "methods[1].selector = @selector(num)");
   }
 
   public void testInnerClassesMetadata() throws IOException {
+    addSourceFile("import java.lang.annotation.*; "
+        + "  @Retention(RetentionPolicy.RUNTIME) "
+        + "  public @interface AnAnnotation {}",
+        "AnAnnotation.java");
     String translation = translateSourceFile(
         " class A {"
         + "class B {"
+        + "  B(@AnAnnotation double x, String y, boolean b) {}"
         + "  class InnerInner{}}"
         + "static class C {"
         + "  Runnable test() {"
@@ -136,10 +144,28 @@ public class MetadataWriterTest extends GenerationTest {
         + "@interface E {}"
         + "}"
         , "A", "A.m");
-    assertTranslation(translation, "static const void *ptrTable[] = { \"LA_B;LA_C;LA_D;LA_E;\" };");
-    assertTranslation(translation,
+    assertTranslatedLines(translation,
+        "static const void *ptrTable[] = { \"LA_B;LA_C;LA_D;LA_E;\" };",
         "static const J2ObjcClassInfo _A = { \"A\", NULL, ptrTable, methods, NULL, 7, 0x0, 1, 0, "
-        + "-1, 0, -1, -1, -1 };");
+            + "-1, 0, -1, -1, -1 };");
+    // B's constructor receives the enclosing object as the first parameter: "LA;DLNSString;Z"
+    assertTranslatedLines(translation,
+        "static const void *ptrTable[] = { \"LA;DLNSString;Z\", (void *)&A_B__Annotations$0, "
+            + "\"LA;\", \"LA_B_InnerInner;\" };",
+        "static const J2ObjcClassInfo _A_B = { \"B\", NULL, ptrTable, methods, NULL, 7, 0x0, "
+            + "1, 0, 2, 3, -1, -1, -1 };");
+    // Note that there are 4 parameter-annotation entries in B's constructor because it includes
+    // an entry for the implicit parameter (enclosing class).
+    assertTranslatedLines(translation,
+        "IOSObjectArray *A_B__Annotations$0() {",
+        "return [IOSObjectArray arrayWithObjects:(id[]){ "
+            + "[IOSObjectArray arrayWithLength:0 type:JavaLangAnnotationAnnotation_class_()], "
+            + "[IOSObjectArray arrayWithObjects:(id[]){ create_AnAnnotation() } count:1 "
+            + "type:JavaLangAnnotationAnnotation_class_()], "
+            + "[IOSObjectArray arrayWithLength:0 type:JavaLangAnnotationAnnotation_class_()], "
+            + "[IOSObjectArray arrayWithLength:0 type:JavaLangAnnotationAnnotation_class_()] } "
+            + "count:4 type:IOSClass_arrayType(JavaLangAnnotationAnnotation_class_(), 1)];",
+        "}");
   }
 
   public void testEnclosingMethodAndConstructor() throws IOException {
@@ -188,16 +214,16 @@ public class MetadataWriterTest extends GenerationTest {
     String translation = translateSourceFile(
         "public class Test { @Deprecated Test() {} }",
         "Test", "Test.m");
-    assertTranslation(translation, "IOSObjectArray *Test__Annotations$0()");
-    assertTranslation(translation, "create_JavaLangDeprecated");
+    assertInTranslation(translation, "IOSObjectArray *Test__Annotations$0()");
+    assertInTranslation(translation, "create_JavaLangDeprecated");
   }
 
   public void testConstructorAnnotationWithParameter() throws IOException {
     String translation = translateSourceFile(
         "public class Test { @Deprecated Test(int i) {} }",
         "Test", "Test.m");
-    assertTranslation(translation, "IOSObjectArray *Test__Annotations$0()");
-    assertTranslation(translation, "create_JavaLangDeprecated");
+    assertInTranslation(translation, "IOSObjectArray *Test__Annotations$0()");
+    assertInTranslation(translation, "create_JavaLangDeprecated");
   }
 
   public void testTypeAnnotationDefaultParameter() throws IOException {
@@ -221,6 +247,28 @@ public class MetadataWriterTest extends GenerationTest {
         "return [IOSObjectArray arrayWithObjects:(id[])"
         + "{ create_OrgJunitIgnore(@\"some \\\"escaped\\n comment\") } "
         + "count:1 type:JavaLangAnnotationAnnotation_class_()];");
+  }
+
+  public void testRepeatedAnnotation() throws IOException {
+    addSourceFile("import java.lang.annotation.*; "
+        + "  @Repeatable(Container.class) "
+        + "  @Retention(RetentionPolicy.RUNTIME) "
+        + "  public @interface Repeated { int value(); }",
+        "Repeated.java");
+    addSourceFile("import java.lang.annotation.*; "
+            + "  @Retention(RetentionPolicy.RUNTIME) "
+            + "  public @interface Container { Repeated[] value(); }",
+        "Container.java");
+    String translation = translateSourceFile("@Repeated(83) @Repeated(14) class Test {}", "Test",
+        "Test.m");
+    assertTranslatedLines(translation,
+        "IOSObjectArray *Test__Annotations$0() {",
+        "return [IOSObjectArray arrayWithObjects:(id[]){ "
+            + "create_Container([IOSObjectArray arrayWithObjects:(id[]){ "
+            + "create_Repeated(83), create_Repeated(14) } "
+            + "count:2 type:Repeated_class_()]) } "
+            + "count:1 type:JavaLangAnnotationAnnotation_class_()];",
+        "}");
   }
 
   // Verify that a class with an annotation with a reserved name property is

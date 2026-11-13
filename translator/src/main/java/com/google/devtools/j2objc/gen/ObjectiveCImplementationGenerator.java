@@ -20,7 +20,6 @@ import com.google.common.collect.Sets;
 import com.google.devtools.j2objc.J2ObjC;
 import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.types.Import;
-
 import java.util.Set;
 
 /**
@@ -28,6 +27,7 @@ import java.util.Set;
  *
  * @author Tom Ball
  */
+@SuppressWarnings("UngroupedOverloads")
 public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGenerator {
 
   private final Options options;
@@ -52,7 +52,11 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
 
   public void generate() {
     print(J2ObjC.getFileHeader(options, getGenerationUnit().getSourceName()));
+    printImportedByJavaImplementation();
+    printOptionBuildFlags();
     printImports();
+    printMemoryManagement();
+    printCompilerSimilarityPragmas();
     printIgnoreIncompletePragmas();
     pushIgnoreDeprecatedDeclarationsPragma();
     for (GeneratedType generatedType : getOrderedTypes()) {
@@ -63,6 +67,26 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
     }
     popIgnoreDeprecatedDeclarationsPragma();
     save(getOutputPath(), options.fileUtil().getOutputDirectory());
+  }
+
+  private void printCompilerSimilarityPragmas() {
+    newline();
+
+    // Ensure that code paths not returning are errors as they would be with Java.
+    println("#pragma clang diagnostic error \"-Wreturn-type\"");
+
+    // Java handles incomplete switch enum coverage as a function of a missing return so
+    // disable the Clang warning for this (which is commonly enabled). This is a little
+    // over-broad, but we do not expect generated code to trigger the other warnings covered
+    // by this switch.
+    println("#pragma clang diagnostic ignored \"-Wswitch\"");
+
+    // Java interfaces with @Property generate Objective-C protocol properties. Objective-C
+    // protocols do not auto-synthesize properties in conforming classes. Disable the Clang
+    // warning since accessors are implemented by methods rather than synthesized ivars.
+    println("#pragma clang diagnostic ignored \"-Wobjc-protocol-property-synthesis\"");
+
+    newline();
   }
 
   private void printIgnoreIncompletePragmas() {
@@ -78,21 +102,52 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
     }
   }
 
+  private void printImportedByJavaImplementation() {
+    newline();
+    println("#define J2OBJC_IMPORTED_BY_JAVA_IMPLEMENTATION 1");
+    newline();
+  }
+
+  private void printOptionBuildFlags() {
+    newline();
+    if (options.useStrictFieldAssign()) {
+      println("#define J2OBJC_STRICT_FIELD_ASSIGN 1");
+    }
+    if (options.useStrictFieldLoad()) {
+      println("#define J2OBJC_STRICT_FIELD_LOAD 1");
+    }
+    if (options.useRetainAutoreleaseReturns()) {
+      println("#define J2OBJC_RETAIN_AUTORELEASE_RETURNS 1");
+    }
+    if (options.useARCAutoreleaseReturns()) {
+      println("#define J2OBJC_ARC_AUTORELEASE_RETURNS 1");
+    }
+    newline();
+  }
+
   private void printImports() {
     Set<String> includeFiles = Sets.newTreeSet();
     includeFiles.add("J2ObjC_source.h");
-    includeFiles.add(getGenerationUnit().getOutputPath() + ".h");
+    String outputPath = getGenerationUnit().getOutputPath();
+    if (options.generateSeparateHeaders()) {
+      for (GeneratedType generatedType : getOrderedTypes()) {
+        includeFiles.add(getHeaderPath(generatedType, outputPath) + ".h");
+      }
+    } else {
+      includeFiles.add(outputPath + ".h");
+    }
     for (GeneratedType generatedType : getOrderedTypes()) {
       for (Import imp : generatedType.getImplementationIncludes()) {
-        if (!isLocalType(imp.getTypeName())) {
+        if (!isLocalType(imp.getTypeName()) && !imp.getImportFileName().isEmpty()) {
           includeFiles.add(imp.getImportFileName());
         }
       }
     }
 
     newline();
+    String directive = options.generateSeparateHeaders() ? "#import" : "#include";
     for (String header : includeFiles) {
-      printf("#include \"%s\"\n", header);
+      printf("%s \"%s\"\n", directive, header);
     }
 
     for (String code : getGenerationUnit().getNativeImplementationBlocks()) {
@@ -117,5 +172,29 @@ public class ObjectiveCImplementationGenerator extends ObjectiveCSourceFileGener
     }
 
     printForwardDeclarations(forwardDecls);
+    newline();
+  }
+
+  private void printMemoryManagement() {
+    Options.MemoryManagementOption memoryManagementOption = options.getMemoryManagementOption();
+    String filename = getGenerationUnit().getOutputPath();
+
+    if (memoryManagementOption == Options.MemoryManagementOption.ARC) {
+      println("#if !__has_feature(objc_arc)");
+      println(String.format("#error \"%s must be compiled with ARC (-fobjc-arc)\"", filename));
+    } else {
+      println("#if __has_feature(objc_arc)");
+      println(String.format("#error \"%s must not be compiled with ARC (-fobjc-arc)\"", filename));
+      if (getGenerationUnit().hasWeakFields()) {
+        println("#if !__has_feature(objc_arc_weak)");
+        println(
+            String.format(
+                "#error \"%s must be compiled with weak references support (-fobjc-weak)\"",
+                filename));
+        println("#endif");
+      }
+    }
+
+    println("#endif");
   }
 }

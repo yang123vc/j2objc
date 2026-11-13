@@ -1,6 +1,9 @@
 # Temp Files
 *~
 
+# Bazel generated files
+**/bazel-*
+
 # Bundler
 Gemfile.lock
 
@@ -12,6 +15,9 @@ dist/
 **/project.xcworkspace/
 **/xcuserdata/
 **/Translated/
+
+# Python Generated Files
+*.pyc
 
 # Mac System Files
 .DS_Store

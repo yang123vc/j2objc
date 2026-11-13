@@ -60,6 +60,8 @@ typedef ComGoogleProtobufDescriptors_OneofDescriptor CGPOneofDescriptor;
 
 - (NSString *)getName;
 
+- (NSString *)getFullName;
+
 - (id<JavaUtilList>)getFields;
 
 - (id<JavaUtilList>)getOneofs;
@@ -114,12 +116,16 @@ J2OBJC_EMPTY_STATIC_INIT(ComGoogleProtobufDescriptors_EnumDescriptor)
 
 J2OBJC_TYPE_LITERAL_HEADER(ComGoogleProtobufDescriptors_EnumDescriptor)
 
-@interface ComGoogleProtobufDescriptors_EnumValueDescriptor : NSObject
+@interface ComGoogleProtobufDescriptors_UnknownEnumValueDescriptor : NSObject
 
 - (jint)getNumber;
 
 - (NSString *)getName;
 
+@end
+
+@interface ComGoogleProtobufDescriptors_EnumValueDescriptor
+    : ComGoogleProtobufDescriptors_UnknownEnumValueDescriptor
 @end
 
 J2OBJC_EMPTY_STATIC_INIT(ComGoogleProtobufDescriptors_EnumValueDescriptor)
@@ -140,4 +146,4 @@ J2OBJC_EMPTY_STATIC_INIT(ComGoogleProtobufDescriptors_OneofDescriptor)
 
 J2OBJC_TYPE_LITERAL_HEADER(ComGoogleProtobufDescriptors_OneofDescriptor)
 
-#endif // __ComGoogleProtobufDescriptors_H__
+#endif  // __ComGoogleProtobufDescriptors_H__

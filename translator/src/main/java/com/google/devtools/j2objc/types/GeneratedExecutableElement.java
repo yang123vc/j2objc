@@ -16,13 +16,16 @@ package com.google.devtools.j2objc.types;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.google.devtools.j2objc.ast.DebugASTPrinter;
 import com.google.devtools.j2objc.util.ElementUtil;
 import com.google.devtools.j2objc.util.NameTable;
 import com.google.devtools.j2objc.util.TypeUtil;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.lang.annotation.Annotation;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
@@ -52,6 +55,7 @@ public class GeneratedExecutableElement extends GeneratedElement implements Exec
   private final List<TypeParameterElement> typeParameters = Lists.newArrayList();
   private final TypeMirror returnType;
   private final boolean varargs;
+  private ExecutableElement originalElement;
 
   private GeneratedExecutableElement(
       String name, String selector, ElementKind kind, TypeMirror returnType,
@@ -89,6 +93,34 @@ public class GeneratedExecutableElement extends GeneratedElement implements Exec
     return new GeneratedExecutableElement(
         selector, selector, ElementKind.METHOD, returnType, method.getEnclosingElement(),
         method.isVarArgs(), ElementUtil.isSynthetic(method));
+  }
+
+  public static GeneratedExecutableElement newAdapterMethod(
+      String selector,
+      TypeMirror adapterReturnType,
+      List<VariableElement> adapterParameters,
+      ExecutableElement method) {
+    AnnotationMirror throwsAnnotation =
+        ElementUtil.getQualifiedNamedAnnotation(method, "com.google.j2kt.annotations.Throws");
+    GeneratedExecutableElement generatedMethod =
+        new GeneratedExecutableElement(
+            throwsAnnotation != null ? method.getSimpleName().toString() : selector,
+            selector,
+            method.getKind(),
+            adapterReturnType,
+            method.getEnclosingElement(),
+            method.isVarArgs(),
+            ElementUtil.isSynthetic(method));
+    generatedMethod.addAnnotationMirrors(method.getAnnotationMirrors());
+    // Remove the Throws annotation as it is not needed on the adapter method.
+    generatedMethod.getAnnotationMirrors().remove(throwsAnnotation);
+    Set<Modifier> modifiers = Sets.newHashSet(method.getModifiers());
+    modifiers.remove(Modifier.ABSTRACT); // Adapter methods are always concrete.
+    generatedMethod.addModifiers(modifiers);
+    generatedMethod.parameters.addAll(adapterParameters);
+    generatedMethod.thrownTypes.addAll(method.getThrownTypes());
+    generatedMethod.typeParameters.addAll(method.getTypeParameters());
+    return generatedMethod;
   }
 
   public static GeneratedExecutableElement mutableCopy(String selector, ExecutableElement method) {
@@ -208,18 +240,22 @@ public class GeneratedExecutableElement extends GeneratedElement implements Exec
     throw new AssertionError("not implemented");
   }
 
-  /**
-   * The associated ExecutableType.
-   * TODO(kstanger): Make private when javac conversion is complete.
-   */
-  public class Mirror extends AbstractTypeMirror implements ExecutableType {
+  public ExecutableElement getOriginalElement() {
+    return originalElement;
+  }
+
+  @CanIgnoreReturnValue
+  public GeneratedExecutableElement setOriginalElement(ExecutableElement element) {
+    originalElement = element;
+    return this;
+  }
+
+  /** The associated ExecutableType. */
+  private class Mirror extends AbstractTypeMirror implements ExecutableType {
 
     private final List<? extends TypeMirror> parameterTypes =
         Lists.transform(parameters, param -> param.asType());
 
-    public GeneratedExecutableElement asExecutableElement() {
-      return GeneratedExecutableElement.this;
-    }
 
     @Override
     public TypeKind getKind() {

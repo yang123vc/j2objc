@@ -56,16 +56,12 @@ import sun.nio.cs.StreamDecoder;
  * @see java.nio.charset.Charset
  *
  * @author      Mark Reinhold
- * @since       JDK1.1
+ * @since       1.1
  */
 
 public class InputStreamReader extends Reader {
 
     private final StreamDecoder sd;
-
-    // J2ObjC added: Avoid creating a reference cycle by passing "this" for the mutex to
-    // StreamDecoder.
-    private final Object lock = new Object();
 
     /**
      * Creates an InputStreamReader that uses the default charset.
@@ -74,12 +70,8 @@ public class InputStreamReader extends Reader {
      */
     public InputStreamReader(InputStream in) {
         super(in);
-        try {
-            sd = StreamDecoder.forInputStreamReader(in, lock, (String)null); // ## check lock object
-        } catch (UnsupportedEncodingException e) {
-            // The default encoding should always be available
-            throw new Error(e);
-        }
+        sd = StreamDecoder.forInputStreamReader(in, lock,
+                Charset.defaultCharset());
     }
 
     /**

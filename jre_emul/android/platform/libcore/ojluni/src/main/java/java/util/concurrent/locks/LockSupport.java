@@ -35,8 +35,6 @@
 
 package java.util.concurrent.locks;
 
-import com.google.j2objc.annotations.ReflectionSupport;
-
 /**
  * Basic thread blocking primitives for creating locks and other
  * synchronization classes.
@@ -133,8 +131,9 @@ import com.google.j2objc.annotations.ReflectionSupport;
  *     Class<?> ensureLoaded = LockSupport.class;
  *   }
  * }}</pre>
+ *
+ * @since 1.5
  */
-@ReflectionSupport(value = ReflectionSupport.Level.FULL)
 public class LockSupport {
     private LockSupport() {} // Cannot be instantiated.
 
@@ -405,6 +404,18 @@ public class LockSupport {
             r = 1; // avoid zero
         U.putInt(t, SECONDARY, r);
         return r;
+    }
+    */
+    
+    /**
+     * Returns the thread id for the given thread.  We must access
+     * this directly rather than via method Thread.getId() because
+     * getId() has been known to be overridden in ways that do not
+     * preserve unique mappings.
+     */
+    /* J2ObjC removed
+    static final long getThreadId(Thread thread) {
+        return U.getLong(thread, TID);
     }
     */
 

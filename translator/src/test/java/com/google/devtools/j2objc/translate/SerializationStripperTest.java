@@ -50,14 +50,14 @@ public class SerializationStripperTest extends GenerationTest {
             sourceFile(/* className= */ "Test", /* implementsSerializable= */ false),
             /* typeName= */ "Test",
             /* fileName= */ "Test.m");
-    assertTranslation(translation, "serialVersionUID");
-    assertTranslation(translation, "anotherField");
-    assertTranslation(translation, "writeObject");
-    assertTranslation(translation, "readObject");
-    assertTranslation(translation, "readObjectNoData");
-    assertTranslation(translation, "writeReplace");
-    assertTranslation(translation, "readResolve");
-    assertTranslation(translation, "anotherMethod");
+    assertInTranslation(translation, "serialVersionUID");
+    assertInTranslation(translation, "anotherField");
+    assertInTranslation(translation, "writeObject");
+    assertInTranslation(translation, "readObject");
+    assertInTranslation(translation, "readObjectNoData");
+    assertInTranslation(translation, "writeReplace");
+    assertInTranslation(translation, "readResolve");
+    assertInTranslation(translation, "anotherMethod");
   }
 
   public void testSerializableTypeIsNotModifiedWhenReflectionIsNotStripped() throws IOException {
@@ -67,14 +67,14 @@ public class SerializationStripperTest extends GenerationTest {
             sourceFile(/* className= */ "Test", /* implementsSerializable= */ true),
             /* typeName= */ "Test",
             /* fileName= */ "Test.m");
-    assertTranslation(translation, "serialVersionUID");
-    assertTranslation(translation, "anotherField");
-    assertTranslation(translation, "writeObject");
-    assertTranslation(translation, "readObject");
-    assertTranslation(translation, "readObjectNoData");
-    assertTranslation(translation, "writeReplace");
-    assertTranslation(translation, "readResolve");
-    assertTranslation(translation, "anotherMethod");
+    assertInTranslation(translation, "serialVersionUID");
+    assertInTranslation(translation, "anotherField");
+    assertInTranslation(translation, "writeObject");
+    assertInTranslation(translation, "readObject");
+    assertInTranslation(translation, "readObjectNoData");
+    assertInTranslation(translation, "writeReplace");
+    assertInTranslation(translation, "readResolve");
+    assertInTranslation(translation, "anotherMethod");
   }
 
   public void testSerializableTypeIsStripped() throws IOException {
@@ -85,12 +85,40 @@ public class SerializationStripperTest extends GenerationTest {
             /* typeName= */ "Test",
             /* fileName= */ "Test.m");
     assertNotInTranslation(translation, "serialVersionUID");
-    assertTranslation(translation, "anotherField");
+    assertInTranslation(translation, "anotherField");
     assertNotInTranslation(translation, "writeObject");
     assertNotInTranslation(translation, "readObject");
     assertNotInTranslation(translation, "readObjectNoData");
     assertNotInTranslation(translation, "writeReplace");
     assertNotInTranslation(translation, "readResolve");
-    assertTranslation(translation, "anotherMethod");
+    assertInTranslation(translation, "anotherMethod");
+  }
+
+  public void testAnonymousSerializableTypeInsideNonSerializableTypeIsStripped()
+      throws IOException {
+    options.setStripReflection(true);
+    String translation =
+        translateSourceFile(
+            "import java.io.IOException;"
+                + "import java.io.ObjectInputStream;"
+                + "import java.io.ObjectOutputStream;"
+                + "import java.io.ObjectStreamException;"
+                + "import java.io.Serializable;"
+                + "public class Test { "
+                + "  void method() {"
+                + "    new Serializable() {"
+                + "      private static final long serialVersionUID = 1053L;"
+                + "      private static final long anotherField = 1122L;"
+                + "      private void writeObject(ObjectOutputStream out) throws IOException {}"
+                + "      private void anotherMethod() {}"
+                + "    };"
+                + "  }"
+                + "}",
+            /* typeName= */ "Test",
+            /* fileName= */ "Test.m");
+    assertNotInTranslation(translation, "serialVersionUID");
+    assertInTranslation(translation, "anotherField");
+    assertNotInTranslation(translation, "writeObject");
+    assertInTranslation(translation, "anotherMethod");
   }
 }

@@ -142,7 +142,7 @@ ZFILE_Close(ZFILE zfd) {
 }
 
 static int
-ZFILE_read(ZFILE zfd, char *buf, jint nbytes) {
+ZFILE_read(ZFILE zfd, char *buf, jint nbytes, jlong offset) {
 #ifdef WIN32
     return (int) IO_Read(zfd, buf, nbytes);
 #else
@@ -154,7 +154,7 @@ ZFILE_read(ZFILE zfd, char *buf, jint nbytes) {
      * JVM_IO_INTR is tricky and could cause undesired side effect. So we decided
      * to simply call "read" on Solaris/Linux. See details in bug 6304463.
      */
-    return (int)read(zfd, buf, nbytes);
+    return (int)pread(zfd, buf, nbytes, offset);
 #endif
 }
 
@@ -165,29 +165,28 @@ ZFILE_read(ZFILE zfd, char *buf, jint nbytes) {
 static jint
 InitializeZip()
 {
-    static jboolean inited = JNI_FALSE;
+  static bool inited = JNI_FALSE;
 
-    // Initialize errno to 0.  It may be set later (e.g. during memory
-    // allocation) but we can disregard previous values.
-    errno = 0;
+  // Initialize errno to 0.  It may be set later (e.g. during memory
+  // allocation) but we can disregard previous values.
+  errno = 0;
 
-    if (inited)
-        return 0;
-    zfiles_lock = MCREATE();
-    if (zfiles_lock == 0) {
-        return -1;
-    }
+  if (inited) return 0;
+  zfiles_lock = MCREATE();
+  if (zfiles_lock == 0) {
+    return -1;
+  }
     inited = JNI_TRUE;
 
     return 0;
 }
 
 /*
- * Reads len bytes of data into buf.
+ * Reads len bytes of data from the specified offset into buf.
  * Returns 0 if all bytes could be read, otherwise returns -1.
  */
 static int
-readFully(ZFILE zfd, void *buf, jlong len) {
+readFullyAt(ZFILE zfd, void *buf, jlong len, jlong offset) {
   char *bp = (char *) buf;
 
   while (len > 0) {
@@ -195,9 +194,10 @@ readFully(ZFILE zfd, void *buf, jlong len) {
         jint count = (len < limit) ?
             (jint) len :
             (jint) limit;
-        jint n = ZFILE_read(zfd, bp, count);
+        jint n = ZFILE_read(zfd, bp, count, offset);
         if (n > 0) {
             bp += n;
+            offset += n;
             len -= n;
         } else if (n == JVM_IO_ERR && errno == EINTR) {
           /* Retry after EINTR (interrupted by signal).
@@ -208,20 +208,6 @@ readFully(ZFILE zfd, void *buf, jlong len) {
         }
     }
     return 0;
-}
-
-/*
- * Reads len bytes of data from the specified offset into buf.
- * Returns 0 if all bytes could be read, otherwise returns -1.
- */
-static int
-readFullyAt(ZFILE zfd, void *buf, jlong len, jlong offset)
-{
-    if (IO_Lseek(zfd, offset, SEEK_SET) == -1) {
-        return -1; /* lseek failure. */
-    }
-
-    return readFully(zfd, buf, len);
 }
 
 /*
@@ -278,22 +264,19 @@ static const jlong END_MAXLEN = 0xFFFF + ZIP_ENDHDR;
 
 #define READBLOCKSZ 128
 
-static jboolean verifyEND(jzfile *zip, jlong endpos, char *endbuf) {
-    /* ENDSIG matched, however the size of file comment in it does not
-       match the real size. One "common" cause for this problem is some
-       "extra" bytes are padded at the end of the zipfile.
-       Let's do some extra verification, we don't care about the performance
-       in this situation.
-     */
-    jlong cenpos = endpos - ZIP_ENDSIZ(endbuf);
-    jlong locpos = cenpos - ZIP_ENDOFF(endbuf);
-    char buf[4];
-    return (cenpos >= 0 &&
-            locpos >= 0 &&
-            readFullyAt(zip->zfd, buf, sizeof(buf), cenpos) != -1 &&
-            GETSIG(buf) == ZIP_CENSIG &&
-            readFullyAt(zip->zfd, buf, sizeof(buf), locpos) != -1 &&
-            GETSIG(buf) == ZIP_LOCSIG);
+static bool verifyEND(jzfile *zip, jlong endpos, char *endbuf) {
+  /* ENDSIG matched, however the size of file comment in it does not
+     match the real size. One "common" cause for this problem is some
+     "extra" bytes are padded at the end of the zipfile.
+     Let's do some extra verification, we don't care about the performance
+     in this situation.
+   */
+  jlong cenpos = endpos - ZIP_ENDSIZ(endbuf);
+  jlong locpos = cenpos - ZIP_ENDOFF(endbuf);
+  char buf[4];
+  return (cenpos >= 0 && locpos >= 0 && readFullyAt(zip->zfd, buf, sizeof(buf), cenpos) != -1 &&
+          GETSIG(buf) == ZIP_CENSIG && readFullyAt(zip->zfd, buf, sizeof(buf), locpos) != -1 &&
+          GETSIG(buf) == ZIP_LOCSIG);
 }
 
 /*
@@ -853,17 +836,15 @@ ZIP_Put_In_Cache(const char *name, ZFILE zfd, char **pmsg, jlong lastModified)
     return ZIP_Put_In_Cache0(name, zfd, pmsg, lastModified, JNI_TRUE);
 }
 
-jzfile *
-ZIP_Put_In_Cache0(const char *name, ZFILE zfd, char **pmsg, jlong lastModified,
-                 jboolean usemmap)
-{
-    char errbuf[256];
-    jlong len;
-    jzfile *zip;
+jzfile *ZIP_Put_In_Cache0(const char *name, ZFILE zfd, char **pmsg, jlong lastModified,
+                          bool usemmap) {
+  char errbuf[256];
+  jlong len;
+  jzfile *zip;
 
-    if ((zip = allocZip(name)) == NULL) {
-        return NULL;
-    }
+  if ((zip = allocZip(name)) == NULL) {
+    return NULL;
+  }
 
 #ifdef USE_MMAP
     zip->usemmap = usemmap;
@@ -878,14 +859,17 @@ ZIP_Put_In_Cache0(const char *name, ZFILE zfd, char **pmsg, jlong lastModified,
         return NULL;
     }
 
-    // Assumption, zfd refers to start of file. Trivially, reuse errbuf.
-    if (readFully(zfd, errbuf, 4) != -1) {  // errors will be handled later
+    // Trivially, reuse errbuf.
+    if (readFullyAt(zfd, errbuf, 4, 0 /* offset */) != -1) {  // errors will be handled later
         if (GETSIG(errbuf) == ZIP_LOCSIG)
             zip->locsig = JNI_TRUE;
         else
             zip->locsig = JNI_FALSE;
     }
 
+    // This lseek is safe because it happens during construction of the ZipFile
+    // object. We must take care not to perform any operations that change the
+    // offset after (see b/30407219).
     len = zip->len = IO_Lseek(zfd, 0, SEEK_END);
     if (len <= 0) {
         if (len == 0) { /* zip file is empty */
@@ -985,7 +969,7 @@ readCENHeader(jzfile *zip, jlong cenpos, jint bufsize)
     censize = CENSIZE(cen);
     if (censize <= bufsize) return cen;
     if ((cen = realloc(cen, censize)) == NULL)              goto Catch;
-    if (readFully(zfd, cen+bufsize, censize-bufsize) == -1) goto Catch;
+    if (readFullyAt(zfd, cen+bufsize, censize-bufsize, cenpos+bufsize) == -1) goto Catch;
     return cen;
 
  Catch:
@@ -1380,64 +1364,62 @@ ZIP_Read(jzfile *zip, jzentry *entry, jlong pos, void *buf, jint len)
  * The current implementation does not support reading an entry that
  * has the size bigger than 2**32 bytes in ONE invocation.
  */
-jboolean
-InflateFully(jzfile *zip, jzentry *entry, void *buf, char **msg)
-{
-    z_stream strm;
-    char tmp[BUF_SIZE];
-    jlong pos = 0;
-    jlong count = entry->csize;
+bool InflateFully(jzfile *zip, jzentry *entry, void *buf, char **msg) {
+  z_stream strm;
+  char tmp[BUF_SIZE];
+  jlong pos = 0;
+  jlong count = entry->csize;
 
-    *msg = 0; /* Reset error message */
+  *msg = 0; /* Reset error message */
 
-    if (count == 0) {
-        *msg = "inflateFully: entry not compressed";
-        return JNI_FALSE;
+  if (count == 0) {
+    *msg = "inflateFully: entry not compressed";
+    return JNI_FALSE;
+  }
+
+  memset(&strm, 0, sizeof(z_stream));
+  if (inflateInit2(&strm, -MAX_WBITS) != Z_OK) {
+    *msg = strm.msg;
+    return JNI_FALSE;
+  }
+
+  strm.next_out = buf;
+  strm.avail_out = (uInt)entry->size;
+
+  while (count > 0) {
+    jint n = count > (jlong)sizeof(tmp) ? (jint)sizeof(tmp) : (jint)count;
+    ZIP_Lock(zip);
+    n = ZIP_Read(zip, entry, pos, tmp, n);
+    ZIP_Unlock(zip);
+    if (n <= 0) {
+      if (n == 0) {
+        *msg = "inflateFully: Unexpected end of file";
+      }
+      inflateEnd(&strm);
+      return JNI_FALSE;
     }
-
-    memset(&strm, 0, sizeof(z_stream));
-    if (inflateInit2(&strm, -MAX_WBITS) != Z_OK) {
-        *msg = strm.msg;
-        return JNI_FALSE;
-    }
-
-    strm.next_out = buf;
-    strm.avail_out = (uInt)entry->size;
-
-    while (count > 0) {
-        jint n = count > (jlong)sizeof(tmp) ? (jint)sizeof(tmp) : (jint)count;
-        ZIP_Lock(zip);
-        n = ZIP_Read(zip, entry, pos, tmp, n);
-        ZIP_Unlock(zip);
-        if (n <= 0) {
-            if (n == 0) {
-                *msg = "inflateFully: Unexpected end of file";
-            }
+    pos += n;
+    count -= n;
+    strm.next_in = (Bytef *)tmp;
+    strm.avail_in = n;
+    do {
+      switch (inflate(&strm, Z_PARTIAL_FLUSH)) {
+        case Z_OK:
+          break;
+        case Z_STREAM_END:
+          if (count != 0 || entry->size < 0 || strm.total_out != (uint64_t)entry->size) {
+            *msg = "inflateFully: Unexpected end of stream";
             inflateEnd(&strm);
             return JNI_FALSE;
-        }
-        pos += n;
-        count -= n;
-        strm.next_in = (Bytef *)tmp;
-        strm.avail_in = n;
-        do {
-            switch (inflate(&strm, Z_PARTIAL_FLUSH)) {
-            case Z_OK:
-                break;
-            case Z_STREAM_END:
-                if (count != 0 || entry->size < 0 || strm.total_out != (uint64_t)entry->size) {
-                    *msg = "inflateFully: Unexpected end of stream";
-                    inflateEnd(&strm);
-                    return JNI_FALSE;
-                }
-                break;
-            default:
-                break;
-            }
-        } while (strm.avail_in > 0);
-    }
-    inflateEnd(&strm);
-    return JNI_TRUE;
+          }
+          break;
+        default:
+          break;
+      }
+    } while (strm.avail_in > 0);
+  }
+  inflateEnd(&strm);
+  return JNI_TRUE;
 }
 
 /*
@@ -1461,49 +1443,45 @@ ZIP_FindEntry(jzfile *zip, char *name, jint *sizeP, jint *nameLenP)
  * Note: this is called from the separately delivered VM (hotspot/classic)
  * so we have to be careful to maintain the expected behaviour.
  */
-jboolean JNICALL
-ZIP_ReadEntry(jzfile *zip, jzentry *entry, unsigned char *buf, char *entryname)
-{
-    char *msg;
+bool JNICALL ZIP_ReadEntry(jzfile *zip, jzentry *entry, unsigned char *buf, char *entryname) {
+  char *msg;
 
-    strcpy(entryname, entry->name);
-    if (entry->csize == 0) {
-        /* Entry is stored */
-        jlong pos = 0;
-        jlong size = entry->size;
-        while (pos < size) {
-            jint n;
-            jlong limit = ((((jlong) 1) << 31) - 1);
-            jint count = (size - pos < limit) ?
-                /* These casts suppress a VC++ Internal Compiler Error */
-                (jint) (size - pos) :
-                (jint) limit;
-            ZIP_Lock(zip);
-            n = ZIP_Read(zip, entry, pos, buf, count);
-            msg = zip->msg;
-            ZIP_Unlock(zip);
-            if (n == -1) {
-                jio_fprintf(stderr, "%s: %s\n", zip->name,
-                            msg != 0 ? msg : strerror(errno));
-                return JNI_FALSE;
-            }
-            buf += n;
-            pos += n;
-        }
-    } else {
-        /* Entry is compressed */
-        int ok = InflateFully(zip, entry, buf, &msg);
-        if (!ok) {
-            if ((msg == NULL) || (*msg == 0)) {
-                msg = zip->msg;
-            }
-            jio_fprintf(stderr, "%s: %s\n", zip->name,
-                        msg != 0 ? msg : strerror(errno));
-            return JNI_FALSE;
-        }
+  strcpy(entryname, entry->name);
+  if (entry->csize == 0) {
+    /* Entry is stored */
+    jlong pos = 0;
+    jlong size = entry->size;
+    while (pos < size) {
+      jint n;
+      jlong limit = ((((jlong)1) << 31) - 1);
+      jint count = (size - pos < limit) ?
+                                        /* These casts suppress a VC++ Internal Compiler Error */
+                       (jint)(size - pos)
+                                        : (jint)limit;
+      ZIP_Lock(zip);
+      n = ZIP_Read(zip, entry, pos, buf, count);
+      msg = zip->msg;
+      ZIP_Unlock(zip);
+      if (n == -1) {
+        jio_fprintf(stderr, "%s: %s\n", zip->name, msg != 0 ? msg : strerror(errno));
+        return JNI_FALSE;
+      }
+      buf += n;
+      pos += n;
     }
+  } else {
+    /* Entry is compressed */
+    int ok = InflateFully(zip, entry, buf, &msg);
+    if (!ok) {
+      if ((msg == NULL) || (*msg == 0)) {
+        msg = zip->msg;
+      }
+      jio_fprintf(stderr, "%s: %s\n", zip->name, msg != 0 ? msg : strerror(errno));
+      return JNI_FALSE;
+    }
+  }
 
-    ZIP_FreeEntry(zip, entry);
+  ZIP_FreeEntry(zip, entry);
 
-    return JNI_TRUE;
+  return JNI_TRUE;
 }

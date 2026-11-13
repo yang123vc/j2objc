@@ -29,9 +29,9 @@ public class DefaultMethodsTest extends GenerationTest {
     String header = translateSourceFile(source, "Test", "Test.h");
     String impl =  getTranslatedFile("Test.m");
 
-    assertTranslation(header, "- (void)f;");
-    assertTranslation(header, "- (void)g;");
-    assertTranslation(header, "void Foo_g(id<Foo> self);");
+    assertInTranslation(header, "- (void)f;");
+    assertInTranslation(header, "- (void)g;");
+    assertInTranslation(header, "void Foo_g(id<Foo> self);");
     assertTranslatedLines(impl,
         "void Foo_g(id<Foo> self) {", "Foo_initialize();", "[self f];", "}");
   }
@@ -43,9 +43,9 @@ public class DefaultMethodsTest extends GenerationTest {
     String header = translateSourceFile(source, "Test", "Test.h");
     String impl =  getTranslatedFile("Test.m");
 
-    assertTranslation(header, "- (void)f;");
-    assertTranslation(header, "- (void)g;");
-    assertTranslation(header, "void Foo_g(id<Foo> self);");
+    assertInTranslation(header, "- (void)f;");
+    assertInTranslation(header, "- (void)g;");
+    assertInTranslation(header, "void Foo_g(id<Foo> self);");
     assertTranslatedLines(impl,
         "void Foo_g(id<Foo> self) {", "Foo_initialize();", "[self f];", "}");
   }
@@ -58,8 +58,28 @@ public class DefaultMethodsTest extends GenerationTest {
         + "  public int f(int y) { return Foo.super.f(y) + 1; }"
         + "}", "Test", "Test.m");
 
-    assertTranslation(translation, "jint i = Foo_fWithInt_(self, x);");
-    assertTranslation(translation, "return Foo_fWithInt_(self, y) + 1;");
+    assertInTranslation(translation, "int32_t i = Foo_fWithInt_(self, x);");
+    assertInTranslation(translation, "return JreIntPlus(Foo_fWithInt_(self, y), 1);");
+  }
+
+  public void testSuperMethodReferenceToDefaultMethod() throws IOException {
+    String translation = translateSourceFile(
+        "import java.util.function.BooleanSupplier; "
+            + "interface I { "
+            + "  default boolean foo() { "
+            + "    return true; "
+            + "  } "
+            + "} "
+            + "public class Test implements I { "
+            + "  BooleanSupplier f() { "
+            + "    return I.super::foo; "
+            + "  } "
+            + "}", "Test", "Test.m");
+
+    assertTranslatedLines(translation,
+        "- (id<JavaUtilFunctionBooleanSupplier>)f {",
+        "  return create_Test_$Lambda$1_initWithTest_(self);",
+        "}");
   }
 
   public void testBasicDefaultMethodUsage() throws IOException {
@@ -79,18 +99,18 @@ public class DefaultMethodsTest extends GenerationTest {
     String header = translateSourceFile(source, "Test", "Test.h");
     String impl = getTranslatedFile("Test.m");
 
-    assertTranslation(header, "void A_f(id<A> self)");
-    assertTranslation(header, "jint A_g(id<A> self)");
-    assertTranslation(header, "void A_q(void)");
-    assertTranslation(header, "id A_rWithInt_withA_(id<A> self, jint x, id<A> b)");
+    assertInTranslation(header, "void A_f(id<A> self)");
+    assertInTranslation(header, "int32_t A_g(id<A> self)");
+    assertInTranslation(header, "void A_q(void)");
+    assertInTranslation(header, "id A_rWithInt_withA_(id<A> self, int32_t x, id<A> b)");
 
     // This is an illegal value for JVM's access_flags field and should never show up in metadata.
     assertNotInTranslation(impl, "0x10001");
 
     assertTranslatedLines(impl, "- (void)f {", "A_f(self);", "}");
-    assertTranslatedLines(impl, "- (jint)g {", "return A_g(self);", "}");
+    assertTranslatedLines(impl, "- (int32_t)g {", "return A_g(self);", "}");
     assertTranslatedLines(impl, "- (void)p {", "}");
-    assertTranslatedLines(impl, "- (id)rWithInt:(jint)arg0", "withA:(id<A>)arg1 {",
+    assertTranslatedLines(impl, "- (id)rWithInt:(int32_t)arg0", "withA:(id<A>)arg1 {",
         "return A_rWithInt_withA_(self, arg0, arg1);", "}");
   }
 
@@ -118,8 +138,8 @@ public class DefaultMethodsTest extends GenerationTest {
     String header = translateSourceFile(source, "Test", "Test.h");
     String impl = getTranslatedFile("Test.m");
 
-    assertTranslation(header,
-        "NSString *A_underscorePrefixWithNSString_(id<A> self, NSString *a)");
+    assertInTranslation(
+        header, "NSString *A_underscorePrefixWithNSString_(id<A> self, NSString *a)");
     assertTranslatedLines(impl,
         "NSString *A_underscorePrefixWithNSString_(id<A> self, NSString *a) {",
         "  A_initialize();",
@@ -128,12 +148,13 @@ public class DefaultMethodsTest extends GenerationTest {
 
     // Make sure we base the non-capturing lambda on interface A's companion class that has the
     // default method shim.
-    assertTranslatedLines(impl,
+    assertTranslatedLines(
+        impl,
         "- (NSString *)underscorePrefixWithNSString:(NSString *)arg0 {",
         "  return A_underscorePrefixWithNSString_(self, arg0);",
         "}",
         "",
-        "- (jboolean)unrelated {",
+        "- (bool)unrelated {",
         "  return Unrelated_unrelated(self);",
         "}");
   }
@@ -154,7 +175,7 @@ public class DefaultMethodsTest extends GenerationTest {
         + "interface B extends A { void f(); }";
     String impl = translateSourceFile(source, "Test", "Test.m");
 
-    assertTranslation(impl, "void A_f(id<A> self)");
+    assertInTranslation(impl, "void A_f(id<A> self)");
     assertNotInTranslation(impl, "void B_f(id<A> self)");
   }
 
@@ -164,9 +185,9 @@ public class DefaultMethodsTest extends GenerationTest {
         + "abstract class C implements B {}";
     String impl = translateSourceFile(source, "Test", "Test.m");
 
-    assertTranslation(impl, "void A_f(id<A> self)");
-    assertTranslation(impl, "void A_g(id<A> self)");
-    assertTranslation(impl, "void B_f(id<B> self)");
+    assertInTranslation(impl, "void A_f(id<A> self)");
+    assertInTranslation(impl, "void A_g(id<A> self)");
+    assertInTranslation(impl, "void B_f(id<B> self)");
     assertNotInTranslation(impl, "void B_g(id<A> self)");
     assertTranslatedLines(impl, "- (void)f {", "B_f(self);", "}");
     assertNotInTranslation(impl, "A_g(self);");
@@ -208,8 +229,8 @@ public class DefaultMethodsTest extends GenerationTest {
         + "  }"
         + "}";
     String impl = translateSourceFile(source, "Test", "Test.m");
-    assertTranslation(impl, "- (NSString *)fWithNSString:(NSString *)arg0 {");
-    assertTranslation(impl, "return A_fWithNSString_(self, arg0);");
+    assertInTranslation(impl, "- (NSString *)fWithNSString:(NSString *)arg0 {");
+    assertInTranslation(impl, "return A_fWithNSString_(self, arg0);");
   }
 
   public void testNestedAndInnerClasses() throws Exception {
@@ -222,7 +243,7 @@ public class DefaultMethodsTest extends GenerationTest {
         + "}";
     String header = translateSourceFile(source, "Test", "Test.h");
     String impl = getTranslatedFile("Test.m");
-    assertTranslation(header, "void A_P_f(id<A_P> self);");
+    assertInTranslation(header, "void A_P_f(id<A_P> self);");
 
     // This is called by the shims -[A_B f], -[A_B_C f], and -[A_D f].
     assertOccurrences(impl, "A_P_f(self);", 3);
@@ -236,11 +257,11 @@ public class DefaultMethodsTest extends GenerationTest {
     String header = translateSourceFile(source, "Test", "Test.h");
     String impl = getTranslatedFile("Test.m");
 
-    assertTranslation(header, "P_get_f_(void)");
-    assertTranslation(header, "P_f_");
-    assertTranslation(header, "void P_f(id<P> self)");
-    assertTranslation(impl, "id P_f_;");
-    assertTranslation(impl, "void P_f(id<P> self)");
+    assertInTranslation(header, "P_get_f_(void)");
+    assertInTranslation(header, "P_f_");
+    assertInTranslation(header, "void P_f(id<P> self)");
+    assertInTranslation(impl, "id P_f_;");
+    assertInTranslation(impl, "void P_f(id<P> self)");
   }
 
   public void testNoReconsideringSuperclasses() throws Exception {
@@ -286,12 +307,12 @@ public class DefaultMethodsTest extends GenerationTest {
         + "abstract class R implements A<Long> { public abstract Long f(); }";
     String header = translateSourceFile(source, "Test", "Test.h");
     String impl = getTranslatedFile("Test.m");
-    assertTranslation(header, "- (id)f");
-    assertTranslation(header, "id A_f(id<A> self)");
-    assertTranslation(header, "- (JavaLangInteger *)f;"); // From Q
+    assertInTranslation(header, "- (id)f");
+    assertInTranslation(header, "id A_f(id<A> self)");
+    assertInTranslation(header, "- (JavaLangInteger *)f;"); // From Q
 
     // From R; abstract method is still declared and will be implemented with throwing an exception.
-    assertTranslation(header, "- (JavaLangLong *)f;");
+    assertInTranslation(header, "- (JavaLangLong *)f;");
 
     // From A<T>
     assertTranslatedLines(impl, "id A_f(id<A> self) {", "A_initialize();", "return nil;", "}");
@@ -322,7 +343,7 @@ public class DefaultMethodsTest extends GenerationTest {
     String header = translateSourceFile(source, "Test", "Test.h");
     String impl = getTranslatedFile("Test.m");
 
-    assertTranslation(header, "void B_fWithA_(id<B> self, id<A> x);");
+    assertInTranslation(header, "void B_fWithA_(id<B> self, id<A> x);");
     assertOccurrences(header, "- (void)fWithA:(id<A>)x;", 2); // From B and Q
     // From P
     assertTranslatedLines(impl, "- (void)fWithA:(id<A>)arg0 {", "B_fWithA_(self, arg0);", "}");
@@ -336,7 +357,7 @@ public class DefaultMethodsTest extends GenerationTest {
 
     // No shim should be generated as -[B f].
     assertOccurrences(header, "- (id)f", 1);
-    assertTranslation(header, "- (NSString *)f");
+    assertInTranslation(header, "- (NSString *)f");
 
     // From the default method of A.
     assertTranslatedLines(impl, "id A_f(id<A> self) {", "A_initialize();", "return nil;", "}");
@@ -359,7 +380,7 @@ public class DefaultMethodsTest extends GenerationTest {
     addSourceFile("class D implements C {}", "D.java");
     String headerC = translateSourceFile("C", "C.h");
     String implD = translateSourceFile("D", "D.m");
-    assertTranslation(headerC, "- (void)fooWithId:(NSString *)s;");
+    assertInTranslation(headerC, "- (void)fooWithId:(NSString *)s;");
     assertTranslatedLines(implD,
         "- (void)fooWithId:(NSString *)arg0 {", "C_fooWithNSString_(self, arg0);", "}");
     assertTranslatedLines(implD,
@@ -381,7 +402,7 @@ public class DefaultMethodsTest extends GenerationTest {
         + "interface OfInt extends OfPrimitive<Integer, OfInt> {}"
         + "static class OfIntImpl implements OfInt {}}", "Node", "Node.m");
     assertTranslatedLines(translation,
-        "return ((id<Node_OfInt>) Node_OfPrimitive_getChildWithInt_(self, arg0));");
+        "return (id<Node_OfInt>) Node_OfPrimitive_getChildWithInt_(self, arg0);");
   }
 
   // Regression test simplified from java.util.stream.ReduceOps, where @interface for
@@ -390,7 +411,7 @@ public class DefaultMethodsTest extends GenerationTest {
     addSourceFile("interface Sink<T> { default void test(long size) {}}", "Sink.java");
     String translation = translateSourceFile("class Test {"
         + "private interface AccumulatingSink<T> extends Sink<T> {}}", "Test", "Test.m");
-    assertTranslatedLines(translation, "@interface Test_AccumulatingSink : NSObject");
+    assertTranslatedLines(translation, "@interface Test_AccumulatingSinkCompanion : NSObject");
   }
 
   public void testExtraSelectorsFromMultipleOverrides() throws IOException {
@@ -399,15 +420,15 @@ public class DefaultMethodsTest extends GenerationTest {
     String translation = translateSourceFile(
         "class B extends A<String> implements I { public int foo(String t) { return 7; } }",
         "B", "B.h");
-    assertTranslation(translation, "- (jint)fooWithId:(NSString *)t;");
+    assertInTranslation(translation, "- (int32_t)fooWithId:(NSString *)t;");
 
     translation = getTranslatedFile("B.m");
     assertTranslatedLines(translation,
-        "- (jint)fooWithId:(NSString *)t {",
+        "- (int32_t)fooWithId:(NSString *)t {",
         "  return 7;",
         "}");
     assertTranslatedLines(translation,
-        "- (jint)fooWithNSString:(NSString *)arg0 {",
+        "- (int32_t)fooWithNSString:(NSString *)arg0 {",
         "  return [self fooWithId:arg0];",
         "}");
   }
@@ -425,25 +446,24 @@ public class DefaultMethodsTest extends GenerationTest {
   }
 
   public void testPrivateInterfaceMethod() throws IOException {
-    if (!onJava9OrAbove()) {
-      return;
-    }
-    String translation = translateSourceFile(
-        "public interface Test { "
-            + "  String name(); "
-            + "  default boolean isPalindrome() { "
-            + "    return name().equals(reverse(name())); "
-            + "  } "
-            + "  default boolean isPalindromeIgnoreCase() { "
-            + "    return name().equalsIgnoreCase(reverse(name())); "
-            + "  } "
-            + "  private String reverse(String s) { "
-            + "    return new StringBuilder(s).reverse().toString(); "
-            + " } "
-            + "}",
-        "Test", "Test.m");
-    assertTranslation(translation,
-        "NSString *Test_reverseWithNSString_(id<Test> self, NSString *s) {");
+    String translation =
+        translateSourceFile(
+            "public interface Test { "
+                + "  String name(); "
+                + "  default boolean isPalindrome() { "
+                + "    return name().equals(reverse(name())); "
+                + "  } "
+                + "  default boolean isPalindromeIgnoreCase() { "
+                + "    return name().equalsIgnoreCase(reverse(name())); "
+                + "  } "
+                + "  private String reverse(String s) { "
+                + "    return new StringBuilder(s).reverse().toString(); "
+                + " } "
+                + "}",
+            "Test",
+            "Test.m");
+    assertInTranslation(
+        translation, "NSString *Test_reverseWithNSString_(id<Test> self, NSString *s) {");
     assertOccurrences(translation, "Test_reverseWithNSString_(self, [self name])", 2);
     assertNotInTranslation(translation, "- (NSString *)reverseWithNSString:(NSString *)s {");
   }

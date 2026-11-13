@@ -36,6 +36,14 @@
 
 #include "java/io/FileNotFoundException.h"
 
+// BEGIN Android-added: Fuchsia: Alias *64 functions on Fuchsia. http://b/119496969
+#if defined(_ALLBSD_SOURCE) || defined(__Fuchsia__)
+#define stat64 stat
+#define fstat64 fstat
+#define open64 open
+#endif
+// END Android-added: Fuchsia: Alias *64 functions on Fuchsia. http://b/119496969
+
 /* IO helper functions */
 
 // J2ObjC: unused.
@@ -134,7 +142,7 @@ outOfBounds(JNIEnv *env, jint off, jint len, jbyteArray array) {
 
 /* J2ObjC: unused.
 void
-writeSingle(JNIEnv *env, jobject this, jint byte, jboolean append, jfieldID fid) {
+writeSingle(JNIEnv *env, jobject this, jint byte, bool append, jfieldID fid) {
     // Discard the 24 high-order bits of byte. See OutputStream#write(int)
     char c = (char) byte;
     jint n;
@@ -158,7 +166,7 @@ writeSingle(JNIEnv *env, jobject this, jint byte, jboolean append, jfieldID fid)
 /* J2ObjC: unused.
 void
 writeBytes(JNIEnv *env, jobject this, jbyteArray bytes,
-           jint off, jint len, jboolean append, jfieldID fid)
+           jint off, jint len, bool append, jfieldID fid)
 {
     jint n;
     char stackBuf[BUF_SIZE];
@@ -240,3 +248,28 @@ throwFileNotFoundException(JNIEnv *env, jstring path)
     }*/
     @throw create_JavaIoFileNotFoundException_initWithNSString_withNSString_(path, why);
 }
+
+// From android/platform/libcore/ojluni/src/main/native/io_util_md.c
+
+FD
+handleOpen(const char *path, int oflag, int mode) {
+    FD fd;
+    RESTARTABLE(open64(path, oflag, mode), fd);
+    if (fd != -1) {
+        struct stat64 buf64;
+        int result;
+        RESTARTABLE(fstat64(fd, &buf64), result);
+        if (result != -1) {
+            if (S_ISDIR(buf64.st_mode)) {
+                close(fd);
+                errno = EISDIR;
+                fd = -1;
+            }
+        } else {
+            close(fd);
+            fd = -1;
+        }
+    }
+    return fd;
+}
+

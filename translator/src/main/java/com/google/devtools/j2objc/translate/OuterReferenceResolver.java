@@ -30,6 +30,7 @@ import com.google.devtools.j2objc.ast.MethodDeclaration;
 import com.google.devtools.j2objc.ast.MethodInvocation;
 import com.google.devtools.j2objc.ast.Name;
 import com.google.devtools.j2objc.ast.QualifiedName;
+import com.google.devtools.j2objc.ast.RecordDeclaration;
 import com.google.devtools.j2objc.ast.SimpleName;
 import com.google.devtools.j2objc.ast.SingleVariableDeclaration;
 import com.google.devtools.j2objc.ast.SuperConstructorInvocation;
@@ -69,6 +70,7 @@ import javax.lang.model.type.TypeMirror;
  *
  * @author Keith Stanger
  */
+@SuppressWarnings("UngroupedOverloads")
 public class OuterReferenceResolver extends UnitTreeVisitor {
 
   private final CaptureInfo captureInfo;
@@ -115,14 +117,6 @@ public class OuterReferenceResolver extends UnitTreeVisitor {
           inheritedScopeBuilder.add(inheritedType.asElement());
           return true;
         });
-      }
-
-      // If type is an interface, type.getSuperClass() returns null even though all interfaces
-      // "inherit" from Object. Therefore we add this manually to make the set complete. This is
-      // needed because Java 8 default methods can call methods in Object.
-      // TODO(tball): remove when javac update is complete.
-      if (ElementUtil.isInterface(type)) {
-        inheritedScopeBuilder.add(typeUtil.getJavaObject());
       }
 
       this.inheritedScope = inheritedScopeBuilder.build();
@@ -342,6 +336,17 @@ public class OuterReferenceResolver extends UnitTreeVisitor {
     popType();
   }
 
+  @Override
+  public boolean visit(RecordDeclaration node) {
+    pushType(node.getTypeElement());
+    return true;
+  }
+
+  @Override
+  public void endVisit(RecordDeclaration node) {
+    popType();
+  }
+
   private void endVisitFunctionalExpression(FunctionalExpression node) {
     // Resolve outer and capture arguments.
     TypeElement typeElement = node.getTypeElement();
@@ -441,7 +446,15 @@ public class OuterReferenceResolver extends UnitTreeVisitor {
     }
   }
 
-  private Name getSuperInvocationPath(Name qualifier) {
+  private Name getSuperPath(Name qualifier, ExecutableElement executableElement) {
+    if (ElementUtil.isDefault(executableElement)) {
+      // Default methods can be invoked with super. In this
+      // case the qualifier is not an enclosing class, but the interface that
+      // implements the default method. Since the default method is an instance
+      // method it captures self.
+      qualifier = null;
+    }
+
     if (qualifier != null) {
       return getOuterPath((TypeElement) qualifier.getElement());
     } else {
@@ -455,18 +468,7 @@ public class OuterReferenceResolver extends UnitTreeVisitor {
 
   @Override
   public void endVisit(SuperMethodInvocation node) {
-    if (ElementUtil.isDefault(node.getExecutableElement())) {
-      // Default methods can be invoked with a SuperMethodInvocation. In this
-      // case the qualifier is not an enclosing class, but the interface that
-      // implements the default method. Since the default method is an instance
-      // method it captures self.
-      Scope currentScope = peekScope();
-      if (ElementUtil.isLambda(currentScope.type)) {
-        node.setReceiver(getOuterPath(ElementUtil.getDeclaringClass(currentScope.type)));
-      }
-    } else {
-      node.setReceiver(getSuperInvocationPath(node.getQualifier()));
-    }
+    node.setReceiver(getSuperPath(node.getQualifier(), node.getExecutableElement()));
     node.setQualifier(null);
   }
 
@@ -474,7 +476,8 @@ public class OuterReferenceResolver extends UnitTreeVisitor {
   public void endVisit(SuperMethodReference node) {
     TypeElement lambdaType = node.getTypeElement();
     pushType(lambdaType);
-    node.setReceiver(getSuperInvocationPath(TreeUtil.remove(node.getQualifier())));
+    Name qualifier = TreeUtil.remove(node.getQualifier());
+    node.setReceiver(getSuperPath(qualifier, node.getExecutableElement()));
     popType();
     endVisitFunctionalExpression(node);
   }

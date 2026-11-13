@@ -14,6 +14,7 @@
 
 package com.google.devtools.j2objc.ast;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -24,6 +25,7 @@ public class InstanceofExpression extends Expression {
   private TypeMirror typeMirror;
   private ChildLink<Expression> leftOperand = ChildLink.create(Expression.class, this);
   private ChildLink<Type> rightOperand = ChildLink.create(Type.class, this);
+  private ChildLink<Pattern> pattern = ChildLink.create(Pattern.class, this);
 
   public InstanceofExpression() {}
 
@@ -32,6 +34,7 @@ public class InstanceofExpression extends Expression {
     typeMirror = other.getTypeMirror();
     leftOperand.copyFrom(other.getLeftOperand());
     rightOperand.copyFrom(other.getRightOperand());
+    pattern.copyFrom(other.getPattern());
   }
 
   @Override
@@ -44,6 +47,7 @@ public class InstanceofExpression extends Expression {
     return typeMirror;
   }
 
+  @CanIgnoreReturnValue
   public InstanceofExpression setTypeMirror(TypeMirror type) {
     typeMirror = type;
     return this;
@@ -53,6 +57,7 @@ public class InstanceofExpression extends Expression {
     return leftOperand.get();
   }
 
+  @CanIgnoreReturnValue
   public InstanceofExpression setLeftOperand(Expression operand) {
     leftOperand.set(operand);
     return this;
@@ -62,8 +67,19 @@ public class InstanceofExpression extends Expression {
     return rightOperand.get();
   }
 
+  @CanIgnoreReturnValue
   public InstanceofExpression setRightOperand(Type operand) {
     rightOperand.set(operand);
+    return this;
+  }
+
+  public Pattern getPattern() {
+    return pattern.get(); // null if no pattern in expression.
+  }
+
+  @CanIgnoreReturnValue
+  public InstanceofExpression setPattern(Pattern bindingPattern) {
+    pattern.set(bindingPattern);
     return this;
   }
 
@@ -72,6 +88,7 @@ public class InstanceofExpression extends Expression {
     if (visitor.visit(this)) {
       leftOperand.accept(visitor);
       rightOperand.accept(visitor);
+      pattern.accept(visitor);
     }
     visitor.endVisit(this);
   }

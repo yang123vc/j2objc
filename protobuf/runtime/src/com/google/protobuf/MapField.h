@@ -80,18 +80,18 @@ typedef struct CGPMapField {
 
 CF_EXTERN_C_BEGIN
 
-CGP_ALWAYS_INLINE inline uint32_t CGPMapFieldIsEmpty(CGPMapField *field) {
+CGP_ALWAYS_INLINE uint32_t CGPMapFieldIsEmpty(CGPMapField *field) {
   return field->data == NULL || field->data->numEntries == 0;
 }
 
-CGP_ALWAYS_INLINE inline uint32_t CGPMapFieldListSize(CGPMapField *field) {
+CGP_ALWAYS_INLINE uint32_t CGPMapFieldListSize(CGPMapField *field) {
   return field->data != NULL ? field->data->numEntries : 0;
 }
 
 void CGPMapFieldEnsureValidMap(
     CGPMapFieldData *data, CGPFieldJavaType keyType, CGPFieldJavaType valueType);
 
-CGP_ALWAYS_INLINE inline uint32_t CGPMapFieldMapSize(
+CGP_ALWAYS_INLINE uint32_t CGPMapFieldMapSize(
     CGPMapField *field, CGPFieldJavaType keyType, CGPFieldJavaType valueType) {
   CGPMapFieldData *data = field->data;
   if (data == NULL) {
@@ -106,10 +106,10 @@ CGP_ALWAYS_INLINE inline uint32_t CGPMapFieldMapSize(
 CGPMapFieldEntry *CGPMapFieldGetWithKey(
     CGPMapField *field, CGPValue key, CGPFieldJavaType keyType, CGPFieldJavaType valueType);
 
-// The caller will indicate whether the key and value are already retained.
+// The key and value are assumed to not be retained.
 void CGPMapFieldPut(
     CGPMapField *field, CGPValue key, CGPFieldJavaType keyType, CGPValue value,
-    CGPFieldJavaType valueType, bool retainedKeyAndValue);
+    CGPFieldJavaType valueType);
 
 void CGPMapFieldRemove(
     CGPMapField *field, CGPValue key, CGPFieldJavaType keyType, CGPFieldJavaType valueType);
@@ -119,7 +119,7 @@ void CGPMapFieldCopyData(CGPMapField *field, CGPFieldJavaType keyType, CGPFieldJ
 void CGPMapFieldAppendOther(
     CGPMapField *field, CGPMapField *other, CGPFieldJavaType keyType, CGPFieldJavaType valueType);
 
-void CGPMapFieldClear(CGPMapField *field, CGPFieldJavaType keyType, CGPFieldJavaType valueType);
+void CGPMapFieldClear(CGPMapField *field, CGPFieldJavaType keyType, CGPFieldJavaType valueType, BOOL releaseData);
 
 bool CGPMapFieldIsEqual(
     CGPMapField *fieldA, CGPMapField *fieldB, CGPFieldJavaType keyType, CGPFieldJavaType valueType);
@@ -140,6 +140,9 @@ void CGPMapFieldAssignFromList(
 
 id<JavaUtilMap> CGPMapFieldAsJavaMap(
     CGPMapField *field, CGPFieldJavaType keyType, CGPFieldJavaType valueType);
+
+NSDictionary *CGPMapFieldAsDict(CGPMapField *field, CGPFieldJavaType keyType,
+                                CGPFieldJavaType valueType);
 
 CF_EXTERN_C_END
 

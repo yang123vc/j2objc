@@ -31,7 +31,6 @@ import com.google.devtools.j2objc.ast.InfixExpression.Operator;
 import com.google.devtools.j2objc.ast.InstanceofExpression;
 import com.google.devtools.j2objc.ast.MethodDeclaration;
 import com.google.devtools.j2objc.ast.MethodInvocation;
-import com.google.devtools.j2objc.ast.ParenthesizedExpression;
 import com.google.devtools.j2objc.ast.ReturnStatement;
 import com.google.devtools.j2objc.ast.SimpleName;
 import com.google.devtools.j2objc.ast.SuperConstructorInvocation;
@@ -91,9 +90,13 @@ public class CastResolver extends UnitTreeVisitor {
           node.replaceWith(rewriteFloatToIntegralCast(type, expr, "JreFpToChar", type));
           return;
         case BYTE:
+          node.replaceWith(rewriteFloatToIntegralCast(type, expr, "JreFpToByte", type));
+          return;
         case SHORT:
+          node.replaceWith(rewriteFloatToIntegralCast(type, expr, "JreFpToShort", type));
+          return;
         case INT:
-          node.replaceWith(rewriteFloatToIntegralCast(type, expr, "JreFpToInt", typeUtil.getInt()));
+          node.replaceWith(rewriteFloatToIntegralCast(type, expr, "JreFpToInt", type));
           return;
         default:  // Fall through.
       }
@@ -101,13 +104,17 @@ public class CastResolver extends UnitTreeVisitor {
 
     // Lean on Java's type-checking.
     if (!type.getKind().isPrimitive() && typeUtil.isAssignable(exprType, typeUtil.erasure(type))) {
-      node.replaceWith(TreeUtil.remove(expr));
+      if (!options.asObjCGenericDecl()) { // Keep casts for generic array returns.
+        node.replaceWith(TreeUtil.remove(expr));
+      }
       return;
     }
 
-    FunctionInvocation castCheck = createCastCheck(type, expr);
-    if (castCheck != null) {
-      node.setExpression(castCheck);
+    if (node.needsCastChk()) {
+      FunctionInvocation castCheck = createCastCheck(type, expr);
+      if (castCheck != null) {
+        node.setExpression(castCheck);
+      }
     }
   }
 
@@ -161,7 +168,7 @@ public class CastResolver extends UnitTreeVisitor {
 
   private void addCast(Expression expr) {
     CastExpression castExpr = new CastExpression(expr.getTypeMirror(), null);
-    expr.replaceWith(ParenthesizedExpression.parenthesize(castExpr));
+    expr.replaceWith(castExpr);
     castExpr.setExpression(expr);
   }
 
@@ -221,8 +228,6 @@ public class CastResolver extends UnitTreeVisitor {
             : ElementUtil.getDeclaringClass(method).asType();
         return getDeclaredReturnType(method, receiverType);
       }
-      case PARENTHESIZED_EXPRESSION:
-        return getDeclaredType(((ParenthesizedExpression) expr).getExpression());
       case SUPER_METHOD_INVOCATION: {
         SuperMethodInvocation invocation = (SuperMethodInvocation) expr;
         return getDeclaredReturnType(
@@ -380,6 +385,7 @@ public class CastResolver extends UnitTreeVisitor {
    * well in sorted collections which rely on Java's runtime type checking.
    */
   @Override
+  @SuppressWarnings("TypeEquals")
   public void endVisit(MethodDeclaration node) {
     ExecutableElement element = node.getExecutableElement();
     if (!ElementUtil.getName(element).equals("compareTo") || node.getBody() == null) {

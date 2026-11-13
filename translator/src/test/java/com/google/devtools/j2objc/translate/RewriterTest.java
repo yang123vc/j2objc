@@ -23,7 +23,6 @@ import com.google.devtools.j2objc.ast.ForStatement;
 import com.google.devtools.j2objc.ast.IfStatement;
 import com.google.devtools.j2objc.ast.LabeledStatement;
 import com.google.devtools.j2objc.ast.Statement;
-
 import java.io.IOException;
 import java.util.List;
 
@@ -42,12 +41,13 @@ public class RewriterTest extends GenerationTest {
         + "int n = i + j; "
         + "if (n == 5) continue outer; "
         + "else break outer; } } } }", "Test", "Test.m");
-    assertTranslatedLines(translation,
-        "jint i = 0;",
-        "for (; i < 10; i++) {",
+    assertTranslatedLines(
+        translation,
+        "int32_t i = 0;",
+        "for (; i < 10; JrePostIncInt(&i)) {",
         "{",
-        "for (jint j = 0; j < 10; j++) {",
-        "jint n = i + j;",
+        "for (int32_t j = 0; j < 10; JrePostIncInt(&j)) {",
+        "int32_t n = JreIntPlus(i, j);",
         "if (n == 5) goto continue_outer;",
         "else goto break_outer;",
         "}",
@@ -132,8 +132,8 @@ public class RewriterTest extends GenerationTest {
         "public class Test { void test() { int[] a = { 1, 2, 3 }; char b[] = { '4', '5' }; } }",
         "Test", "Test.m");
     assertTranslatedLines(translation,
-        "IOSIntArray *a = [IOSIntArray arrayWithInts:(jint[]){ 1, 2, 3 } count:3];",
-        "IOSCharArray *b = [IOSCharArray arrayWithChars:(jchar[]){ '4', '5' } count:2];");
+        "IOSIntArray *a = [IOSIntArray arrayWithInts:(int32_t[]){ 1, 2, 3 } count:3];",
+        "IOSCharArray *b = [IOSCharArray arrayWithChars:(unichar[]){ '4', '5' } count:2];");
   }
 
   /**
@@ -147,31 +147,33 @@ public class RewriterTest extends GenerationTest {
         "+ (void)initialize {",
         "if (self == [Test class]) {",
         "JreStrongAssignAndConsume(&Test_a, "
-            + "[IOSIntArray newArrayWithInts:(jint[]){ 1, 2, 3 } count:3]);",
+            + "[IOSIntArray newArrayWithInts:(int32_t[]){ 1, 2, 3 } count:3]);",
         "JreStrongAssignAndConsume(&Test_b, "
-            + "[IOSCharArray newArrayWithChars:(jchar[]){ '4', '5' } count:2]);");
+            + "[IOSCharArray newArrayWithChars:(unichar[]){ '4', '5' } count:2]);");
   }
 
   public void testNonStaticMultiDimArrayInitializer() throws IOException {
     String translation = translateSourceFile(
         "class Test { int[][] a = { { 1, 2, 3 } }; }", "Test", "Test.m");
-    assertTranslation(translation,
+    assertInTranslation(
+        translation,
         "[IOSObjectArray newArrayWithObjects:(id[]){"
-        + " [IOSIntArray arrayWithInts:(jint[]){ 1, 2, 3 } count:3] } count:1"
-        + " type:IOSClass_intArray(1)]");
+            + " [IOSIntArray arrayWithInts:(int32_t[]){ 1, 2, 3 } count:3] } count:1"
+            + " type:IOSClass_intArray(1)]");
   }
 
   public void testArrayCreationInConstructorInvocation() throws IOException {
     String translation = translateSourceFile(
         "class Test { Test(int[] i) {} Test() { this(new int[] {}); } }", "Test", "Test.m");
-    assertTranslation(translation,
-        "Test_initWithIntArray_(self, [IOSIntArray arrayWithInts:(jint[]){  } count:0]);");
+    assertInTranslation(
+        translation,
+        "Test_initWithIntArray_(self, [IOSIntArray arrayWithInts:(int32_t[]){  } count:0]);");
   }
 
   public void testInterfaceFieldsAreStaticFinal() throws IOException {
     String source = "interface Test { String foo = \"bar\"; }";
     String translation = translateSourceFile(source, "Test", "Test.h");
-    assertTranslation(translation, "J2OBJC_STATIC_FIELD_OBJ_FINAL(Test, foo, NSString *)");
+    assertInTranslation(translation, "J2OBJC_STATIC_FIELD_OBJ_FINAL(Test, foo, NSString *)");
   }
 
   // Regression test: the wrong method name used for "f.group()" translation.
@@ -180,7 +182,7 @@ public class RewriterTest extends GenerationTest {
         + "String group() { return \"foo\"; } "
         + "void test() { A a = new A(); System.out.println(a.group()); }}";
     String translation = translateSourceFile(source, "A", "A.m");
-    assertTranslation(translation, "printlnWithNSString:[a group]];");
+    assertInTranslation(translation, "printlnWithNSString:[a group]];");
   }
 
   public void testStaticArrayInitializerMove() throws IOException {
@@ -190,10 +192,12 @@ public class RewriterTest extends GenerationTest {
         + "0x1.7cac197cfe503p605, 0x1.1e5dfc140e1e5p716, 0x1.8ce85fadb707ep829, "
         + "0x1.95d5f3d928edep945 }; }";
     String translation = translateSourceFile(source, "Test", "Test.m");
-    assertTranslation(translation, "{ 1.0, 2.0922789888E13, 2.631308369336935E35, "
-        + "1.2413915592536073E61, 1.2688693218588417E89, 7.156945704626381E118, "
-        + "9.916779348709496E149, 1.974506857221074E182, 3.856204823625804E215, "
-        + "5.5502938327393044E249, 4.7147236359920616E284 }");
+    assertInTranslation(
+        translation,
+        "{ 1.0, 2.0922789888E13, 2.631308369336935E35, "
+            + "1.2413915592536073E61, 1.2688693218588417E89, 7.156945704626381E118, "
+            + "9.916779348709496E149, 1.974506857221074E182, 3.856204823625804E215, "
+            + "5.5502938327393044E249, 4.7147236359920616E284 }");
   }
 
   public void testTypeCheckInCompareToMethod() throws IOException {
@@ -201,21 +205,21 @@ public class RewriterTest extends GenerationTest {
         "class Test implements Comparable<Test> { int i; "
         + "  public int compareTo(Test t) { return i - t.i; } }", "Test", "Test.m");
     assertTranslatedLines(translation,
-        "- (jint)compareToWithId:(Test *)t {",
+        "- (int32_t)compareToWithId:(Test *)t {",
         "cast_chk(t, [Test class]);");
   }
 
   public void testAdditionWithinStringConcatenation() throws IOException {
     String translation = translateSourceFile(
         "class Test { void test() { String s = 1 + 2.3f + \"foo\"; } }", "Test", "Test.m");
-    assertTranslation(translation, "NSString *s = JreStrcat(\"F$\", 1 + 2.3f, @\"foo\");");
+    assertInTranslation(translation, "NSString *s = JreStrcat(\"F$\", 1 + 2.3f, @\"foo\");");
   }
 
   public void testMethodCollisionWithSuperclassField() throws IOException {
     addSourceFile("class A { protected int i; }", "A.java");
     String translation = translateSourceFile(
         "class B extends A { int i() { return i; } }", "B", "B.m");
-    assertTranslation(translation, "return i_;");
+    assertInTranslation(translation, "return i_;");
   }
 
   public void testMultipleLabelsWithSameName() throws IOException {
@@ -231,24 +235,24 @@ public class RewriterTest extends GenerationTest {
         + "    for (int w = 0; w < 10; w++) {"
         + "      break outer;"
         + "}}}}", "Test", "Test.m");
-    assertTranslation(translation, "break_outer:");
-    assertTranslation(translation, "goto break_outer;");
-    assertTranslation(translation, "break_outer_2:");
-    assertTranslation(translation, "goto break_outer_2;");
-    assertTranslation(translation, "break_outer_3:");
-    assertTranslation(translation, "goto break_outer_3;");
+    assertInTranslation(translation, "break_outer:");
+    assertInTranslation(translation, "goto break_outer;");
+    assertInTranslation(translation, "break_outer_2:");
+    assertInTranslation(translation, "goto break_outer_2;");
+    assertInTranslation(translation, "break_outer_3:");
+    assertInTranslation(translation, "goto break_outer_3;");
   }
 
   public void testExtraDimensionsInFieldDeclaration() throws IOException {
     String translation = translateSourceFile(
         "class Test { int i1, i2[], i3[][], i4[][][], i5[][], i6; }", "Test", "Test.h");
     assertTranslatedLines(translation,
-        "jint i1_;",
+        "int32_t i1_;",
         "IOSIntArray *i2_;",
         "IOSObjectArray *i3_;",
         "IOSObjectArray *i4_;",
         "IOSObjectArray *i5_;",
-        "jint i6_;");
+        "int32_t i6_;");
   }
 
   public void testExtraDimensionsInVariableDeclarationStatement() throws IOException {
@@ -257,12 +261,11 @@ public class RewriterTest extends GenerationTest {
     assertTranslatedLines(translation,
         "IOSObjectArray *c1;",
         "IOSCharArray *c2;",
-        "jchar c3;",
-        "jchar c4;",
+        "unichar c3;",
+        "unichar c4;",
         "IOSObjectArray *c5;");
   }
 
-  // Objective-C requires that && tests be surrounded by parens when mixed with || tests.
   public void testLogicalPrecedence() throws IOException {
     String translation = translateSourceFile(
         "class Test { "
@@ -273,23 +276,27 @@ public class RewriterTest extends GenerationTest {
         + "boolean test3(boolean e, boolean f, boolean g, boolean h, boolean i) { "
         + "  return e && f || g && h || i; }"
         + "boolean test4(boolean j, boolean k, boolean l, boolean m, boolean n) {"
-        + "  return j || k || l && m && n; }}",
+        + "  return j || k || l && m && n; }"
+        + "boolean test5(boolean a, boolean b, boolean c, boolean d) {"
+        + "  return (a || b) && (c || d); }}",
         "Test", "Test.m");
-    assertTranslation(translation, "return a && b;");
-    assertTranslation(translation, "return c || d;");
+    assertInTranslation(translation, "return a && b;");
+    assertInTranslation(translation, "return c || d;");
     assertTranslatedLines(translation, "return (e && f) || (g && h) || i;");
     assertTranslatedLines(translation, "return j || k || (l && m && n);");
+    assertTranslatedLines(translation, "return (a || b) && (c || d);");
 
     translation = translateSourceFile(
         "class Test { int i; @Override public boolean equals(Object object) { "
         + "return (object == this) || (object instanceof Test) && (i == ((Test) object).i); } }",
         "Test", "Test.m");
-    assertTranslatedLines(translation, "(object == self) || "
-        + "(([object isKindOfClass:[Test class]]) && (i_ == ((Test *) nil_chk(((Test *) "
-        + "cast_chk(object, [Test class]))))->i_));");
+    assertTranslatedLines(
+        translation,
+        "return JreObjectEqualsEquals(object, self) || "
+            + "([object isKindOfClass:[Test class]] && (i_ == "
+            + "((Test *) cast_chk(object, [Test class]))->i_));");
   }
 
-  // Objective-C requires that bit-wise and tests be surrounded by parens when mixed with or tests.
   public void testBitPrecedence() throws IOException {
     String translation = translateSourceFile(
         "class Test { "
@@ -299,17 +306,24 @@ public class RewriterTest extends GenerationTest {
         + "  return c | d; }"
         + "int test3(int e, int f, int g, int h, int i) { "
         + "  return e & f | g & h | i; }"
-        + "int test4(int j, int k, int l, int m, int n) {"
-        + "  return j | k | l & m & n; }}",
+        + "int test4(int e, int f, int g, int h, int i) { "
+        + "  return e & f ^ g & h ^ i; }"
+        + "int test5(int j, int k, int l, int m, int n) {"
+        + "  return j | k | l & m & n; }"
+        + "int test6(int j, int k, int l, int m, int n) {"
+        + "  return j ^ k ^ l & m & n; }"
+        + "int test7(int a, int b, int c, int d, int e) {"
+        + "  return (a | b) ^ (c | d) & e; }}",
         "Test", "Test.m");
-    assertTranslation(translation, "return a & b;");
-    assertTranslation(translation, "return c | d;");
+    assertInTranslation(translation, "return a & b;");
+    assertInTranslation(translation, "return c | d;");
     assertTranslatedLines(translation, "return (e & f) | (g & h) | i;");
+    assertTranslatedLines(translation, "return (e & f) ^ (g & h) ^ i;");
     assertTranslatedLines(translation, "return j | k | (l & m & n);");
+    assertTranslatedLines(translation, "return j ^ k ^ (l & m & n);");
+    assertTranslatedLines(translation, "return (a | b) ^ ((c | d) & e);");
   }
 
-  // C compiler requires that tests using & or | as boolean test have parentheses around
-  // infix operands.
   public void testLowerPrecedence() throws IOException {
     String translation = translateSourceFile(
         "class Test { "
@@ -317,10 +331,13 @@ public class RewriterTest extends GenerationTest {
         + "  return o < 0 | (o == 0 & p > q); } "
         + "boolean test2(int r) {"
         + "  return r < 0 & !isPowerOfTwo(r); } "
+        + "boolean test3(int a, int b, int c, int d) {"
+        + "  return (a & b) == (c | d); } "
         + "boolean isPowerOfTwo(int i) { return false; }}",
         "Test", "Test.m");
     assertTranslatedLines(translation, "return (o < 0) | ((o == 0) & (p > q));");
-    assertTranslatedLines(translation, "return (r < 0) & ![self isPowerOfTwoWithInt:r];");
+    assertTranslatedLines(translation, "return (r < 0) & (![self isPowerOfTwoWithInt:r]);");
+    assertTranslatedLines(translation, "return (a & b) == (c | d);");
   }
 
   public void testInitializeRenamed() throws IOException {
@@ -328,7 +345,7 @@ public class RewriterTest extends GenerationTest {
         "class Test { "
         + "  public static void initialize() {}}",
         "Test", "Test.m");
-    assertTranslation(translation, "+ (void)initialize__ {");
+    assertInTranslation(translation, "+ (void)initialize__ {");
   }
 
   // Verify minimal try-with-resources translation.
@@ -466,27 +483,27 @@ public class RewriterTest extends GenerationTest {
         " }",
         "}",
         "@catch (JavaIoIOException *e) {",
-        " [((JavaIoPrintStream *) nil_chk(JreLoadStatic(JavaLangSystem, out))) printlnWithId:e];",
+        " [((JavaIoPrintStream *) nil_chk((JreLoadStatic(JavaLangSystem, out)))) printlnWithId:e];",
         " @throw e;",
         "}");
   }
 
   public void testTryWithResourceOnEffectivelyFinalVariable() throws IOException {
-    if (!onJava9OrAbove()) {
-      return;
-    }
-    String translation = translateSourceFile(
-        "import java.io.*; "
-            + "public class Test { "
-            + "  String test(String path) throws IOException { "
-            + "    BufferedReader br = new BufferedReader(new FileReader(path)); "
-            + "    try (br) { "
-            + "      return br.readLine(); "
-            + "    } "
-            + "  } "
-            + "} ",
-        "Test", "Test.m");
-    assertTranslatedLines(translation,
+    String translation =
+        translateSourceFile(
+            "import java.io.*; "
+                + "public class Test { "
+                + "  String test(String path) throws IOException { "
+                + "    BufferedReader br = new BufferedReader(new FileReader(path)); "
+                + "    try (br) { "
+                + "      return br.readLine(); "
+                + "    } "
+                + "  } "
+                + "} ",
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
         "JavaIoBufferedReader *br = create_JavaIoBufferedReader_initWithJavaIoReader_("
             + "create_JavaIoFileReader_initWithNSString_(path));",
         "{",

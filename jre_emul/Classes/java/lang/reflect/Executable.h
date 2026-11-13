@@ -53,7 +53,7 @@
 - (NSString *)getName;
 
 // Returns the set of modifier flags, as defined by java.lang.reflect.Modifier.
-- (jint)getModifiers;
+- (int32_t)getModifiers;
 
 // Returns the class this executable is a member of.
 - (IOSClass *)getDeclaringClass;
@@ -63,17 +63,17 @@
 - (IOSObjectArray *)getGenericExceptionTypes;
 
 // Returns the parameter types for this executable member.
-- (jint)getParameterCount;
+- (int32_t)getParameterCount;
 - (IOSObjectArray *)getParameters;
 - (IOSObjectArray *)getParameterTypes;
 - (IOSObjectArray *)getGenericParameterTypes;
 - (IOSObjectArray *)getTypeParameters;
 
 // Returns true if this method has variable arguments.
-- (jboolean)isVarArgs;
+- (bool)isVarArgs;
 
 // Returns true if this method was added by j2objc.
-- (jboolean)isSynthetic;
+- (bool)isSynthetic;
 
 // Annotation accessors.
 - (IOSObjectArray *)getAnnotationsByTypeWithIOSClass:(IOSClass *)cls;
@@ -90,7 +90,7 @@
 // Internal methods.
 - (IOSObjectArray *)getParameterTypesInternal;
 - (SEL)getSelector;
-- (jboolean)hasRealParameterData;
+- (bool)hasRealParameterData;
 
 @end
 

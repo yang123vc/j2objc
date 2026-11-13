@@ -15,7 +15,6 @@
 package com.google.devtools.j2objc.translate;
 
 import com.google.devtools.j2objc.GenerationTest;
-
 import java.io.IOException;
 
 /**
@@ -33,10 +32,10 @@ public class EnhancedForRewriterTest extends GenerationTest {
         + "List<Character> charList; "
         + "void test() { for (char c : charArray) {} for (char c : charList) {} } }";
     String translation = translateSourceFile(source, "A", "A.m");
-    assertTranslation(translation,
-        "jchar c = [((JavaLangCharacter *) nil_chk(*b__++)) charValue];");
-    assertTranslation(translation,
-        "jchar c = [((JavaLangCharacter *) nil_chk(boxed__)) charValue];");
+    assertInTranslation(
+        translation, "unichar c = [((JavaLangCharacter *) nil_chk((*b__++))) charValue];");
+    assertInTranslation(
+        translation, "unichar c = [((JavaLangCharacter *) nil_chk(boxed__)) charValue];");
   }
 
   public void testEnhancedForLoopAnnotation() throws IOException {
@@ -52,7 +51,7 @@ public class EnhancedForRewriterTest extends GenerationTest {
           "{",
             "id<JavaUtilIterator> iter__ = [((id<JavaLangIterable>) nil_chk(strings)) iterator];",
             "while ([((id<JavaUtilIterator>) nil_chk(iter__)) hasNext]) {",
-              "NSString *s = [iter__ next];",
+              "NSString *s = JreRetainedLocalValue([iter__ next]);",
             "}",
           "}",
           "for (NSString * __strong s in strings) {",
@@ -69,15 +68,16 @@ public class EnhancedForRewriterTest extends GenerationTest {
         + " if (b) { break testLabel1; } continue testLabel1; }"
         + " testLabel2: for (@LoopTranslation(LoopStyle.JAVA_ITERATOR) Object o: list) {"
         + " if (b) { break testLabel2; } continue testLabel2; } } }", "Test", "Test.m");
-    assertTranslatedLines(translation,
+    assertTranslatedLines(
+        translation,
         "{",
         "  IOSObjectArray *a__ = [IOSObjectArray arrayWithObjects:"
-          + "(id[]){  } count:0 type:NSObject_class_()];",
+            + "(id[]){  } count:0 type:NSObject_class_()];",
         "  id const *b__ = a__->buffer_;",
         "  id const *e__ = b__ + a__->size_;",
         "  while (b__ < e__) {",
         "    {",
-        "      id o = *b__++;",
+        "      id o = RETAIN_AND_AUTORELEASE((*b__++));",
         "      if (b) {",
         "        goto break_testLabel1;",
         "      }",
@@ -91,7 +91,7 @@ public class EnhancedForRewriterTest extends GenerationTest {
         "  id<JavaUtilIterator> iter__ = [((id<JavaUtilList>) nil_chk(list)) iterator];",
         "  while ([((id<JavaUtilIterator>) nil_chk(iter__)) hasNext]) {",
         "    {",
-        "      id o = [iter__ next];",
+        "      id o = JreRetainedLocalValue([iter__ next]);",
         "      if (b) {",
         "        goto break_testLabel2;",
         "      }",

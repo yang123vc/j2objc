@@ -15,7 +15,6 @@
 package com.google.devtools.j2objc.translate;
 
 import com.google.devtools.j2objc.GenerationTest;
-
 import java.io.IOException;
 
 /**
@@ -33,7 +32,7 @@ public class VarargsRewriterTest extends GenerationTest {
         + "  void foo(char... chars) {}"
         + "  void test() { foo(null); }}";
     String translation = translateSourceFile(source, "Test", "Test.m");
-    assertTranslation(translation, "[self fooWithCharArray:nil];");
+    assertInTranslation(translation, "[self fooWithCharArray:nil];");
     assertNotInTranslation(translation,
         "[self fooWithCharArray:[IOSCharArray arrayWithChars:(unichar[]){ nil } count:1]];");
   }
@@ -47,30 +46,31 @@ public class VarargsRewriterTest extends GenerationTest {
         + "void test() { A a = new A(4); foo(5); super.foo(6); Foo f = this::foo; } }",
         "Test", "Test.m");
     // EnumConstantDeclaration
-    assertTranslation(translation,
+    assertInTranslation(
+        translation,
         "E_initWithIntArray_withNSString_withInt_(e, [IOSIntArray arrayWithInts:"
-        + "(jint[]){ 1 } count:1], @\"VALUE1\", 0);");
+            + "(int32_t[]){ 1 } count:1], @\"VALUE1\", 0);");
     // ConstructorInvocation
     assertTranslatedLines(translation,
         "void A_init(A *self) {",
-        "  A_initWithIntArray_(self, [IOSIntArray arrayWithInts:(jint[]){ 2 } count:1]);",
+        "  A_initWithIntArray_(self, [IOSIntArray arrayWithInts:(int32_t[]){ 2 } count:1]);",
         "}");
     // SuperConstructorInvocation
     assertTranslatedLines(translation,
         "void Test_init(Test *self) {",
-        "  A_initWithIntArray_(self, [IOSIntArray arrayWithInts:(jint[]){ 3 } count:1]);",
+        "  A_initWithIntArray_(self, [IOSIntArray arrayWithInts:(int32_t[]){ 3 } count:1]);",
         "}");
     assertTranslatedLines(translation,
         // ClassInstanceCreation
-        "A *a = create_A_initWithIntArray_([IOSIntArray arrayWithInts:(jint[]){ 4 } count:1]);",
+        "A *a = create_A_initWithIntArray_([IOSIntArray arrayWithInts:(int32_t[]){ 4 } count:1]);",
         // MethodInvocation
-        "[self fooWithIntArray:[IOSIntArray arrayWithInts:(jint[]){ 5 } count:1]];",
+        "[self fooWithIntArray:[IOSIntArray arrayWithInts:(int32_t[]){ 5 } count:1]];",
         // SuperMethodInvocation
-        "A_fooWithIntArray_(self, [IOSIntArray arrayWithInts:(jint[]){ 6 } count:1]);");
+        "A_fooWithIntArray_(self, [IOSIntArray arrayWithInts:(int32_t[]){ 6 } count:1]);");
     // MethodReference
     assertTranslatedLines(translation,
-        "- (void)fooWithInt:(jint)a {",
-        "  [target$_ fooWithIntArray:[IOSIntArray arrayWithInts:(jint[]){ a } count:1]];",
+        "- (void)fooWithInt:(int32_t)a {",
+        "  [target$_ fooWithIntArray:[IOSIntArray arrayWithInts:(int32_t[]){ a } count:1]];",
         "}");
   }
 
@@ -86,11 +86,12 @@ public class VarargsRewriterTest extends GenerationTest {
         + "void test(Object[] array) { "
         + "Arrays.asList(array); super.bar(array); new Foo(array); Baz b = Arrays::asList;}}",
         "Test", "Test.m");
-    assertTranslation(translation,
+    assertInTranslation(
+        translation,
         "E_initWithNSObjectArray_withNSString_withInt_(e, [IOSObjectArray arrayWithObjects:"
-        + "(id[]){  } count:0 type:NSObject_class_()], @\"A\", 0);");
+            + "(id[]){  } count:0 type:NSObject_class_()], @\"A\", 0);");
     assertTranslatedLines(translation,
-        "void Bar_initWithInt_withNSObjectArray_(Bar *self, jint i, IOSObjectArray *array) {",
+        "void Bar_initWithInt_withNSObjectArray_(Bar *self, int32_t i, IOSObjectArray *array) {",
         "  Bar_initWithNSObjectArray_(self, array);",
         "}");
     assertTranslatedLines(translation,
@@ -115,7 +116,7 @@ public class VarargsRewriterTest extends GenerationTest {
         "class Test { void doVarargs(int... ints) {}"
         + "void test(int[] array) { doVarargs(array); }}",
         "Test", "Test.m");
-    assertTranslation(translation, "[self doVarargsWithIntArray:array];");
+    assertInTranslation(translation, "[self doVarargsWithIntArray:array];");
   }
 
   // Verify that a single primitive array argument to an object varargs method is just treated
@@ -124,9 +125,11 @@ public class VarargsRewriterTest extends GenerationTest {
     String translation = translateSourceFile(
         "class Test { void test(float[] array) { java.util.Arrays.asList(array); }}",
         "Test", "Test.m");
-    assertTranslation(translation, "JavaUtilArrays_asListWithNSObjectArray_("
-        + "[IOSObjectArray arrayWithObjects:(id[]){ array } count:1 "
-        + "type:IOSClass_floatArray(1)]);");
+    assertInTranslation(
+        translation,
+        "JavaUtilArrays_asListWithNSObjectArray_("
+            + "[IOSObjectArray arrayWithObjects:(id[]){ array } count:1 "
+            + "type:IOSClass_floatArray(1)]);");
   }
 
   public void testMultiDimPrimitiveArrayPassedToTypeVariableVarargs() throws IOException {
@@ -134,7 +137,7 @@ public class VarargsRewriterTest extends GenerationTest {
         "class Test { void test(int[][] array) { java.util.Arrays.asList(array); } }",
         "Test", "Test.m");
     // Array should be passed as it is.
-    assertTranslation(translation, "JavaUtilArrays_asListWithNSObjectArray_(array);");
+    assertInTranslation(translation, "JavaUtilArrays_asListWithNSObjectArray_(array);");
   }
 
   public void testTwoDimObjectArrayPassedToObjectVarargs() throws IOException {
@@ -142,7 +145,7 @@ public class VarargsRewriterTest extends GenerationTest {
         "class Test { void foo(Object... args) {} void test(Object[][] array) { foo(array); } }",
         "Test", "Test.m");
     // Array should be passed as it is.
-    assertTranslation(translation, "[self fooWithNSObjectArray:array];");
+    assertInTranslation(translation, "[self fooWithNSObjectArray:array];");
   }
 
   // Verify cloning a single array argument doesn't cause it to get boxed in another array.
@@ -151,7 +154,8 @@ public class VarargsRewriterTest extends GenerationTest {
         "class A { void varargs(String s, Object... objects) {}"
         + "void test() { Object[] objs = new Object[] { \"\", \"\" };"
         + "varargs(\"objects\", objs.clone()); }}", "A", "A.m");
-    assertTranslation(translation,
+    assertInTranslation(
+        translation,
         "[self varargsWithNSString:@\"objects\" withNSObjectArray:[objs java_clone]];");
   }
 
@@ -160,15 +164,16 @@ public class VarargsRewriterTest extends GenerationTest {
         "class Test { class A<E> { void test(E... objsVararg) {} } class B<E> extends A<E> { "
         + "void test(E... objs) { super.test(objs); } } }", "Test", "Test.m");
     // Must pass the objs parameter as a direct argument, not wrap in a varargs array.
-    assertTranslation(translation, "Test_A_testWithNSObjectArray_(self, objs);");
+    assertInTranslation(translation, "Test_A_testWithNSObjectArray_(self, objs);");
   }
 
   public void testGenericVarargsInvocation() throws IOException {
     String translation = translateSourceFile(
         "class Test<T extends Runnable> { void foo(T... t) {} void test(T t) { foo(t); } }",
         "Test", "Test.m");
-    assertTranslation(translation,
+    assertInTranslation(
+        translation,
         "[self fooWithJavaLangRunnableArray:[IOSObjectArray arrayWithObjects:(id[]){ t } "
-        + "count:1 type:JavaLangRunnable_class_()]];");
+            + "count:1 type:JavaLangRunnable_class_()]];");
   }
 }

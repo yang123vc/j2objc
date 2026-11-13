@@ -31,9 +31,11 @@
 #ifndef __ComGoogleProtobufCommon_H__
 #define __ComGoogleProtobufCommon_H__
 
-#define CGP_ALWAYS_INLINE __attribute__((always_inline))
+#define CGP_ALWAYS_INLINE __attribute__((always_inline)) inline
 
 #define CGP_CODED_STREAM_BUFFER_SIZE (jint)NSPageSize()
+
+#include <stdint.h>
 
 // For ported c++ code.
 typedef int8_t  int8;

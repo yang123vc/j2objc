@@ -16,11 +16,14 @@
 
 package org.json;
 
+//import dalvik.annotation.compat.UnsupportedAppUsage;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+
+// import libcore.util.NonNull;
 
 // Note: this class was written without inspecting the non-free org.json sourcecode.
 
@@ -48,13 +51,14 @@ import java.util.List;
  */
 public class JSONArray {
 
-    private final List<Object> values;
+    @UnsupportedAppUsage
+    private final List<@Nullable Object> values;
 
     /**
      * Creates a {@code JSONArray} with no values.
      */
     public JSONArray() {
-        values = new ArrayList<Object>();
+        values = new ArrayList<@Nullable Object>();
     }
 
     /**
@@ -116,7 +120,7 @@ public class JSONArray {
             throw new JSONException("Not a primitive array: " + array.getClass());
         }
         final int length = Array.getLength(array);
-        values = new ArrayList<Object>(length);
+        values = new ArrayList<@Nullable Object>(length);
         for (int i = 0; i < length; ++i) {
             put(JSONObject.wrap(Array.get(array, i)));
         }
@@ -290,7 +294,7 @@ public class JSONArray {
             }
             return value;
         } catch (IndexOutOfBoundsException e) {
-            throw new JSONException("Index " + index + " out of range [0.." + values.size() + ")");
+      throw new JSONException("Index " + index + " out of range [0.." + values.size() + ")", e);
         }
     }
 
@@ -579,13 +583,15 @@ public class JSONArray {
      * Encodes this array as a compact JSON string, such as:
      * <pre>[94043,90210]</pre>
      */
-    @Override public String toString() {
+    @Override @NonNull public String toString() {
         try {
             JSONStringer stringer = new JSONStringer();
             writeTo(stringer);
             return stringer.toString();
         } catch (JSONException e) {
-            return null;
+            // j2objc: do not return null from @NonNull method.
+            // return null;
+            return e.toString();
         }
     }
 
@@ -607,6 +613,7 @@ public class JSONArray {
         return stringer.toString();
     }
 
+    @UnsupportedAppUsage
     void writeTo(JSONStringer stringer) throws JSONException {
         stringer.array();
         for (Object value : values) {

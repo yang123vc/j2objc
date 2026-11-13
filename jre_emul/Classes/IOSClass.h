@@ -81,7 +81,7 @@
 - (IOSClass *)getDeclaringClass;
 
 // Class.isInstance(Object)
-- (jboolean)isInstance:(id)object;
+- (bool)isInstance:(id)object;
 
 // These methods all return the same class name.
 - (NSString *)getName;
@@ -89,7 +89,7 @@
 - (NSString *)getCanonicalName;
 
 // Class.getModifiers()
-- (jint)getModifiers;
+- (int32_t)getModifiers;
 
 // Class.getDeclaredConstructors()
 - (IOSObjectArray *)getDeclaredConstructors;
@@ -118,7 +118,7 @@
 - (IOSObjectArray *)getMethods;
 
 // Class.isAssignableFrom(Class)
-- (jboolean) isAssignableFrom:(IOSClass *)cls;
+- (bool)isAssignableFrom:(IOSClass *)cls;
 
 // Class.asSubclass(Class)
 - (IOSClass *)asSubclass:(IOSClass *)cls;
@@ -129,7 +129,7 @@
 // Class.forName
 + (IOSClass *)forName:(NSString *)className;
 + (IOSClass *)forName:(NSString *)className
-           initialize:(jboolean)load
+           initialize:(bool)load
           classLoader:(JavaLangClassLoader *)loader;
 
 // Class.cast(Object)
@@ -139,15 +139,16 @@
 - (IOSClass *)getEnclosingClass;
 
 // Class.isMemberClass
-- (jboolean)isMemberClass;
-- (jboolean)isLocalClass;
+- (bool)isMemberClass;
+- (bool)isLocalClass;
 
-- (jboolean)isArray;
-- (jboolean)isEnum;
-- (jboolean)isInterface;
-- (jboolean)isPrimitive;
-- (jboolean)isAnnotation;
-- (jboolean)isSynthetic;
+- (bool)isArray;
+- (bool)isEnum;
+- (bool)isInterface;
+- (bool)isPrimitive;
+- (bool)isAnnotation;
+- (bool)isSynthetic;
+- (bool)isRecord;
 
 - (IOSObjectArray *)getInterfaces;
 - (IOSObjectArray *)getGenericInterfaces;
@@ -155,12 +156,13 @@
 
 - (id<JavaLangAnnotationAnnotation>)
       getAnnotationWithIOSClass:(IOSClass *)annotationClass;
-- (jboolean)isAnnotationPresentWithIOSClass:(IOSClass *)annotationType;
+- (bool)isAnnotationPresentWithIOSClass:(IOSClass *)annotationType;
 - (IOSObjectArray *)getAnnotations;
 - (IOSObjectArray *)getDeclaredAnnotations;
 - (id<JavaLangAnnotationAnnotation>)
       getDeclaredAnnotationWithIOSClass:(IOSClass *)annotationClass;
 - (id)getPackage;
+- (NSString *)getPackageName;
 - (id)getClassLoader;
 
 - (JavaLangReflectField *)getDeclaredField:(NSString *)name;
@@ -170,11 +172,12 @@
 
 - (JavaLangReflectConstructor *)getEnclosingConstructor;
 - (JavaLangReflectMethod *)getEnclosingMethod;
-- (jboolean)isAnonymousClass;
+- (bool)isAnonymousClass;
 
-- (jboolean)desiredAssertionStatus;
+- (bool)desiredAssertionStatus;
 
 - (IOSObjectArray *)getEnumConstants;
+- (IOSObjectArray *)getRecordComponents;
 
 // Class.getResource, getResourceAsStream
 - (JavaNetURL *)getResource:(NSString *)name;
@@ -190,10 +193,10 @@
 
 // Boxing and unboxing (internal)
 - (id)__boxValue:(J2ObjcRawValue *)rawValue;
-- (jboolean)__unboxValue:(id)value toRawValue:(J2ObjcRawValue *)rawValue;
+- (bool)__unboxValue:(id)value toRawValue:(J2ObjcRawValue *)rawValue;
 - (void)__readRawValue:(J2ObjcRawValue *)rawValue fromAddress:(const void *)addr;
 - (void)__writeRawValue:(J2ObjcRawValue *)rawValue toAddress:(const void *)addr;
-- (jboolean)__convertRawValue:(J2ObjcRawValue *)rawValue toType:(IOSClass *)type;
+- (bool)__convertRawValue:(J2ObjcRawValue *)rawValue toType:(IOSClass *)type;
 
 // Internal methods
 - (JavaLangReflectMethod *)getMethodWithSelector:(const char *)selector;
@@ -215,15 +218,15 @@ CF_EXTERN_C_BEGIN
 // Class.forName(String)
 IOSClass *IOSClass_forName_(NSString *className);
 // Class.forName(String, boolean, ClassLoader)
-IOSClass *IOSClass_forName_initialize_classLoader_(
-    NSString *className, jboolean load, JavaLangClassLoader *loader);
+IOSClass *IOSClass_forName_initialize_classLoader_(NSString *className, bool load,
+                                                   JavaLangClassLoader *loader);
 
 // Lookup a IOSClass from its associated ObjC class, protocol or component type.
 IOSClass *IOSClass_fromClass(Class cls);
 IOSClass *IOSClass_fromProtocol(Protocol *protocol);
 IOSClass *IOSClass_arrayOf(IOSClass *componentType);
 // Same as "arrayOf" but allows dimensions to be specified.
-IOSClass *IOSClass_arrayType(IOSClass *componentType, jint dimensions);
+IOSClass *IOSClass_arrayType(IOSClass *componentType, int32_t dimensions);
 
 // Primitive array type literals.
 #define IOSClass_byteArray(DIM) IOSClass_arrayType([IOSClass byteClass], DIM)

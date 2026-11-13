@@ -19,7 +19,16 @@
 
 #import "IOSArray_PackagePrivate.h"
 #import "IOSClass.h"
+#import "java/lang/Boolean.h"
+#import "java/lang/Byte.h"
+#import "java/lang/Character.h"
+#import "java/lang/Double.h"
+#import "java/lang/Float.h"
+#import "java/lang/Integer.h"
+#import "java/lang/Long.h"
+#import "java/lang/ArrayStoreException.h"
 #import "java/lang/NegativeArraySizeException.h"
+#import "java/lang/Short.h"
 
 /*!
  * Implements the common constructors for the primitive array types.
@@ -50,7 +59,7 @@
   } \
   \
   + (instancetype)arrayWithLength:(NSUInteger)length { \
-    return [IOS##U_NAME##Array_NewArray((jint)length) autorelease]; \
+    return AUTORELEASE(IOS##U_NAME##Array_NewArray((jint)length)); \
   } \
   \
   + (instancetype)newArrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count { \
@@ -58,12 +67,12 @@
   } \
   \
   + (instancetype)arrayWith##U_NAME##s:(const C_TYPE *)buf count:(NSUInteger)count { \
-    return [IOS##U_NAME##Array_NewArrayWith##U_NAME##s((jint)count, buf) autorelease]; \
+    return AUTORELEASE(IOS##U_NAME##Array_NewArrayWith##U_NAME##s((jint)count, buf)); \
   } \
   \
   + (id)arrayWithDimensions:(NSUInteger)dimensionCount lengths:(const jint *)dimensionLengths { \
-    return [IOSArray_NewArrayWithDimensions(self, dimensionCount, dimensionLengths, nil) \
-        autorelease]; \
+    return AUTORELEASE(IOSArray_NewArrayWithDimensions(self, dimensionCount, dimensionLengths, nil)\
+        ); \
   } \
 + (id)newArrayWithDimensions:(NSUInteger)dimensionCount lengths:(const jint *)dimensionLengths \
     __attribute__((objc_method_family(none), ns_returns_retained)) { \
@@ -95,7 +104,6 @@
     IOSArray_checkIndex(size_, (jint)length - 1); \
     memcpy(buffer, buffer_, length * sizeof(C_TYPE)); \
   } \
-  \
   - (void *)buffer { \
     return buffer_; \
   } \
@@ -128,26 +136,48 @@
     return [IOS##U_NAME##Array newArrayWith##U_NAME##s:buffer_ count:size_]; \
   }
 
+#define PRIMITIVE_NSARRAY_ACCESSORS_IMPL(L_NAME, U_NAME, W_TYPE, M_NAME) \
+  - (id)objectAtIndex:(NSUInteger)index { \
+    return JavaLang##W_TYPE##_valueOfWith##U_NAME##_(IOS##U_NAME##Array_Get(self, (jint)index)); \
+  } \
+  \
+  - (void)replaceObjectAtIndex:(NSUInteger)index withObject:(id)o { \
+    if (![o isKindOfClass:[JavaLang##W_TYPE class]]) { \
+      ThrowArrayStoreException([JavaLang##W_TYPE class], [o class]); \
+    } \
+    IOSArray_checkIndex(size_, (jint)index); \
+    buffer_[index] = [((JavaLang##W_TYPE *) o) M_NAME]; \
+  }
+
 /*!
  * Adds all the common implementations for the primitive array types.
  *
  * @define PRIMITIVE_ARRAY_IMPLEMENTATION
- * @param L_NAME Lowercase name of the primitive type. (e.g. "char")
- * @param U_NAME Uppercase name of the primitive type. (e.g. "Char")
- * @param C_TYPE Objective-C type for the primitive type, (e.g. "jchar")
+ * @param L_NAME Lowercase name of the primitive type (e.g. "char").
+ * @param U_NAME Uppercase name of the primitive type (e.g. "Char").
+ * @param C_TYPE Objective-C type for the primitive type (e.g. "jchar").
+ * @param W_TYPE java.lang wrapper type for the primitive type (e.g. "Character").
+ * @param M_NAME Name of NSNumber unwrapping method (e.g. "charValue").
  */
-#define PRIMITIVE_ARRAY_IMPLEMENTATION(L_NAME, U_NAME, C_TYPE) \
+#define PRIMITIVE_ARRAY_IMPLEMENTATION(L_NAME, U_NAME, C_TYPE, W_TYPE, M_NAME) \
   PRIMITIVE_ARRAY_CTOR_IMPL(U_NAME, C_TYPE) \
   PRIMITIVE_ARRAY_ACCESSORS_IMPL(L_NAME, U_NAME, C_TYPE) \
   PRIMITIVE_ARRAY_RANGE_COPY_IMPL(U_NAME, C_TYPE) \
-  PRIMITIVE_ARRAY_COPY_IMPL(U_NAME)
+  PRIMITIVE_ARRAY_COPY_IMPL(U_NAME) \
+  PRIMITIVE_NSARRAY_ACCESSORS_IMPL(L_NAME, U_NAME, W_TYPE, M_NAME)
 
+
+static void ThrowArrayStoreException(Class expectedType, Class actualType) {
+  NSString *msg = [NSString stringWithFormat:
+      @"attempt to add element of type %@ to array with type %@", actualType, expectedType];
+  @throw AUTORELEASE([[JavaLangArrayStoreException alloc] initWithNSString:msg]);
+}
 
 // ********** IOSBooleanArray **********
 
 @implementation IOSBooleanArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(boolean, Boolean, jboolean)
+PRIMITIVE_ARRAY_IMPLEMENTATION(boolean, Boolean, bool, Boolean, booleanValue)
 
 - (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%@", (buffer_[index] ? @"true" : @"false")];
@@ -160,7 +190,7 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(boolean, Boolean, jboolean)
 
 @implementation IOSCharArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(char, Char, jchar)
+PRIMITIVE_ARRAY_IMPLEMENTATION(char, Char, jchar, Character, charValue)
 
 + (instancetype)arrayWithNSString:(NSString *)string {
   NSUInteger length = [string length];
@@ -168,7 +198,7 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(char, Char, jchar)
   if (length > 0) {
     [string getCharacters:array->buffer_ range:NSMakeRange(0, length)];
   }
-  return [array autorelease];
+  return AUTORELEASE(array);
 }
 
 - (NSString *)descriptionOfElementAtIndex:(jint)index {
@@ -182,7 +212,7 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(char, Char, jchar)
 
 @implementation IOSByteArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(byte, Byte, jbyte)
+PRIMITIVE_ARRAY_IMPLEMENTATION(byte, Byte, jbyte, Byte, charValue)
 
 + (instancetype)arrayWithNSData:(NSData *)data {
   NSUInteger length = [data length];
@@ -190,7 +220,7 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(byte, Byte, jbyte)
   if (length > 0) {
     [data getBytes:array->buffer_ length:length];
   }
-  return [array autorelease];
+  return AUTORELEASE(array);
 }
 
 - (void)getBytes:(jbyte *)buffer
@@ -222,7 +252,7 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(byte, Byte, jbyte)
 
 @implementation IOSShortArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(short, Short, jshort)
+PRIMITIVE_ARRAY_IMPLEMENTATION(short, Short, jshort, Short, shortValue)
 
 - (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%hi", buffer_[index]];
@@ -235,7 +265,7 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(short, Short, jshort)
 
 @implementation IOSIntArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(int, Int, jint)
+PRIMITIVE_ARRAY_IMPLEMENTATION(int, Int, jint, Integer, intValue)
 
 - (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%d", buffer_[index]];
@@ -248,7 +278,7 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(int, Int, jint)
 
 @implementation IOSLongArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(long, Long, jlong)
+PRIMITIVE_ARRAY_IMPLEMENTATION(long, Long, jlong, Long, longLongValue)
 
 - (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%lld", buffer_[index]];
@@ -261,7 +291,7 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(long, Long, jlong)
 
 @implementation IOSFloatArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(float, Float, jfloat)
+PRIMITIVE_ARRAY_IMPLEMENTATION(float, Float, jfloat, Float, floatValue)
 
 - (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%g", buffer_[index]];
@@ -274,7 +304,7 @@ PRIMITIVE_ARRAY_IMPLEMENTATION(float, Float, jfloat)
 
 @implementation IOSDoubleArray
 
-PRIMITIVE_ARRAY_IMPLEMENTATION(double, Double, jdouble)
+PRIMITIVE_ARRAY_IMPLEMENTATION(double, Double, jdouble, Double, doubleValue)
 
 - (NSString *)descriptionOfElementAtIndex:(jint)index {
   return [NSString stringWithFormat:@"%g", buffer_[index]];

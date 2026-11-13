@@ -17,7 +17,6 @@
 package com.google.devtools.j2objc.gen;
 
 import com.google.devtools.j2objc.GenerationTest;
-
 import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -55,12 +54,12 @@ public class LineDirectivesTest extends GenerationTest {
         + "  void two() {}\n"
         + "  void three() {}}\n",
         "A", "A.m");
-    assertTranslation(translation, "#line 1 \"A.java\"");
-    assertTranslation(translation, "#line 3\n@implementation A");
-    assertTranslation(translation, "#line 6\n- (void)one");
+    assertInTranslation(translation, "#line 1 \"A.java\"");
+    assertInTranslation(translation, "#line 3\n@implementation A");
+    assertInTranslation(translation, "#line 6\n- (void)one");
     // Lines match up between one() and two() so no need for the directive.
     assertNotInTranslation(translation, "#line 9\n- (void)two");
-    assertTranslation(translation, "#line 10\n- (void)three");
+    assertInTranslation(translation, "#line 10\n- (void)three");
   }
 
   public void testStatementNumbering() throws IOException {
@@ -73,10 +72,10 @@ public class LineDirectivesTest extends GenerationTest {
         + "    return Integer.toString(i);\n"
         + "  }}\n",
         "A", "A.m");
-    assertTranslation(translation, "#line 1 \"A.java\"");
-    assertTranslation(translation, "#line 2\n- (NSString *)test");
-    assertTranslation(translation, "#line 4\n  jint i = 0;");
-    assertTranslation(translation, "#line 7\n  return JavaLangInteger_toStringWithInt_(i);");
+    assertInTranslation(translation, "#line 1 \"A.java\"");
+    assertInTranslation(translation, "#line 2\n- (NSString *)test");
+    assertInTranslation(translation, "#line 4\n  int32_t i = 0;");
+    assertInTranslation(translation, "#line 7\n  return JavaLangInteger_toStringWithInt_(i);");
   }
 
   public void testForIfWhileStatementsWithoutBlocks() throws IOException {
@@ -95,24 +94,25 @@ public class LineDirectivesTest extends GenerationTest {
         + "      n--;"
         + "  }}",
         "Test", "Test.m");
-    assertTranslatedLines(translation,
-        "for (jint i = 0; i < 10; i++)",
+    assertTranslatedLines(
+        translation,
+        "for (int32_t i = 0; i < 10; JrePostIncInt(&i))",
         "#line 4",
-        "if ((n % 2) == 0)",
+        "if (JreIntMod(n, 2) == 0)",
         "#line 5",
-        "n += i;",
+        "JrePlusAssignIntI(&n, i);",
         "",
         "#line 7",
-        "for (jint j = 0; j < 100; j++)",
+        "for (int32_t j = 0; j < 100; JrePostIncInt(&j))",
         "#line 8",
-        "for (jint k = 0; k < 1000; k++)",
+        "for (int32_t k = 0; k < 1000; JrePostIncInt(&k))",
         "#line 9",
-        "n += j + k;",
+        "JrePlusAssignIntI(&n, JreIntPlus(j, k));",
         "",
         "#line 11",
         "while (n > 0)",
         "#line 12",
-        "n--;");
+        "JrePostDecInt(&n);");
   }
 
   public void testCombinedFileLineDirectives() throws IOException {
@@ -173,10 +173,30 @@ public class LineDirectivesTest extends GenerationTest {
     // make sure lines get re-synced when files are interwoven
     assertTranslatedLines(translation,
         "#line 3",
-        "- (NSString *)DummyWithInt:(jint)i {");
+        "- (NSString *)DummyWithInt:(int32_t)i {");
     assertTranslatedLines(translation,
         "#line 9",
-        "- (NSString *)DummyTwoWithInt:(jint)i {");
+        "- (NSString *)DummyTwoWithInt:(int32_t)i {");
+  }
+
+  public void testSyncAfterMultilineMethodSignature() throws IOException {
+    String translation = translateSourceFile(
+        "public class Test {\n"
+            + "  int sum(int a, int b, int c) {\n"
+            + "    return a + b + c;\n"
+            + "  }\n"
+            + "}",
+        "Test", "Test.m");
+    assertTranslatedLines(
+        translation,
+        "#line 2",
+        "- (int32_t)sumWithInt:(int32_t)a",
+        "           withInt:(int32_t)b",
+        "           withInt:(int32_t)c {",
+        "",
+        "#line 3",
+        "  return JreIntPlus(JreIntPlus(a, b), c);",
+        "}");
   }
 
   private static final Pattern LINE_DIRECTIVE_PATTERN = Pattern.compile(

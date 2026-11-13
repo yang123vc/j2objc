@@ -36,8 +36,8 @@ public class CycleFinderTest extends TestCase {
   File tempDir;
   List<String> inputFiles;
   List<List<Edge>> cycles;
-  List<String> whitelistEntries;
-  List<String> blacklistEntries;
+  List<String> suppressListEntries;
+  List<String> restrictToListEntries;
   boolean printReferenceGraph;
   ReferenceGraph referenceGraph;
 
@@ -50,8 +50,8 @@ public class CycleFinderTest extends TestCase {
   protected void setUp() throws IOException {
     tempDir = createTempDir();
     inputFiles = new ArrayList<>();
-    whitelistEntries = new ArrayList<>();
-    blacklistEntries = new ArrayList<>();
+    suppressListEntries = new ArrayList<>();
+    restrictToListEntries = new ArrayList<>();
     printReferenceGraph = false;
     referenceGraph = null;
   }
@@ -69,14 +69,30 @@ public class CycleFinderTest extends TestCase {
   }
 
   // TODO(nbraswell): Use com.google.j2objc.annotations.WeakOuter when transitioned to Java 8
-  private static String weakOuterAndInterface = "import java.lang.annotation.*;\n"
-        + "@Target(ElementType.TYPE_USE) @interface WeakOuter {}"
-        + "interface Simple { public int run(); }";
+  private static final String weakOuterAndInterface =
+      """
+      import java.lang.annotation.*;
+      @Target(ElementType.TYPE_USE) @interface WeakOuter {}
+      interface Simple { public int run(); }
+      """;
 
   public void testAnonymousClassOuterRefCycle() throws Exception {
-    addSourceFile("Simple.java", weakOuterAndInterface
-        + "class Test { int member = 7; Simple o;"
-        + "void f() { o = new Simple() { public int run() { return member; } }; } }");
+    addSourceFile(
+        "Simple.java",
+        weakOuterAndInterface
+            + """
+            class Test {
+              int member = 7;
+              Simple o;
+              void f() {
+                o = new Simple() {
+                  public int run() {
+                    return member;
+                  }
+                };
+              }
+            }
+            """);
     findCycles();
 
     // Assert that we have one cycle that contains LTest and a LTest anonymous class.
@@ -86,24 +102,58 @@ public class CycleFinderTest extends TestCase {
   }
 
   public void testAnonymousClassWithWeakOuter() throws Exception {
-    addSourceFile("Simple.java", weakOuterAndInterface
-        + "class Test { int member = 7; Simple o;"
-        + "void f() { new @WeakOuter Simple() { public int run() { return member; } }; } }");
+    addSourceFile(
+        "Simple.java",
+        weakOuterAndInterface
+            + """
+            class Test {
+              int member = 7;
+              Simple o;
+              void f() {
+                new @WeakOuter Simple() {
+                  public int run() {
+                    return member;
+                  }
+                };
+              }
+            }
+            """);
     findCycles();
     assertNoCycles();
   }
 
   public void testInnerClassWithWeakOuter() throws Exception {
-    String source = "import com.google.j2objc.annotations.WeakOuter; "
-        + "public class A { @WeakOuter class B { int test() { return o.hashCode(); }} B o; }";
+    String source =
+        """
+        import com.google.j2objc.annotations.WeakOuter;
+        public class A {
+          @WeakOuter
+          class B {
+            int test() {
+              return o.hashCode();
+            }
+          }
+          B o;
+        }
+        """;
     addSourceFile("A.java", source);
     findCycles();
     assertNoCycles();
   }
 
   public void testInnerClassOuterRefCycle() throws Exception {
-    String source = "import com.google.j2objc.annotations.WeakOuter; "
-        + "public class A { class B {int test(){return o.hashCode();}} B o;}";
+    String source =
+        """
+        import com.google.j2objc.annotations.WeakOuter;
+        public class A {
+          class B {
+            int test() {
+              return o.hashCode();
+            }
+          }
+          B o;
+        }
+        """;
     addSourceFile("A.java", source);
     findCycles();
     assertCycle("LA;", "LA.B;");
@@ -140,89 +190,113 @@ public class CycleFinderTest extends TestCase {
     assertCycle("LA;", "LB<+LC;>;", "+LC;");
   }
 
-  public void testWhitelistedField() throws Exception {
+  public void testSuppressListedField() throws Exception {
     addSourceFile("A.java", "class A { B b; }");
     addSourceFile("B.java", "class B { A a; }");
-    whitelistEntries.add("FIELD A.b");
+    suppressListEntries.add("FIELD A.b");
     findCycles();
     assertNoCycles();
   }
 
-  public void testWhitelistedType() throws Exception {
+  public void testSuppressListedType() throws Exception {
     addSourceFile("test/foo/A.java", "package test.foo; class A { C c; }");
     addSourceFile("test/foo/B.java", "package test.foo; class B { A a; }");
     addSourceFile("test/foo/C.java", "package test.foo; class C extends B { }");
-    whitelistEntries.add("TYPE test.foo.C");
+    suppressListEntries.add("TYPE test.foo.C");
     findCycles();
     assertNoCycles();
-    whitelistEntries.set(0, "TYPE test.foo.A");
+    suppressListEntries.set(0, "TYPE test.foo.A");
     findCycles();
     assertNoCycles();
-    whitelistEntries.set(0, "TYPE test.foo.B");
+    suppressListEntries.set(0, "TYPE test.foo.B");
     findCycles();
     assertCycle("Ltest/foo/C;", "Ltest/foo/A;");
   }
 
-  public void testWhitelistedLocalType() throws Exception {
-    addSourceFile("test/foo/A.java",
-      "package test.foo; class A { B b; void test() { "
-      + "class Inner extends B { void foo() { A a = A.this; } } } }");
+  public void testSuppressListedLocalType() throws Exception {
+    addSourceFile(
+        "test/foo/A.java",
+        """
+        package test.foo;
+        class A {
+          B b;
+          void test() {
+            class Inner extends B {
+              void foo() {
+                A a = A.this;
+              }
+            }
+          }
+        }
+        """);
     addSourceFile("test/foo/B.java", "package test.foo; class B {}");
-    whitelistEntries.add("TYPE test.foo.A.test.Inner");
+    suppressListEntries.add("TYPE test.foo.A.test.Inner");
     findCycles();
     assertNoCycles();
   }
 
-  public void testWhitelistedAnonymousType() throws Exception {
-    addSourceFile("test/foo/A.java",
-      "package test.foo; class A { B b; B test() { "
-      + "return new B() { void foo() { A a = A.this; } }; } }");
+  public void testSuppressListedAnonymousType() throws Exception {
+    addSourceFile(
+        "test/foo/A.java",
+        """
+        package test.foo;
+        class A {
+          B b;
+          B test() {
+            return new B() {
+              void foo() {
+                A a = A.this;
+              }
+            };
+          }
+        }
+        """);
     addSourceFile("test/foo/B.java", "package test.foo; class B {}");
-    whitelistEntries.add("TYPE test.foo.A.test.$");
+    suppressListEntries.add("TYPE test.foo.A.test.$");
     findCycles();
     assertNoCycles();
   }
 
-  public void testSubtypeOfWhitelistedType() throws Exception {
+  public void testSubtypeOfSuppressListedType() throws Exception {
     addSourceFile("test/foo/A.java", "package test.foo; class A { B b; }");
     addSourceFile("test/foo/B.java", "package test.foo; class B { A a; }");
     addSourceFile("test/foo/C.java", "package test.foo; class C extends B { }");
-    whitelistEntries.add("TYPE test.foo.B");
+    suppressListEntries.add("TYPE test.foo.B");
     findCycles();
     assertNoCycles();
   }
 
-  public void testWhitelistedPackage() throws Exception {
+  public void testSuppressListedPackage() throws Exception {
     addSourceFile("test/foo/A.java",
                   "package test.foo; import test.bar.B; public class A { B b; }");
     addSourceFile("test/bar/B.java",
                   "package test.bar; import test.foo.A; public class B { A a; }");
-    whitelistEntries.add("NAMESPACE test.bar");
+    suppressListEntries.add("NAMESPACE test.bar");
     findCycles();
     assertNoCycles();
   }
 
-  public void testWhitelistedSubtype() throws Exception {
+  public void testSuppressListedSubtype() throws Exception {
     addSourceFile("A.java", "class A { B b; }");
     addSourceFile("B.java", "class B {}");
     addSourceFile("C.java", "class C extends B {}");
     addSourceFile("D.java", "class D extends C { A a; }");
-    whitelistEntries.add("FIELD A.b C");
+    suppressListEntries.add("FIELD A.b C");
     findCycles();
     assertNoCycles();
   }
 
-  public void testWhitelistedOuterReference() throws Exception {
+  public void testSuppressListedOuterReference() throws Exception {
     addSourceFile("A.java", "class A { Inner i; class Inner { void test() { A a = A.this; } } }");
-    whitelistEntries.add("OUTER A.Inner");
+    suppressListEntries.add("OUTER A.Inner");
     findCycles();
     assertNoCycles();
   }
 
-  public void testWhitelistComment() throws Exception {
+  public void testSuppressListComment() throws Exception {
     addSourceFile("A.java", "class A { B b; }");
     addSourceFile("B.java", "class B { A a; }");
-    whitelistEntries.add("# FIELD A.b");
+    suppressListEntries.add("# FIELD A.b");
     findCycles();
     assertCycle("LA;", "LB;");
   }
@@ -248,46 +322,91 @@ public class CycleFinderTest extends TestCase {
   }
 
   public void testCapturedVariable() throws Exception {
-    addSourceFile("A.java", "class A { void test() {"
-        + " final B b = new B();"
-        + " A a = new A() { void test() { b.hashCode(); } }; } }");
+    addSourceFile(
+        "A.java",
+        """
+        class A {
+          void test() {
+            final B b = new B();
+            A a = new A() {
+              void test() {
+                b.hashCode();
+              }
+            };
+          }
+        }
+        """);
     addSourceFile("B.java", "class B { A a; }");
     findCycles();
     assertCycle("LB;");
   }
 
   public void testCapturedVariableNotUsed() throws Exception {
-    addSourceFile("A.java", "class A { void test() {"
-        + " final B b = new B();"
-        + " A a = new A() { void test() { } }; } }");
+    addSourceFile(
+        "A.java",
+        """
+        class A {
+          void test() {
+            final B b = new B();
+            A a = new A() {
+              void test() {}
+            };
+          }
+        }
+        """);
     addSourceFile("B.java", "class B { A a; }");
     findCycles();
     assertNoCycles();
   }
 
   public void testWeakCapturedVariable() throws Exception {
-    addSourceFile("A.java", "import com.google.j2objc.annotations.Weak;"
-        + "class A { void test() {"
-        + " @Weak final B b = new B();"
-        + " A a = new A() { void test() { b.hashCode(); } }; } }");
+    addSourceFile(
+        "A.java",
+        """
+        import com.google.j2objc.annotations.Weak;
+        class A {
+          void test() {
+            @Weak final B b = new B();
+            A a = new A() {
+              void test() {
+                b.hashCode();
+              }
+            };
+          }
+        }
+        """);
     addSourceFile("B.java", "class B { A a; }");
     findCycles();
     assertNoCycles();
   }
 
   public void testFinalVarAfterAnonymousClassNotCaptured() throws Exception {
-    addSourceFile("A.java", "class A { void test() {"
-        + " A a = new A() {};"
-        + " final B b; } }");
+    addSourceFile(
+        "A.java",
+        """
+        class A {
+          void test() {
+            A a = new A() {};
+            final B b;
+          }
+        }
+        """);
     addSourceFile("B.java", "class B { A a; }");
     findCycles();
     assertNoCycles();
   }
 
   public void testOutOFScopeFinalVarNotCaptured() throws Exception {
-    addSourceFile("A.java", "class A { void test() {"
-        + " { final B b; }"
-        + " A a = new A() {}; } }");
+    addSourceFile(
+        "A.java",
+        """
+        class A {
+          void test() {
+            { final B b; }
+            A a = new A() {};
+          }
+        }
+        """);
     addSourceFile("B.java", "class B { A a; }");
     findCycles();
     assertNoCycles();
@@ -302,8 +421,18 @@ public class CycleFinderTest extends TestCase {
   }
 
   public void testAnonymousClassInStaticMethod() throws Exception {
-    addSourceFile("A.java", "class A { B b; static void test() { "
-        + "Runnable r = new Runnable() { public void run() {} }; } }");
+    addSourceFile(
+        "A.java",
+        """
+        class A {
+          B b;
+          static void test() {
+            Runnable r = new Runnable() {
+              public void run() {}
+            };
+          }
+        }
+        """);
     addSourceFile("B.java", "class B { Runnable r; }");
     findCycles();
     assertNoCycles();
@@ -324,21 +453,25 @@ public class CycleFinderTest extends TestCase {
     assertCycle("LA<LB;>;", "LB;", "LA<LB;>.C;");
   }
 
-  public void testBlacklist() throws Exception {
+  public void testrestrictToList() throws Exception {
     addSourceFile("A.java", "class A { B b; C c; }");
     addSourceFile("B.java", "class B { A a; }");
     addSourceFile("C.java", "class C { A a; }");
-    blacklistEntries.add("TYPE C");
+    restrictToListEntries.add("TYPE C");
     findCycles();
     assertEquals(1, cycles.size());
     assertCycle("LA;", "LC;");
   }
 
   public void testAnonymousLineNumbers() throws Exception {
-    addSourceFile("Test.java",
-        "class Test {\n"
-        + " void dummy() {}\n"
-        + " Runnable r = new Runnable() { public void run() { dummy(); } }; }");
+    addSourceFile(
+        "Test.java",
+        """
+        class Test {
+          void dummy() {}
+          Runnable r = new Runnable() { public void run() { dummy(); } };
+        }
+        """);
     findCycles();
     assertEquals(1, cycles.size());
     assertCycle("LTest;");
@@ -347,22 +480,41 @@ public class CycleFinderTest extends TestCase {
     }
   }
 
-  public void testWhitelistedAnonymousTypesInClassScope() throws Exception {
+  public void testSuppressListedAnonymousTypesInClassScope() throws Exception {
     addSourceFile("bar/AbstractA.java", "package bar; public class AbstractA {}");
     addSourceFile("bar/AbstractB.java", "package bar; public class AbstractB {}");
-    addSourceFile("foo/Test.java",
-        "package foo; import bar.AbstractA; import bar.AbstractB;"
-        + " class Test { AbstractA a = new AbstractA() { void dummyA() {}"
-        + " AbstractB b = new AbstractB() { void dummyB() { dummyA(); } }; }; }");
-    whitelistEntries.add("NAMESPACE foo");
+    addSourceFile(
+        "foo/Test.java",
+        """
+        package foo;
+        import bar.AbstractA;
+        import bar.AbstractB;
+        class Test {
+          AbstractA a = new AbstractA() {
+            void dummyA() {}
+            AbstractB b = new AbstractB() {
+              void dummyB() {
+                dummyA();
+              }
+            };
+          };
+        }
+        """);
+    suppressListEntries.add("NAMESPACE foo");
     findCycles();
     assertNoCycles();
   }
 
   public void testIncompatibleStripping() throws Exception {
-    addSourceFile("Test.java",
-        "import com.google.j2objc.annotations.J2ObjCIncompatible; "
-        + "import java.garbage.Foo; class Test { @J2ObjCIncompatible Foo foo; }");
+    addSourceFile(
+        "Test.java",
+        """
+        import com.google.j2objc.annotations.J2ObjCIncompatible;
+        import java.garbage.Foo;
+        class Test {
+          @J2ObjCIncompatible Foo foo;
+        }
+        """);
     // We just care that there are no compile errors.
     findCycles();
     assertNoCycles();
@@ -403,52 +555,82 @@ public class CycleFinderTest extends TestCase {
 
   public void testInnerClassWithExternalWeakOuter() throws Exception {
     String externalWeakOuterAnnotation =
-        "package com.google.j2objc.annotations: "
-            + "annotation @WeakOuter: "
-            + "@java.lang.annotation.Target(value={TYPE, LOCAL_VARIABLE})\n\n"
-            + "package p: "
-            + "class A$B: "
-            + "  @com.google.j2objc.annotations.WeakOuter ";
-    String source = "package p; "
-        + "public class A { class B { int test() { return o.hashCode(); }} B o; }";
+        """
+        package com.google.j2objc.annotations:
+        annotation @WeakOuter: @java.lang.annotation.Target(value={TYPE, LOCAL_VARIABLE})
+
+        package p:
+        class A$B: @com.google.j2objc.annotations.WeakOuter
+        """;
+    String source =
+        """
+        package p;
+        public class A {
+          class B {
+            int test() {
+              return o.hashCode();
+            }
+          }
+          B o;
+        }
+        """;
     addSourceFile("A.java", source);
     Options options = new Options();
-    options.addExternalAnnotationFileContents(externalWeakOuterAnnotation);
+    addExternalAnnotationFileContents(options, externalWeakOuterAnnotation);
     findCycles(options);
     assertNoCycles();
   }
 
   public void testFieldWithExternalWeak() throws Exception {
     String externalWeakAnnotation =
-        "package com.google.j2objc.annotations: "
-            + "annotation @Weak: "
-            + "@java.lang.annotation.Target(value={FIELD, LOCAL_VARIABLE, PARAMETER})\n\n"
-            + "package p: "
-            + "class A: "
-            + "field b:"
-            + "  @com.google.j2objc.annotations.Weak ";
+        """
+        package com.google.j2objc.annotations:
+        annotation @Weak: @java.lang.annotation.Target(value={FIELD, LOCAL_VARIABLE, PARAMETER})
+
+        package p:
+        class A:
+        field b: @com.google.j2objc.annotations.Weak
+        """;
     addSourceFile("A.java", "package p; class A { B b; }");
     addSourceFile("B.java", "package p; class B { A a; }");
     Options options = new Options();
-    options.addExternalAnnotationFileContents(externalWeakAnnotation);
+    addExternalAnnotationFileContents(options, externalWeakAnnotation);
     findCycles(options);
     assertNoCycles();
   }
 
   public void testFieldWithExternalRetainedWith() throws Exception {
     String externalRetainedWithAnnotation =
-        "package com.google.j2objc.annotations: "
-            + "annotation @RetainedWith: "
-            + "@java.lang.annotation.Target(value={FIELD})\n\n"
-            + "package p: "
-            + "class A: "
-            + "field b:"
-            + "  @com.google.j2objc.annotations.RetainedWith ";
+        """
+        package com.google.j2objc.annotations:
+        annotation @RetainedWith: @java.lang.annotation.Target(value={FIELD})
+
+        package p:
+        class A:
+        field b: @com.google.j2objc.annotations.RetainedWith
+        """;
     addSourceFile("A.java", "package p; class A { B b; }");
     addSourceFile("B.java", "package p; class B { A a; }");
     Options options = new Options();
-    options.addExternalAnnotationFileContents(externalRetainedWithAnnotation);
+    addExternalAnnotationFileContents(options, externalRetainedWithAnnotation);
     findCycles(options);
+    assertNoCycles();
+  }
+
+  public void testWeakOuterAnonymousTypeInArrayField() throws Exception {
+    // Test adapted from cycle in UCharacterProperty.java.
+    addSourceFile(
+        "Test.java",
+        """
+        import com.google.j2objc.annotations.WeakOuter;
+        class Test {
+          @WeakOuter private class IntProperty {}
+          IntProperty intProps[] = {
+            new @WeakOuter IntProperty() {},
+          };
+        }
+        """);
+    findCycles();
     assertNoCycles();
   }
 
@@ -496,17 +678,17 @@ public class CycleFinderTest extends TestCase {
   }
 
   private void findCycles(Options options) throws IOException {
-    if (!whitelistEntries.isEmpty()) {
-      File whitelistFile = new File(tempDir, "whitelist");
-      Files.asCharSink(whitelistFile, Charset.defaultCharset())
-          .write(Joiner.on("\n").join(whitelistEntries));
-      options.addWhitelistFile(whitelistFile.getAbsolutePath());
+    if (!suppressListEntries.isEmpty()) {
+      File suppressListFile = new File(tempDir, "suppress_list");
+      Files.asCharSink(suppressListFile, Charset.defaultCharset())
+          .write(Joiner.on("\n").join(suppressListEntries));
+      options.addSuppressListFile(suppressListFile.getAbsolutePath());
     }
-    if (!blacklistEntries.isEmpty()) {
-      File blacklistFile = new File(tempDir, "type_filter");
-      Files.asCharSink(blacklistFile, Charset.defaultCharset())
-          .write(Joiner.on("\n").join(blacklistEntries));
-      options.addBlacklistFile(blacklistFile.getAbsolutePath());
+    if (!restrictToListEntries.isEmpty()) {
+      File restrictToListFile = new File(tempDir, "type_filter");
+      Files.asCharSink(restrictToListFile, Charset.defaultCharset())
+          .write(Joiner.on("\n").join(restrictToListEntries));
+      options.addRestrictToFile(restrictToListFile.getAbsolutePath());
     }
     options.setSourceFiles(inputFiles);
     options.setClasspath(System.getProperty("java.class.path"));
@@ -525,11 +707,20 @@ public class CycleFinderTest extends TestCase {
     }
   }
 
-  private void addSourceFile(String fileName, String source) throws IOException {
+  private File addFile(String fileName, String source) throws IOException {
     File file = new File(tempDir, fileName);
     file.getParentFile().mkdirs();
     Files.asCharSink(file, Charset.defaultCharset()).write(source);
-    inputFiles.add(file.getAbsolutePath());
+    return file;
+  }
+
+  private void addSourceFile(String fileName, String source) throws IOException {
+    inputFiles.add(addFile(fileName, source).getAbsolutePath());
+  }
+
+  private void addExternalAnnotationFileContents(Options options, String content)
+      throws IOException {
+    options.addExternalAnnotationFile(addFile("annotations.jaif", content).getPath());
   }
 
   private File createTempDir() throws IOException {

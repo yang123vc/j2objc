@@ -26,6 +26,7 @@
 #import "IOSObjectArray.h"
 #import "IOSPrimitiveArray.h"
 #import "java/lang/ArrayIndexOutOfBoundsException.h"
+#import "java/lang/ArrayStoreException.h"
 #import "java/lang/AssertionError.h"
 
 static id NewArrayWithDimensionsAndComponentTypes(
@@ -51,8 +52,8 @@ static id NewArrayWithDimensionsAndComponentTypes(
   // dimensions.
   __unsafe_unretained id subarrays[size];
   for (jint i = 0; i < size; i++) {
-    subarrays[i] = [NewArrayWithDimensionsAndComponentTypes(
-        self, dimensionCount - 1, dimensionLengths + 1, componentTypes + 1) autorelease];
+    subarrays[i] = AUTORELEASE(NewArrayWithDimensionsAndComponentTypes(
+        self, dimensionCount - 1, dimensionLengths + 1, componentTypes + 1));
   }
   return [IOSObjectArray newArrayWithObjects:subarrays count:size type:componentType];
 }
@@ -81,7 +82,7 @@ id IOSArray_NewArrayWithDimensions(
 
 + (id)arrayWithDimensions:(NSUInteger)dimensionCount
                   lengths:(const jint *)dimensionLengths {
-  return [IOSArray_NewArrayWithDimensions(self, dimensionCount, dimensionLengths, nil) autorelease];
+  return AUTORELEASE(IOSArray_NewArrayWithDimensions(self, dimensionCount, dimensionLengths, nil));
 }
 
 + (id)newArrayWithDimensions:(NSUInteger)dimensionCount
@@ -140,8 +141,8 @@ void IOSArray_throwRangeOutOfBounds(jint size, jint offset, jint length) {
 #if __has_feature(objc_arc)
   @throw [[JavaLangAssertionError alloc] initWithId:@"abstract method not overridden"];
 #else
-  @throw [[[JavaLangAssertionError alloc]
-           initWithId:@"abstract method not overridden"] autorelease];
+  @throw AUTORELEASE([[JavaLangAssertionError alloc]
+           initWithId:@"abstract method not overridden"]);
 #endif
   return nil;
 }
@@ -150,6 +151,16 @@ void IOSArray_throwRangeOutOfBounds(jint size, jint offset, jint length) {
   IOSArray *copy = [[[self class] allocWithZone:zone] init];
   copy->size_ = size_;
   return copy;
+}
+
+// Define isEqual: and hash methods to be the same as NSObject's, which is
+// what they were before IOSArray was changed to subclass NSArray.
+- (BOOL)isEqual:(id)object {
+  return self == object;
+}
+
+- (NSUInteger)hash {
+  return (NSUInteger)self;
 }
 
 - (id)java_clone {
@@ -164,12 +175,30 @@ void IOSArray_throwRangeOutOfBounds(jint size, jint offset, jint length) {
       destination:(IOSArray *)destination
         dstOffset:(jint)dstOffset
            length:(jint)length {
-  @throw [[[JavaLangAssertionError alloc]
-      initWithId:@"abstract method not overridden"] autorelease];
+  @throw AUTORELEASE([[JavaLangAssertionError alloc]
+      initWithId:@"abstract method not overridden"]);
 }
 
 - (void *)buffer {
   return nil;
+}
+
+// NSMutableArray override methods that are not supported by Java array design.
+- (void)addObject:(id)anObject {
+  @throw create_JavaLangArrayStoreException_initWithNSString_(@"IOSArray size is immutable");
+}
+
+- (void)insertObject:(id)anObject 
+             atIndex:(NSUInteger)index {
+  @throw create_JavaLangArrayStoreException_initWithNSString_(@"IOSArray size is immutable");
+}
+
+- (void)removeObjectAtIndex:(NSUInteger)index {
+  @throw create_JavaLangArrayStoreException_initWithNSString_(@"IOSArray size is immutable");
+}
+
+- (void)removeLastObject {
+  @throw create_JavaLangArrayStoreException_initWithNSString_(@"IOSArray size is immutable");
 }
 
 @end

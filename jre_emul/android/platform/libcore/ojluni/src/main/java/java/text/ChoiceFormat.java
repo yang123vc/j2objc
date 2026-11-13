@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1996, 2005, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -50,7 +50,7 @@ import java.util.Arrays;
  * specifies a half-open interval up to the next item:
  * <blockquote>
  * <pre>
- * X matches j if and only if limit[j] &lt;= X &lt; limit[j+1]
+ * X matches j if and only if limit[j] &le; X &lt; limit[j+1]
  * </pre>
  * </blockquote>
  * If there is no match, then either the first or last index is used, depending
@@ -85,21 +85,21 @@ import java.util.Arrays;
  * <p>
  * Here is a simple example that shows formatting and parsing:
  * <blockquote>
- * <pre>
+ * <pre>{@code
  * double[] limits = {1,2,3,4,5,6,7};
  * String[] dayOfWeekNames = {"Sun","Mon","Tue","Wed","Thur","Fri","Sat"};
  * ChoiceFormat form = new ChoiceFormat(limits, dayOfWeekNames);
  * ParsePosition status = new ParsePosition(0);
- * for (double i = 0.0; i &lt;= 8.0; ++i) {
+ * for (double i = 0.0; i <= 8.0; ++i) {
  *     status.setIndex(0);
- *     System.out.println(i + " -&gt; " + form.format(i) + " -&gt; "
+ *     System.out.println(i + " -> " + form.format(i) + " -> "
  *                              + form.parse(form.format(i),status));
  * }
- * </pre>
+ * }</pre>
  * </blockquote>
  * Here is a more complex example, with a pattern format:
  * <blockquote>
- * <pre>
+ * <pre>{@code
  * double[] filelimits = {0,1,2};
  * String[] filepart = {"are no files","is one file","are {2} files"};
  * ChoiceFormat fileform = new ChoiceFormat(filelimits, filepart);
@@ -107,20 +107,20 @@ import java.util.Arrays;
  * MessageFormat pattform = new MessageFormat("There {0} on {1}");
  * pattform.setFormats(testFormats);
  * Object[] testArgs = {null, "ADisk", null};
- * for (int i = 0; i &lt; 4; ++i) {
+ * for (int i = 0; i < 4; ++i) {
  *     testArgs[0] = new Integer(i);
  *     testArgs[2] = testArgs[0];
  *     System.out.println(pattform.format(testArgs));
  * }
- * </pre>
+ * }</pre>
  * </blockquote>
  * <p>
  * Specifying a pattern for ChoiceFormat objects is fairly straightforward.
  * For example:
  * <blockquote>
- * <pre>
+ * <pre>{@code
  * ChoiceFormat fmt = new ChoiceFormat(
- *      "-1#is negative| 0#is zero or fraction | 1#is one |1.0&lt;is 1+ |2#is two |2&lt;is more than 2.");
+ *      "-1#is negative| 0#is zero or fraction | 1#is one |1.0<is 1+ |2#is two |2<is more than 2.");
  * System.out.println("Formatter Pattern : " + fmt.toPattern());
  *
  * System.out.println("Format with -INF : " + fmt.format(Double.NEGATIVE_INFINITY));
@@ -133,25 +133,25 @@ import java.util.Arrays;
  * System.out.println("Format with 2.1 : " + fmt.format(2.1));
  * System.out.println("Format with NaN : " + fmt.format(Double.NaN));
  * System.out.println("Format with +INF : " + fmt.format(Double.POSITIVE_INFINITY));
- * </pre>
+ * }</pre>
  * </blockquote>
  * And the output result would be like the following:
  * <blockquote>
- * <pre>
- *   Format with -INF : is negative
- *   Format with -1.0 : is negative
- *   Format with 0 : is zero or fraction
- *   Format with 0.9 : is zero or fraction
- *   Format with 1.0 : is one
- *   Format with 1.5 : is 1+
- *   Format with 2 : is two
- *   Format with 2.1 : is more than 2.
- *   Format with NaN : is negative
- *   Format with +INF : is more than 2.
- * </pre>
+ * <pre>{@code
+ * Format with -INF : is negative
+ * Format with -1.0 : is negative
+ * Format with 0 : is zero or fraction
+ * Format with 0.9 : is zero or fraction
+ * Format with 1.0 : is one
+ * Format with 1.5 : is 1+
+ * Format with 2 : is two
+ * Format with 2.1 : is more than 2.
+ * Format with NaN : is negative
+ * Format with +INF : is more than 2.
+ * }</pre>
  * </blockquote>
  *
- * <h4><a name="synchronization">Synchronization</a></h4>
+ * <h3><a id="synchronization">Synchronization</a></h3>
  *
  * <p>
  * Choice formats are not synchronized.
@@ -163,6 +163,7 @@ import java.util.Arrays;
  * @see          DecimalFormat
  * @see          MessageFormat
  * @author       Mark Davis
+ * @since 1.1
  */
 public class ChoiceFormat extends NumberFormat {
 
@@ -172,6 +173,8 @@ public class ChoiceFormat extends NumberFormat {
     /**
      * Sets the pattern.
      * @param newPattern See the class description.
+     * @exception NullPointerException if {@code newPattern}
+     *            is {@code null}
      */
     public void applyPattern(String newPattern) {
         StringBuffer[] segments = new StringBuffer[2];
@@ -199,26 +202,26 @@ public class ChoiceFormat extends NumberFormat {
                 segments[part].append(ch);
             } else if (ch == '<' || ch == '#' || ch == '\u2264') {
                 if (segments[0].length() == 0) {
-                    throw new IllegalArgumentException();
+                    throw new IllegalArgumentException("Each interval must"
+                            + " contain a number before a format");
                 }
-                try {
-                    String tempBuffer = segments[0].toString();
-                    if (tempBuffer.equals("\u221E")) {
-                        startValue = Double.POSITIVE_INFINITY;
-                    } else if (tempBuffer.equals("-\u221E")) {
-                        startValue = Double.NEGATIVE_INFINITY;
-                    } else {
-                        startValue = Double.valueOf(segments[0].toString()).doubleValue();
-                    }
-                } catch (Exception e) {
-                    throw new IllegalArgumentException();
+
+                String tempBuffer = segments[0].toString();
+                if (tempBuffer.equals("\u221E")) {
+                    startValue = Double.POSITIVE_INFINITY;
+                } else if (tempBuffer.equals("-\u221E")) {
+                    startValue = Double.NEGATIVE_INFINITY;
+                } else {
+                    startValue = Double.parseDouble(tempBuffer);
                 }
+
                 if (ch == '<' && startValue != Double.POSITIVE_INFINITY &&
                         startValue != Double.NEGATIVE_INFINITY) {
                     startValue = nextDouble(startValue);
                 }
                 if (startValue <= oldStartValue) {
-                    throw new IllegalArgumentException();
+                    throw new IllegalArgumentException("Incorrect order of"
+                            + " intervals, must be in ascending order");
                 }
                 segments[0].setLength(0);
                 part = 1;
@@ -255,9 +258,11 @@ public class ChoiceFormat extends NumberFormat {
 
     /**
      * Gets the pattern.
+     *
+     * @return the pattern string
      */
     public String toPattern() {
-        StringBuffer result = new StringBuffer();
+        StringBuilder result = new StringBuilder();
         for (int i = 0; i < choiceLimits.length; ++i) {
             if (i != 0) {
                 result.append('|');
@@ -270,7 +275,7 @@ public class ChoiceFormat extends NumberFormat {
             double tryLess = Math.abs(Math.IEEEremainder(less, 1.0d));
 
             if (tryLessOrEqual < tryLess) {
-                result.append(""+choiceLimits[i]);
+                result.append(choiceLimits[i]);
                 result.append('#');
             } else {
                 if (choiceLimits[i] == Double.POSITIVE_INFINITY) {
@@ -278,7 +283,7 @@ public class ChoiceFormat extends NumberFormat {
                 } else if (choiceLimits[i] == Double.NEGATIVE_INFINITY) {
                     result.append("-\u221E");
                 } else {
-                    result.append(""+less);
+                    result.append(less);
                 }
                 result.append('<');
             }
@@ -305,6 +310,10 @@ public class ChoiceFormat extends NumberFormat {
 
     /**
      * Constructs with limits and corresponding formats based on the pattern.
+     *
+     * @param newPattern the new pattern string
+     * @exception NullPointerException if {@code newPattern} is
+     *            {@code null}
      * @see #applyPattern
      */
     public ChoiceFormat(String newPattern)  {
@@ -313,6 +322,11 @@ public class ChoiceFormat extends NumberFormat {
 
     /**
      * Constructs with the limits and the corresponding formats.
+     *
+     * @param limits limits in ascending order
+     * @param formats corresponding format strings
+     * @exception NullPointerException if {@code limits} or {@code formats}
+     *            is {@code null}
      * @see #setChoices
      */
     public ChoiceFormat(double[] limits, String[] formats) {
@@ -322,9 +336,9 @@ public class ChoiceFormat extends NumberFormat {
     /**
      * Set the choices to be used in formatting.
      * @param limits contains the top value that you want
-     * parsed with that format,and should be in ascending sorted order. When
+     * parsed with that format, and should be in ascending sorted order. When
      * formatting X, the choice will be the i, where
-     * limit[i] &lt;= X &lt; limit[i+1].
+     * limit[i] &le; X {@literal <} limit[i+1].
      * If the limit array is not in ascending order, the results of formatting
      * will be incorrect.
      * @param formats are the formats you want to use for each limit.
@@ -332,30 +346,36 @@ public class ChoiceFormat extends NumberFormat {
      * When formatting with object Y,
      * if the object is a NumberFormat, then ((NumberFormat) Y).format(X)
      * is called. Otherwise Y.toString() is called.
+     * @exception NullPointerException if {@code limits} or
+     *            {@code formats} is {@code null}
      */
     public void setChoices(double[] limits, String formats[]) {
         if (limits.length != formats.length) {
             throw new IllegalArgumentException(
                 "Array and limit arrays must be of the same length.");
         }
-        choiceLimits = limits;
-        choiceFormats = formats;
+        choiceLimits = Arrays.copyOf(limits, limits.length);
+        choiceFormats = Arrays.copyOf(formats, formats.length);
     }
 
+    // Android-changed: Clarify that calling setChoices() changes what is returned here.
     /**
-     * Get the limits passed in the constructor.
-     * @return the limits.
+     * @return a copy of the {@code double[]} array supplied to the constructor or the most recent
+     * call to {@link #setChoices(double[], String[])}.
      */
     public double[] getLimits() {
-        return choiceLimits;
+        double[] newLimits = Arrays.copyOf(choiceLimits, choiceLimits.length);
+        return newLimits;
     }
 
+    // Android-changed: Clarify that calling setChoices() changes what is returned here.
     /**
-     * Get the formats passed in the constructor.
-     * @return the formats.
+     * @return a copy of the {@code String[]} array supplied to the constructor or the most recent
+     * call to {@link #setChoices(double[], String[])}.
      */
     public Object[] getFormats() {
-        return choiceFormats;
+        Object[] newFormats = Arrays.copyOf(choiceFormats, choiceFormats.length);
+        return newFormats;
     }
 
     // Overrides
@@ -374,9 +394,11 @@ public class ChoiceFormat extends NumberFormat {
 
     /**
      * Returns pattern with formatted double.
-     * @param number number to be formatted & substituted.
+     * @param number number to be formatted and substituted.
      * @param toAppendTo where text is appended.
      * @param status ignore no useful status is returned.
+     * @exception NullPointerException if {@code toAppendTo}
+     *            is {@code null}
      */
    public StringBuffer format(double number, StringBuffer toAppendTo,
                                FieldPosition status) {
@@ -400,11 +422,14 @@ public class ChoiceFormat extends NumberFormat {
      * @param status an input-output parameter.  On input, the
      * status.index field indicates the first character of the
      * source text that should be parsed.  On exit, if no error
-     * occured, status.index is set to the first unparsed character
+     * occurred, status.index is set to the first unparsed character
      * in the source text.  On exit, if an error did occur,
      * status.index is unchanged and status.errorIndex is set to the
      * first index of the character that caused the parse to fail.
      * @return A Number representing the value of the number parsed.
+     * @exception NullPointerException if {@code status} is {@code null}
+     *            or if {@code text} is {@code null} and the list of
+     *            choice strings is not empty.
      */
     public Number parse(String text, ParsePosition status) {
         // find the best number (defined as the one with the longest parse)
@@ -428,13 +453,16 @@ public class ChoiceFormat extends NumberFormat {
         if (status.index == start) {
             status.errorIndex = furthest;
         }
-        return new Double(bestNumber);
+        return Double.valueOf(bestNumber);
     }
 
     /**
-     * Finds the least double greater than d.
-     * If NaN, returns same value.
+     * Finds the least double greater than {@code d}.
+     * If {@code NaN}, returns same value.
      * <p>Used to make half-open intervals.
+     *
+     * @param d the reference value
+     * @return the least double value greather than {@code d}
      * @see #previousDouble
      */
     public static final double nextDouble (double d) {
@@ -442,8 +470,11 @@ public class ChoiceFormat extends NumberFormat {
     }
 
     /**
-     * Finds the greatest double less than d.
-     * If NaN, returns same value.
+     * Finds the greatest double less than {@code d}.
+     * If {@code NaN}, returns same value.
+     *
+     * @param d the reference value
+     * @return the greatest double value less than {@code d}
      * @see #nextDouble
      */
     public static final double previousDouble (double d) {
@@ -457,8 +488,8 @@ public class ChoiceFormat extends NumberFormat {
     {
         ChoiceFormat other = (ChoiceFormat) super.clone();
         // for primitives or immutables, shallow clone is enough
-        other.choiceLimits = (double[]) choiceLimits.clone();
-        other.choiceFormats = (String[]) choiceFormats.clone();
+        other.choiceLimits = choiceLimits.clone();
+        other.choiceFormats = choiceFormats.clone();
         return other;
     }
 
@@ -475,7 +506,7 @@ public class ChoiceFormat extends NumberFormat {
     }
 
     /**
-     * Equality comparision between two
+     * Equality comparison between two
      */
     public boolean equals(Object obj) {
         if (obj == null) return false;
@@ -551,15 +582,21 @@ public class ChoiceFormat extends NumberFormat {
     static final long POSITIVEINFINITY    = 0x7FF0000000000000L;
 
     /**
-     * Finds the least double greater than d (if positive == true),
-     * or the greatest double less than d (if positive == false).
-     * If NaN, returns same value.
+     * Finds the least double greater than {@code d} (if {@code positive} is
+     * {@code true}), or the greatest double less than {@code d} (if
+     * {@code positive} is {@code false}).
+     * If {@code NaN}, returns same value.
      *
      * Does not affect floating-point flags,
      * provided these member functions do not:
      *          Double.longBitsToDouble(long)
      *          Double.doubleToLongBits(double)
      *          Double.isNaN(double)
+     *
+     * @param d        the reference value
+     * @param positive {@code true} if the least double is desired;
+     *                 {@code false} otherwise
+     * @return the least or greater double value
      */
     public static double nextDouble (double d, boolean positive) {
 

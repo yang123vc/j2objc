@@ -14,38 +14,42 @@
 
 package com.google.devtools.treeshaker;
 
+import static com.google.common.collect.ImmutableList.toImmutableList;
+
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Table.Cell;
+import com.google.common.flogger.GoogleLogger;
 import com.google.common.io.Files;
 import com.google.devtools.j2objc.ast.CompilationUnit;
 import com.google.devtools.j2objc.file.RegularInputFile;
+import com.google.devtools.j2objc.pipeline.GenerationBatch;
 import com.google.devtools.j2objc.util.CodeReferenceMap;
 import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.FileUtil;
 import com.google.devtools.j2objc.util.Parser;
 import com.google.devtools.j2objc.util.ProGuardUsageParser;
-import com.google.devtools.j2objc.util.TranslationEnvironment;
-import com.google.devtools.treeshaker.ElementReferenceMapper.ReferenceNode;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
-import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
-/**
- * A tool for finding unused code in a Java program.
- *
- * @author Priyank Malvania
- */
+/** A tool for finding unused code in a Java program. */
+@SuppressWarnings("FloggerRedundantIsEnabled")
 public class TreeShaker {
-
+  private static final GoogleLogger logger = GoogleLogger.forEnclosingClass();
   private final Options options;
   private final com.google.devtools.j2objc.Options j2objcOptions;
-  private TranslationEnvironment env = null;
 
   static {
     // Enable assertions in the tree shaker.
@@ -55,15 +59,29 @@ public class TreeShaker {
     }
   }
 
-  public TreeShaker(Options options) throws IOException {
+  @VisibleForTesting
+  TreeShaker(Options options) throws IOException {
     this.options = options;
     j2objcOptions = new com.google.devtools.j2objc.Options();
-    j2objcOptions.load(new String[] {
-      "-sourcepath", Strings.nullToEmpty(options.getSourcepath()),
-      "-classpath", Strings.nullToEmpty(options.getClasspath()),
-      "-encoding", options.fileEncoding(),
-      "-source",   options.sourceVersion().flag()
-    });
+    List<String> list =
+        new ArrayList<>(
+            Arrays.asList(
+                "-sourcepath",
+                Strings.nullToEmpty(options.getSourcepath()),
+                "-classpath",
+                Strings.nullToEmpty(options.getClasspath()),
+                "-encoding",
+                options.fileEncoding(),
+                "-source",
+                options.sourceVersion().flag(),
+
+                // Disable all warnings, minimize diagnostic output to save memory.
+                "-Xlint:none",
+                "-Xjavac-warnings:true",
+                "-Xignore-jar-warnings"));
+    list.addAll(options.getPlatformModuleSystemOptions());
+    j2objcOptions.load(list.toArray(new String[0]));
+    j2objcOptions.setStripReflection(options.stripReflection());
   }
 
   private Parser createParser(Options options) throws IOException {
@@ -80,19 +98,19 @@ public class TreeShaker {
     if (nWarnings > 0 || nErrors > 0) {
       if (nWarnings > 0) {
         if (treatWarningsAsErrors) {
-          System.err.println("Treating warnings as errors.");
-          System.err.println("Failed with " + nWarnings + " warnings:");
+          logger.atSevere().log("Treating warnings as errors.");
+          logger.atSevere().log("Failed with %d warnings:", nWarnings);
         } else {
-          System.err.println("TreeShaker ran with " + nWarnings + " warnings:");
+          logger.atWarning().log("TreeShaker ran with %d warnings:", nWarnings);
         }
         for (String warning : ErrorUtil.getWarningMessages()) {
-          System.err.println("  warning: " + warning);
+          logger.atWarning().log("  warning: %s", warning);
         }
       }
       if (nErrors > 0) {
-        System.err.println("Failed with " + nErrors + " errors:");
+        logger.atSevere().log("Failed with %d errors:", nErrors);
         for (String error : ErrorUtil.getErrorMessages()) {
-          System.err.println("  error: " + error);
+          logger.atSevere().log("  error: %s", error);
         }
       }
       if (treatWarningsAsErrors) {
@@ -130,75 +148,213 @@ public class TreeShaker {
       String relativePath = qualifiedName.replace('.', File.separatorChar) + ".java";
       File strippedFile = new File(strippedDir, relativePath);
       Files.createParentDirs(strippedFile);
-      Files.write(
-          parseResult.getSource(), strippedFile, j2objcOptions.fileUtil().getCharset());
+      Files.asCharSink(strippedFile, j2objcOptions.fileUtil().getCharset())
+          .write(parseResult.getSource());
       sourceFileNames.set(i, strippedFile.getPath());
     }
     return strippedDir;
   }
 
-  public CodeReferenceMap getUnusedCode(CodeReferenceMap inputRootSet) throws IOException {
+  @VisibleForTesting
+  @Nullable CodeReferenceMap findUnusedCode() throws IOException {
+    TypeGraphBuilder tgb = createTypeGraphBuilder();
+    if (tgb == null) {
+      return null;
+    }
+    if (logger.atFine().isEnabled()) {
+      logger.atFine().log("External Types: %s", String.join(", ", tgb.getExternalTypeReferences()));
+    }
+    Collection<String> unknownMethodReferences = tgb.getUnknownMethodReferences();
+    if (!unknownMethodReferences.isEmpty()) {
+      logger.atWarning().log("Unknown Methods: %s", String.join(", ", unknownMethodReferences));
+    }
+    if (options.useClassHierarchyAnalyzer()) {
+      return ClassHierarchyAnalyzer.analyze(tgb.getTypes());
+    } else {
+      return RapidTypeAnalyser.analyse(tgb.getTypes());
+    }
+  }
+
+  private TypeGraphBuilder createTypeGraphBuilder() throws IOException {
+    if (options.getSummary() != null) {
+      LibraryInfo info = options.getSummary();
+      LibraryInfo markedInfo = UsedCodeMarker.mark(info, options.getTreeShakerRoots());
+      return new TypeGraphBuilder(ImmutableList.of(markedInfo));
+    } else if (!options.getSummaries().isEmpty()) {
+    ImmutableList<LibraryInfo> markedInfo =
+        options.getSummaries().stream()
+            .map(summary -> UsedCodeMarker.mark(summary, options.getTreeShakerRoots()))
+            .collect(toImmutableList());
+    return new TypeGraphBuilder(markedInfo);
+    } else {
+      return new TypeGraphBuilder(ImmutableList.of(createLibraryInfo()));
+    }
+  }
+
+  @Nullable LibraryInfo createLibraryInfo() throws IOException {
+    UsedCodeMarker.Context context;
+    if (options.getTreeShakerRoots() == null) {
+      context = new UsedCodeMarker.Context();
+    } else {
+      context = new UsedCodeMarker.Context(ProGuardUsageParser.parseDeadCodeFile(options.getTreeShakerRoots()));
+    }
     Parser parser = createParser(options);
-
-    final HashMap<String, ReferenceNode> elementReferenceMap = new HashMap<>();
-    final Set<String> staticSet = new HashSet<>();
-    final HashMap<String, Set<String>> overrideMap = new HashMap<>();
-
-    List<String> sourceFiles = options.getSourceFiles();
-    File strippedDir = stripIncompatible(sourceFiles, parser);
-
-    Parser.Handler handler = new Parser.Handler() {
-      @Override
-      public void handleParsedUnit(String path, CompilationUnit unit) {
-        if (env == null) {
-          env = unit.getEnv();
-        } else {
-          //TODO(malvania): Assertion fails! Remove this once we're sure all env utils are the same.
-          //assert(unit.getEnv() == env);
-        }
-        new ElementReferenceMapper(unit, elementReferenceMap, staticSet, overrideMap).run();
-      }
-    };
-    parser.parseFiles(sourceFiles, handler, options.sourceVersion());
-
-    FileUtil.deleteTempDir(strippedDir);
+    List<String> sourceFiles = getSourceFiles();
     if (ErrorUtil.errorCount() > 0) {
       return null;
     }
+    File strippedDir = stripIncompatible(sourceFiles, parser);
+    Parser.Handler handler =
+        new Parser.Handler() {
+          @Override
+          public void handleParsedUnit(String path, CompilationUnit unit) {
+            new UsedCodeMarker(unit, context).run();
+          }
+        };
 
-    UnusedCodeTracker tracker = new UnusedCodeTracker(env, elementReferenceMap, staticSet,
-        overrideMap);
-    tracker.mapOverridingMethods();
-    tracker.markUsedElements(inputRootSet);
-    CodeReferenceMap codeMap = tracker.buildTreeShakerMap();
-    return codeMap;
-  }
-
-  private static CodeReferenceMap loadRootSetMap(Options options) {
-    return ProGuardUsageParser.parseDeadCodeFile(options.getPublicRootSetFile());
-  }
-
-  public static void writeCodeReferenceMapInfo(BufferedWriter writer, CodeReferenceMap map)
-      throws IOException {
-    writer.write("Dead Classes:\n");
-    for (String clazz : map.getReferencedClasses()) {
-      writer.write(clazz + "\n");
+    parser.parseFiles(sourceFiles, handler, options.sourceVersion());
+    FileUtil.deleteTempDir(strippedDir);
+    parser.close();
+    if (ErrorUtil.errorCount() > 0) {
+      return null;
     }
-    //TODO(malvania): Add output formatting that can be easily read by the parser in translator.
-    writer.write("Dead Methods:\n");
-    for (Cell<String, String, ImmutableSet<String>> cell : map.getReferencedMethods().cellSet()) {
-      writer.write(cell.toString() + "\n");
-    }
+    return context.getLibraryInfo();
   }
 
-  public static void writeToFile(String fileName, CodeReferenceMap map) throws IOException {
-    File file = new File(fileName);
-    try {
-      BufferedWriter writer = Files.newWriter(file, Charset.defaultCharset());
-      writeCodeReferenceMapInfo(writer, map);
-      writer.close();
+  private List<String> getSourceFiles() {
+    GenerationBatch batch = new GenerationBatch(j2objcOptions);
+    batch.processFileArgs(options.getSourceFiles());
+    return batch.getInputs().stream()
+        .map(input -> input.getFile().getAbsolutePath())
+        .collect(Collectors.toList());
+  }
+
+  private static void writeToFile(Options options, CodeReferenceMap unused) {
+    try (BufferedWriter writer =
+        Files.newWriter(options.getOutputFile(), Charset.defaultCharset())) {
+      writeUnused(
+          unused,
+          s -> {
+            try {
+              writer.write(s);
+            } catch (IOException e) {
+              ErrorUtil.error(e.getMessage());
+            }
+          });
     } catch (IOException e) {
       ErrorUtil.error(e.getMessage());
+    }
+  }
+
+  @VisibleForTesting
+  static void writeUnused(CodeReferenceMap unused, Consumer<String> writer) {
+    ImmutableSortedSet<String> referencedClasses =
+        ImmutableSortedSet.copyOf(unused.getReferencedClasses());
+    for (String clazz : referencedClasses) {
+      writer.accept(clazz + "\n");
+    }
+    ImmutableSortedSet.Builder<Cell<String, String, ImmutableSet<String>>>
+        referencedMethodsCellSetBuilder =
+            ImmutableSortedSet.orderedBy(
+                (c1, c2) -> {
+                  if (c1.getRowKey().equals(c2.getRowKey())) {
+                    return c1.getColumnKey().compareTo(c2.getColumnKey());
+                  } else {
+                    return c1.getRowKey().compareTo(c2.getRowKey());
+                  }
+                });
+    referencedMethodsCellSetBuilder
+        .addAll(unused.getReferencedMethods().cellSet())
+        .build()
+        .forEach(
+            cell -> {
+              String type = cell.getRowKey();
+              String name = cell.getColumnKey();
+              writer.accept(type + ":\n");
+              cell.getValue()
+                  .forEach(
+                      signature -> {
+                        StringBuilder argTypes = new StringBuilder();
+                        StringBuilder returnTypeBuilder = new StringBuilder();
+                        int offset = getArgTypes(signature, 0, argTypes);
+                        getType(signature, offset, returnTypeBuilder);
+                        String returnType = returnTypeBuilder.toString();
+                        writer.accept("    ");
+                        if (!returnType.equals("void")) {
+                          writer.accept(returnType);
+                          writer.accept(" ");
+                        }
+                        writer.accept(name);
+                        writer.accept(argTypes.toString());
+                        writer.accept("\n");
+                      });
+            });
+  }
+
+  private static int getArgTypes(String type, int offset, StringBuilder result) {
+    result.append('(');
+    // consume '('
+    offset++;
+    boolean first = true;
+    while (type.charAt(offset) != ')') {
+      if (first) {
+        first = false;
+      } else {
+        result.append(',');
+      }
+      offset = getType(type, offset, result);
+    }
+    // consume ')'
+    offset++;
+    result.append(')');
+    return offset;
+  }
+
+  @VisibleForTesting
+  static int getType(String type, int offset, StringBuilder result) {
+    switch (type.charAt(offset)) {
+      case 'V':
+        result.append("void");
+        return offset + 1;
+      case 'Z':
+        result.append("boolean");
+        return offset + 1;
+      case 'C':
+        result.append("char");
+        return offset + 1;
+      case 'B':
+        result.append("byte");
+        return offset + 1;
+      case 'S':
+        result.append("short");
+        return offset + 1;
+      case 'I':
+        result.append("int");
+        return offset + 1;
+      case 'F':
+        result.append("float");
+        return offset + 1;
+      case 'J':
+        result.append("long");
+        return offset + 1;
+      case 'D':
+        result.append("double");
+        return offset + 1;
+      case '[':
+        offset = getType(type, offset + 1, result);
+        result.append("[]");
+        return offset;
+      case 'L':
+        int end = type.indexOf(';', offset + 1);
+        result.append(type.substring(offset + 1, end).replace('/', '.'));
+        return end + 1;
+        // case '(':
+      default:
+        StringBuilder argTypes = new StringBuilder();
+        offset = getArgTypes(type, offset, argTypes);
+        offset = getType(type, offset, result);
+        result.append(argTypes);
+        return offset;
     }
   }
 
@@ -210,15 +366,16 @@ public class TreeShaker {
     try {
       Options options = Options.parse(args);
       treatWarningsAsErrors = options.treatWarningsAsErrors();
-      TreeShaker finder = new TreeShaker(options);
-      finder.testFileExistence();
+      TreeShaker shaker = new TreeShaker(options);
+      shaker.testFileExistence();
       exitOnErrorsOrWarnings(treatWarningsAsErrors);
-      CodeReferenceMap unusedCodeMap = finder.getUnusedCode(loadRootSetMap(options));
-      writeToFile("tree-shaker-report.txt", unusedCodeMap);
+      CodeReferenceMap unusedCode = shaker.findUnusedCode();
+      if (unusedCode != null) {
+        writeToFile(options, unusedCode);
+      }
     } catch (IOException e) {
       ErrorUtil.error(e.getMessage());
     }
-
     exitOnErrorsOrWarnings(treatWarningsAsErrors);
   }
 }

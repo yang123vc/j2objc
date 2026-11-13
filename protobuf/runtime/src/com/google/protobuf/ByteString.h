@@ -60,7 +60,7 @@
 
 - (jbyte)byteAtWithInt:(jint)index;
 - (jint)size;
-- (jboolean)isEmpty;
+- (bool)isEmpty;
 - (ComGoogleProtobufByteString *)substringWithInt:(jint)beginIndex;
 - (ComGoogleProtobufByteString *)substringWithInt:(jint)beginIndex withInt:(jint)endIndex;
 - (IOSByteArray *)toByteArray;
@@ -68,6 +68,8 @@
 - (NSString *)toStringWithNSString:(NSString *)charsetName;
 - (NSString *)toStringUtf8;
 
++ (ComGoogleProtobufByteString *)empty;
++ (ComGoogleProtobufByteString *)fromHexWithNSString:(NSString *)hexString;
 + (ComGoogleProtobufByteString *)readFromWithJavaIoInputStream:(JavaIoInputStream *)streamToDrain;
 + (ComGoogleProtobufByteString *)readFromWithJavaIoInputStream:(JavaIoInputStream *)streamToDrain
                                                        withInt:(jint)chunkSize;
@@ -81,6 +83,7 @@
 @end
 
 typedef ComGoogleProtobufByteString CGPByteString;
+typedef ComGoogleProtobufByteString KNPComGoogleProtobufByteString;
 
 CF_EXTERN_C_BEGIN
 
@@ -88,6 +91,10 @@ ComGoogleProtobufByteString *ComGoogleProtobufByteString_copyFromWithByteArray_(
     IOSByteArray *bytes);
 
 ComGoogleProtobufByteString *ComGoogleProtobufByteString_copyFromUtf8WithNSString_(NSString *text);
+
+ComGoogleProtobufByteString *ComGoogleProtobufByteString_empty();
+
+ComGoogleProtobufByteString *ComGoogleProtobufByteString_fromHexWithNSString_(NSString *hexString);
 
 ComGoogleProtobufByteString *ComGoogleProtobufByteString_readFromWithJavaIoInputStream_(
     JavaIoInputStream *streamToDrain);

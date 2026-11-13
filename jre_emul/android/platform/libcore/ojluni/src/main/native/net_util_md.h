@@ -36,6 +36,7 @@
 #include <sys/poll.h>
 #endif
 
+#include "jni.h"
 
 #if defined(__linux__) || defined(MACOSX)
 extern int NET_Timeout(int s, long timeout);
@@ -106,7 +107,7 @@ void ThrowUnknownHostExceptionWithGaiError(JNIEnv *env,
 
 /* do we have address translation support */
 
-extern jboolean NET_addrtransAvailable();
+extern bool NET_addrtransAvailable(void);
 
 #define NET_WAIT_READ   0x01
 #define NET_WAIT_WRITE  0x02

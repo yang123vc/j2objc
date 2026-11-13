@@ -33,6 +33,7 @@
 #ifndef __ComGoogleProtobufMessageLite_H__
 #define __ComGoogleProtobufMessageLite_H__
 
+#import "com/google/protobuf/CodedOutputStream.h"
 #import "com/google/protobuf/MessageLiteOrBuilder.h"
 
 @class ComGoogleProtobufByteString;
@@ -49,9 +50,11 @@
 - (jint)getSerializedSize;
 - (ComGoogleProtobufByteString *)toByteString;
 - (IOSByteArray *)toByteArray;
+- (NSData *)toNSData;
 
 - (void)writeToWithJavaIoOutputStream:(JavaIoOutputStream *)output;
 - (void)writeDelimitedToWithJavaIoOutputStream:(JavaIoOutputStream *)output;
+- (void)writeToWithComGoogleProtobufCodedOutputStream:(ComGoogleProtobufCodedOutputStream *)output;
 
 @end
 
@@ -79,10 +82,10 @@ J2OBJC_TYPE_LITERAL_HEADER(ComGoogleProtobufMessageLite)
     mergeFromWithJavaIoInputStream:(JavaIoInputStream *)input
     withComGoogleProtobufExtensionRegistryLite:
         (ComGoogleProtobufExtensionRegistryLite *)extensionRegistry;
-- (jboolean)mergeDelimitedFromWithJavaIoInputStream:(JavaIoInputStream *)input;
-- (jboolean)mergeDelimitedFromWithJavaIoInputStream:(JavaIoInputStream *)input
-    withComGoogleProtobufExtensionRegistryLite:
-        (ComGoogleProtobufExtensionRegistryLite *)extensionRegistry;
+- (bool)mergeDelimitedFromWithJavaIoInputStream:(JavaIoInputStream *)input;
+- (bool)mergeDelimitedFromWithJavaIoInputStream:(JavaIoInputStream *)input
+     withComGoogleProtobufExtensionRegistryLite:
+         (ComGoogleProtobufExtensionRegistryLite *)extensionRegistry;
 
 @end
 

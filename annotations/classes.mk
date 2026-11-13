@@ -10,14 +10,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ANNOTATION_MODULE_INFO = \
+    module-info.java
+
 ANNOTATION_SOURCE_JAVA = \
     com/google/j2objc/annotations/AutoreleasePool.java \
+    com/google/j2objc/annotations/GenerateObjCCompanion.java \
+    com/google/j2objc/annotations/GenerateObjectiveCGenerics.java \
     com/google/j2objc/annotations/J2ObjCIncompatible.java \
     com/google/j2objc/annotations/LoopTranslation.java \
+    com/google/j2objc/annotations/ObjectiveCAdapterMethod.java \
+    com/google/j2objc/annotations/ObjectiveCAdapterProtocol.java \
+    com/google/j2objc/annotations/ObjectiveCKmpMethod.java \
     com/google/j2objc/annotations/ObjectiveCName.java \
+    com/google/j2objc/annotations/ObjectiveCNativeEnumName.java \
+    com/google/j2objc/annotations/ObjectiveCNativeProtocol.java \
+    com/google/j2objc/annotations/ObjectiveCNativeProtocols.java \
+    com/google/j2objc/annotations/OnDealloc.java \
     com/google/j2objc/annotations/Property.java \
     com/google/j2objc/annotations/ReflectionSupport.java \
     com/google/j2objc/annotations/RetainedLocalRef.java \
     com/google/j2objc/annotations/RetainedWith.java \
+    com/google/j2objc/annotations/SwiftName.java \
+    com/google/j2objc/annotations/UsedByNative.java \
+    com/google/j2objc/annotations/UsedByReflection.java \
     com/google/j2objc/annotations/Weak.java \
-    com/google/j2objc/annotations/WeakOuter.java
+    com/google/j2objc/annotations/WeakOuter.java \

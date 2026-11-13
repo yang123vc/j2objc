@@ -14,8 +14,6 @@
 #
 # Author: Keith Stanger
 
-SUFFIXES:
-
 J2OBJC_ROOT = ../..
 
 include $(J2OBJC_ROOT)/make/common.mk
@@ -23,37 +21,41 @@ include $(J2OBJC_ROOT)/make/j2objc_deps.mk
 include $(J2OBJC_ROOT)/java_deps/jars.mk
 
 SRCS = \
-  com/google/protobuf/AbstractMessage.m \
-  com/google/protobuf/ByteString.m \
-  com/google/protobuf/CodedInputStream.mm \
-  com/google/protobuf/CodedOutputStream.mm \
-  com/google/protobuf/Descriptors.m \
-  com/google/protobuf/Extension.m \
-  com/google/protobuf/ExtensionLite.m \
-  com/google/protobuf/ExtensionRegistry.mm \
-  com/google/protobuf/ExtensionRegistryLite.mm \
-  com/google/protobuf/GeneratedMessage.mm \
-  com/google/protobuf/InvalidProtocolBufferException.m \
-  com/google/protobuf/MapEntry.m \
-  com/google/protobuf/MapField.m \
-  com/google/protobuf/ProtocolStringList.m \
-  com/google/protobuf/RepeatedField.m \
-  com/google/protobuf/WireFormat.mm
+	com/google/protobuf/AbstractMessage.m \
+	com/google/protobuf/AbstractMessageLite.m \
+	com/google/protobuf/ByteString.m \
+	com/google/protobuf/CodedInputStream.mm \
+	com/google/protobuf/CodedOutputStream.mm \
+	com/google/protobuf/Descriptors.m \
+	com/google/protobuf/Extension.m \
+	com/google/protobuf/ExtensionLite.m \
+	com/google/protobuf/ExtensionRegistry.mm \
+	com/google/protobuf/ExtensionRegistryLite.mm \
+	com/google/protobuf/GeneratedMessage.mm \
+	com/google/protobuf/InvalidProtocolBufferException.m \
+	com/google/protobuf/MapEntry.m \
+	com/google/protobuf/MapField.m \
+	com/google/protobuf/ProtocolStringList.m \
+	com/google/protobuf/RepeatedField.m \
+	com/google/protobuf/TextFormat.mm \
+	com/google/protobuf/WireFormat.mm
 
 # This headers list defines those headers included by all client code
 # of the ProtobufRuntime framework.
-STATIC_FRAMEWORK_PUBLIC_HEADERS = \
-  com/google/protobuf/AbstractMessage.h \
-  com/google/protobuf/ByteString.h \
-  com/google/protobuf/Descriptors.h \
-  com/google/protobuf/Extension.h \
-  com/google/protobuf/ExtensionLite.h \
-  com/google/protobuf/ExtensionRegistry.h \
-  com/google/protobuf/ExtensionRegistryLite.h \
-  com/google/protobuf/GeneratedMessage.h \
-  com/google/protobuf/InvalidProtocolBufferException.h \
-  com/google/protobuf/MapEntry.h \
-  com/google/protobuf/ProtocolStringList.h
+FRAMEWORK_PUBLIC_HEADERS = \
+	com/google/protobuf/AbstractMessage.h \
+	com/google/protobuf/AbstractMessageLite.h \
+	com/google/protobuf/ByteString.h \
+	com/google/protobuf/Descriptors.h \
+	com/google/protobuf/Extension.h \
+	com/google/protobuf/ExtensionLite.h \
+	com/google/protobuf/ExtensionRegistry.h \
+	com/google/protobuf/ExtensionRegistryLite.h \
+	com/google/protobuf/GeneratedMessage.h \
+	com/google/protobuf/InvalidProtocolBufferException.h \
+	com/google/protobuf/MapEntry.h \
+	com/google/protobuf/ProtocolStringList.h \
+	com/google/protobuf/TextFormat.h
 
 SRC_DIR = $(CURDIR)/src
 
@@ -81,8 +83,8 @@ ALL_SOURCES_FULL = $(HEADERS) $(SOURCES_FULL)
 J2OBJCC = $(ARCH_BIN_DIR)/j2objcc
 
 C_FLAGS = $(DEBUGFLAGS) -Werror -Wobjc-missing-property-synthesis -Wshorten-64-to-32 \
-  -Wsign-compare -fobjc-abi-version=2 -fobjc-legacy-dispatch -stdlib=libc++ \
-  -Wno-nullability-completeness
+	-Wsign-compare -fobjc-abi-version=2 -fobjc-legacy-dispatch \
+	-Wno-nullability-completeness
 INCLUDE_DIRS = src $(GEN_OBJC_DIR)
 
 FAT_LIB_NAME = protobuf_runtime
@@ -91,10 +93,10 @@ FAT_LIB_SOURCE_DIRS = src $(GEN_OBJC_DIR)
 FAT_LIB_COMPILE = $(J2OBJCC) $(C_FLAGS) $(INCLUDE_DIRS:%=-I%)
 include $(J2OBJC_ROOT)/make/fat_lib.mk
 
-STATIC_FRAMEWORK_NAME = ProtobufRuntime
-STATIC_FRAMEWORK_HEADERS = $(DIST_HEADERS)
+FRAMEWORK_NAME = ProtobufRuntime
+FRAMEWORK_HEADERS = $(DIST_HEADERS)
 STATIC_HEADERS_DIR = $(ARCH_INCLUDE_DIR)
-include $(J2OBJC_ROOT)/make/static_framework.mk
+include $(J2OBJC_ROOT)/make/framework.mk
 
 fat_lib_dependencies: jre_emul_dist $(DESCRIPTOR_PROTO_H)
 
@@ -105,36 +107,41 @@ PROTOC_PLUGIN = $(DIST_DIR)/j2objc_protoc_plugin
 $(PROTOC_PLUGIN): protobuf_compiler_dist
 	@:
 
-dist: $(DIST_JAR) $(FAT_LIBS_DIST) $(ARCH_BUILD_DIR)/.dist_headers $(PROTOBUF_LICENSE_DIST)
+dist: framework | $(BUILD_DIR)
+
+lib: $(DIST_JAR) $(FAT_LIBS_DIST) $(ARCH_BUILD_DIR)/.dist_headers $(PROTOBUF_LICENSE_DIST)
 	@:
 
 java: $(DIST_JAR)
 	@:
 
-generate: $(ALL_SOURCES_FULL)
+generate: $(ALL_SOURCES_FULL) | $(BUILD_DIR)
 
-objc_sources_manifest: $(OBJC_SOURCES_MANIFEST)
+objc_sources_manifest: $(OBJC_SOURCES_MANIFEST) | $(BUILD_DIR)
 	@:
 
-$(OBJC_SOURCES_MANIFEST):
+$(OBJC_SOURCES_MANIFEST): | $(BUILD_DIR)
 	@mkdir -p $(@D)
 	@echo "Building $$(basename $@)"
 	@if [ -e $@ ]; then rm $@; fi
 	@files='$(ALL_SOURCES_FULL)' && for i in $$files; do \
-	  echo $$i >> $@; \
+		echo $$i >> $@; \
 	done
 
 $(PROTOBUF_LICENSE_DIST): $(PROTOBUF_LICENSE)
 	@mkdir -p $(@D)
 	@install -m 0644 $< $@
 
+$(BUILD_DIR):
+	@mkdir -p $@
+
 clean:
 	@rm -rf $(BUILD_DIR) $(DIST_JAR) $(FAT_LIBS_DIST) $(DIST_HEADERS)
 	@rm -rf $(PROTOBUF_LICENSE_DIST)
-	@rm -rf $(STATIC_FRAMEWORK_DIR)
+	@rm -rf $(FRAMEWORK_DIR)
 
 DESCRIPTOR_PROTO_M_CMD = $(PROTOBUF_PROTOC) --plugin=protoc-gen-j2objc=$(PROTOC_PLUGIN) \
-  --proto_path=$(PROTOBUF_INCLUDE_PATH) --j2objc_out=$(GEN_OBJC_DIR) $(DESCRIPTOR_PROTO)
+	--proto_path=$(PROTOBUF_INCLUDE_PATH) --j2objc_out=$(GEN_OBJC_DIR) $(DESCRIPTOR_PROTO)
 
 $(DESCRIPTOR_PROTO_M): $(DESCRIPTOR_PROTO) $(PROTOC_PLUGIN)
 	@mkdir -p $(@D)

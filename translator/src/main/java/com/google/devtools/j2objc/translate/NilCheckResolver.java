@@ -39,16 +39,18 @@ import com.google.devtools.j2objc.ast.ForStatement;
 import com.google.devtools.j2objc.ast.FunctionInvocation;
 import com.google.devtools.j2objc.ast.IfStatement;
 import com.google.devtools.j2objc.ast.InfixExpression;
+import com.google.devtools.j2objc.ast.InstanceofExpression;
 import com.google.devtools.j2objc.ast.LabeledStatement;
 import com.google.devtools.j2objc.ast.MethodDeclaration;
 import com.google.devtools.j2objc.ast.MethodInvocation;
 import com.google.devtools.j2objc.ast.NullLiteral;
-import com.google.devtools.j2objc.ast.ParenthesizedExpression;
+import com.google.devtools.j2objc.ast.RecordDeclaration;
 import com.google.devtools.j2objc.ast.ReturnStatement;
 import com.google.devtools.j2objc.ast.Statement;
 import com.google.devtools.j2objc.ast.SuperConstructorInvocation;
 import com.google.devtools.j2objc.ast.SuperMethodInvocation;
 import com.google.devtools.j2objc.ast.SwitchCase;
+import com.google.devtools.j2objc.ast.SwitchExpression;
 import com.google.devtools.j2objc.ast.SwitchStatement;
 import com.google.devtools.j2objc.ast.ThrowStatement;
 import com.google.devtools.j2objc.ast.TreeNode;
@@ -132,7 +134,7 @@ public class NilCheckResolver extends UnitTreeVisitor {
       this.kind = kind;
       this.label = label;
       // When the stack grows, the existing scope is assumed to be terminating
-      // until a decendent branch merges back into it.
+      // until a descendant branch merges back into it.
       if (next != null) {
         next.terminates = true;
       }
@@ -197,7 +199,7 @@ public class NilCheckResolver extends UnitTreeVisitor {
       vars.clear();
     }
 
-    // This scope is re-entered from it's parent scope.
+    // This scope is re-entered from its parent scope.
     private void backwardMerge() {
       if (terminates) {
         vars.clear();
@@ -400,8 +402,6 @@ public class NilCheckResolver extends UnitTreeVisitor {
     switch (e.getKind()) {
       case CAST_EXPRESSION:
         return needsNilCheck(((CastExpression) e).getExpression());
-      case PARENTHESIZED_EXPRESSION:
-        return needsNilCheck(((ParenthesizedExpression) e).getExpression());
       case ARRAY_ACCESS:
       case NULL_LITERAL:
       case PREFIX_EXPRESSION:
@@ -536,6 +536,11 @@ public class NilCheckResolver extends UnitTreeVisitor {
   }
 
   @Override
+  public boolean visit(RecordDeclaration node) {
+    return visitType(node);
+  }
+
+  @Override
   public boolean visit(TypeDeclaration node) {
     return visitType(node);
   }
@@ -597,6 +602,15 @@ public class NilCheckResolver extends UnitTreeVisitor {
           setConditionalSafeVars(node, Collections.singleton(maybeNullVar), EMPTY_VARS);
         }
       }
+    }
+    return true;
+  }
+
+  @Override
+  public boolean visit(InstanceofExpression node) {
+    VariableElement maybeNullVar = TreeUtil.getVariableElement(node.getLeftOperand());
+    if (maybeNullVar != null) {
+      setConditionalSafeVars(node, Collections.singleton(maybeNullVar), EMPTY_VARS);
     }
     return true;
   }
@@ -705,6 +719,20 @@ public class NilCheckResolver extends UnitTreeVisitor {
       }
     }
     popWithoutMerge();
+    return false;
+  }
+
+  @Override
+  @SuppressWarnings("UngroupedOverloads")
+  public boolean visit(SwitchExpression node) {
+    // No need to test for no matched value like SwitchStatement,
+    // as switch expressions are exhaustive.
+    node.getExpression().accept(this);
+    pushLoopOrSwitchScope(null);
+    for (Statement stmt : node.getStatements()) {
+      stmt.accept(this);
+    }
+    popAndMerge();
     return false;
   }
 

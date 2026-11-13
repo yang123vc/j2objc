@@ -26,10 +26,22 @@ public class MethodReferenceTest extends GenerationTest {
   // Test the creation of explicit blocks for lambdas with expression bodies.
   public void testCreationReferenceBlockWrapper() throws IOException {
     String creationReferenceHeader =
-        "class I { I() { } I(int x) { } I(int x, I j, String s, Object o) { } }\n"
-        + "interface FunInt<T> { T apply(int x); }"
-        + "interface FunInt4<T> { T apply(int x, I j, String s, Object o); }"
-        + "interface Call<T> { T call(); }";
+        """
+        class I {
+          I() {}
+          I(int x) {}
+          I(int x, I j, String s, Object o) {}
+        }
+        interface FunInt<T> {
+          T apply(int x);
+        }
+        interface FunInt4<T> {
+          T apply(int x, I j, String s, Object o);
+        }
+        interface Call<T> {
+          T call();
+        }
+        """;
 
     String noArgumentTranslation = translateSourceFile(
         creationReferenceHeader + "class Test { Call<I> iInit = I::new; }",
@@ -41,13 +53,13 @@ public class MethodReferenceTest extends GenerationTest {
     String oneArgumentTranslation = translateSourceFile(
         creationReferenceHeader + "class Test { FunInt<I> iInit2 = I::new; }", "Test", "Test.m");
     assertTranslatedLines(oneArgumentTranslation,
-        "- (id)applyWithInt:(jint)a {",
+        "- (id)applyWithInt:(int32_t)a {",
         "  return create_I_initWithInt_(a);",
         "}");
     String mixedArgumentTranslation = translateSourceFile(
         creationReferenceHeader + "class Test { FunInt4<I> iInit3 = I::new; }", "Test", "Test.m");
     assertTranslatedLines(mixedArgumentTranslation,
-        "- (id)applyWithInt:(jint)a",
+        "- (id)applyWithInt:(int32_t)a",
         "             withI:(I *)b",
         "      withNSString:(NSString *)c",
         "            withId:(id)d {",
@@ -57,13 +69,26 @@ public class MethodReferenceTest extends GenerationTest {
 
   // Test that expression method references resolve correctly for static and non-static methods.
   public void testExpressionReferenceStaticResolution() throws IOException {
-    String expressionReferenceHeader = "class Q { static Object o(Object x) { return x; }\n"
-        + "    Object o2(Object x) { return x; }}" + "interface F<T, R> { R f(T t); }";
+    String expressionReferenceHeader =
+        """
+        class Q {
+          static Object o(Object x) {
+            return x;
+          }
+          Object o2(Object x) {
+            return x;
+          }
+        }
+        interface F<T, R> {
+          R f(T t);
+        }
+        """;
     String staticTranslation = translateSourceFile(
         expressionReferenceHeader + "class Test { F fun = Q::o; }",
         "Test", "Test.m");
     // Should be non-capturing.
-    assertTranslation(staticTranslation,
+    assertInTranslation(
+        staticTranslation,
         "JreStrongAssign(&self->fun_, JreLoadStatic(Test_$Lambda$1, instance));");
     assertTranslatedLines(staticTranslation,
         "- (id)fWithId:(id)a {",
@@ -73,20 +98,22 @@ public class MethodReferenceTest extends GenerationTest {
         expressionReferenceHeader + "class Test { F fun = new Q()::o2; }",
         "Test", "Test.m");
     // Should be capturing.
-    assertTranslation(instanceTranslation,
+    assertInTranslation(
+        instanceTranslation,
         "JreStrongAssignAndConsume(&self->fun_, new_Test_$Lambda$1_initWithQ_(create_Q_init()));");
     assertTranslatedLines(instanceTranslation,
         "- (id)fWithId:(id)a {",
-        "  return [target$_ o2WithId:a];",
+        "  return JreRetainedLocalValue([target$_ o2WithId:a]);",
         "}");
     String staticInstanceTranslation = translateSourceFile(
         expressionReferenceHeader + "class Test { static F fun = new Q()::o2; }",
         "Test", "Test.m");
-    assertTranslation(staticInstanceTranslation,
+    assertInTranslation(
+        staticInstanceTranslation,
         "JreStrongAssignAndConsume(&Test_fun, new_Test_$Lambda$1_initWithQ_(create_Q_init()));");
     assertTranslatedLines(staticInstanceTranslation,
         "- (id)fWithId:(id)a {",
-        "  return [target$_ o2WithId:a];",
+        "  return JreRetainedLocalValue([target$_ o2WithId:a]);",
         "}");
   }
 
@@ -96,61 +123,99 @@ public class MethodReferenceTest extends GenerationTest {
         typeReferenceHeader + "class Test { H h = int[]::clone; }", "Test", "Test.m");
     assertTranslatedLines(translation,
         "- (id)copy__WithIntArray:(IOSIntArray *)a {",
-        "  return [((IOSIntArray *) nil_chk(a)) java_clone];",
+        "  return JreRetainedLocalValue([((IOSIntArray *) nil_chk(a)) java_clone]);",
         "}");
   }
 
   public void testReferenceToInstanceMethodOfType() throws IOException {
-    String source = "import java.util.Comparator;"
-        + "class Test { void f() { Comparator<String> s = String::compareTo; } }";
+    String source =
+        """
+        import java.util.Comparator;
+        class Test {
+          void f() {
+            Comparator<String> s = String::compareTo;
+          }
+        }
+        """;
 
     String impl = translateSourceFile(source, "Test", "Test.m");
-    assertTranslation(impl, "return [((NSString *) nil_chk(a)) compareToWithId:b];");
+    assertInTranslation(impl, "return [((NSString *) nil_chk(a)) compareToWithId:b];");
   }
 
   public void testReferenceToInstanceMethodOfGenericType() throws IOException {
-    String source = "interface BiConsumer<T,U> { void accept(T t, U u); } "
-        + "interface Collection<E> { boolean add(E x); } "
-        + "class Test {"
-        + "  <T> void f(Collection<T> c, T o) {"
-        + "    BiConsumer<Collection<T>, T> bc = Collection<T>::add;"
-        + "  }"
-        + "}";
+    String source =
+        """
+        interface BiConsumer<T, U> {
+          void accept(T t, U u);
+        }
+        interface Collection<E> {
+          boolean add(E x);
+        }
+        class Test {
+          <T> void f(Collection<T> c, T o) {
+            BiConsumer<Collection<T>, T> bc = Collection<T>::add;
+          }
+        }
+        """;
 
     String impl = translateSourceFile(source, "Test", "Test.m");
-    assertTranslation(impl, "[((id<Collection>) nil_chk(a)) addWithId:b];");
+    assertInTranslation(impl, "[((id<Collection>) nil_chk(a)) addWithId:b];");
     assertNotInTranslation(impl, "return [((id<Collection>) nil_chk(a)) addWithId:b];");
   }
 
   public void testReferenceToInstanceMethodOfGenericTypeWithReturnType() throws IOException {
-    String source = "interface BiConsumer<T,U> { boolean accept(T t, U u); } "
-        + "interface Collection<E> { boolean add(E x); } "
-        + "class Test {"
-        + "  <T> void f(Collection<T> c, T o) {"
-        + "    BiConsumer<Collection<T>, T> bc = Collection<T>::add;"
-        + "  }"
-        + "}";
+    String source =
+        """
+        interface BiConsumer<T, U> {
+          boolean accept(T t, U u);
+        }
+        interface Collection<E> {
+          boolean add(E x);
+        }
+        class Test {
+          <T> void f(Collection<T> c, T o) {
+            BiConsumer<Collection<T>, T> bc = Collection<T>::add;
+          }
+        }
+        """;
 
     String impl = translateSourceFile(source, "Test", "Test.m");
-    assertTranslation(impl, "return [((id<Collection>) nil_chk(a)) addWithId:b];");
+    assertInTranslation(impl, "return [((id<Collection>) nil_chk(a)) addWithId:b];");
   }
 
   public void testVarArgs() throws IOException {
-    String varArgsHeader = "interface I { void foo(int a1, String a2, String a3); }"
-        + "interface I2 { void foo(int a1, String a2, String a3, String a4); }"
-        + "class Y { static void m(int a1, String... rest) { } }";
-    String translation = translateSourceFile(
-        varArgsHeader + "class Test { I i = Y::m; I2 i2 = Y::m; }",
-        "Test", "Test.m");
+    String varArgsHeader =
+        """
+        interface I {
+          void foo(int a1, String a2, String a3);
+        }
+        interface I2 {
+          void foo(int a1, String a2, String a3, String a4);
+        }
+        class Y {
+          static void m(int a1, String... rest) {}
+        }
+        """;
+    String translation =
+        translateSourceFile(
+            varArgsHeader
+                + """
+                class Test {
+                  I i = Y::m;
+                  I2 i2 = Y::m;
+                }
+                """,
+            "Test",
+            "Test.m");
     assertTranslatedLines(translation,
-        "- (void)fooWithInt:(jint)a",
+        "- (void)fooWithInt:(int32_t)a",
         "      withNSString:(NSString *)b",
         "      withNSString:(NSString *)c {",
         "  Y_mWithInt_withNSStringArray_(a, [IOSObjectArray arrayWithObjects:(id[]){ b, c } "
             + "count:2 type:NSString_class_()]);",
         "}");
     assertTranslatedLines(translation,
-        "- (void)fooWithInt:(jint)a",
+        "- (void)fooWithInt:(int32_t)a",
         "      withNSString:(NSString *)b",
         "      withNSString:(NSString *)c",
         "      withNSString:(NSString *)d {",
@@ -163,9 +228,36 @@ public class MethodReferenceTest extends GenerationTest {
     String p = "interface P<T> { void f(T t); }";
     String q = "interface Q<T> { void f(T t, String a, String b); }";
     String r = "interface R<T> { void f(T t, String... rest); }";
-    String x1 = p + "class X { void g(String... rest) {} void h() { P<X> ff = X::g; } }";
-    String x2 = q + "class X { void g(String... rest) {} void h() { Q<X> ff = X::g; } }";
-    String x3 = r + "class X { void g(String... rest) {} void h() { R<X> ff = X::g; } }";
+    String x1 =
+        p
+            + """
+            class X {
+              void g(String... rest) {}
+              void h() {
+                P<X> ff = X::g;
+              }
+            }
+            """;
+    String x2 =
+        q
+            + """
+            class X {
+              void g(String... rest) {}
+              void h() {
+                Q<X> ff = X::g;
+              }
+            }
+            """;
+    String x3 =
+        r
+            + """
+            class X {
+              void g(String... rest) {}
+              void h() {
+                R<X> ff = X::g;
+              }
+            }
+            """;
     String impl1 = translateSourceFile(x1, "X", "X.m");
     String impl2 = translateSourceFile(x2, "X", "X.m");
     String impl3 = translateSourceFile(x3, "X", "X.m");
@@ -182,8 +274,8 @@ public class MethodReferenceTest extends GenerationTest {
         "- (void)fWithId:(X *)a",
         "   withNSString:(NSString *)b",
         "   withNSString:(NSString *)c {",
-        "  [((X *) nil_chk(a)) gWithNSStringArray:[IOSObjectArray arrayWithObjects:(id[]){ b, c } "
-            + "count:2 type:NSString_class_()]];",
+        "  [((X *) nil_chk(a)) gWithNSStringArray:[IOSObjectArray "
+            + "arrayWithObjects:(id[]){ b, c } count:2 type:NSString_class_()]];",
         "}");
 
     // Pass the varargs array to the referenced method.
@@ -195,13 +287,30 @@ public class MethodReferenceTest extends GenerationTest {
   }
 
   public void testArgumentBoxingAndUnboxing() throws IOException {
-    String header = "interface IntFun { void apply(int a); }\n"
-        + "interface IntegerFun { void apply(Integer a); }";
-    String translation = translateSourceFile(header
-        + "class Test { static void foo(Integer x) {}; static void bar(int x) {};"
-        + "IntFun f = Test::foo; IntegerFun f2 = Test::bar; }", "Test", "Test.m");
+    String header =
+        """
+        interface IntFun {
+          void apply(int a);
+        }
+        interface IntegerFun {
+          void apply(Integer a);
+        }
+        """;
+    String translation =
+        translateSourceFile(
+            header
+                + """
+                class Test {
+                  static void foo(Integer x) {}
+                  static void bar(int x) {}
+                  IntFun f = Test::foo;
+                  IntegerFun f2 = Test::bar;
+                }
+                """,
+            "Test",
+            "Test.m");
     assertTranslatedLines(translation,
-        "- (void)applyWithInt:(jint)a {",
+        "- (void)applyWithInt:(int32_t)a {",
         "  Test_fooWithJavaLangInteger_(JavaLangInteger_valueOfWithInt_(a));",
         "}");
     assertTranslatedLines(translation,
@@ -211,26 +320,55 @@ public class MethodReferenceTest extends GenerationTest {
   }
 
   public void testReturnBoxingAndUnboxing() throws IOException {
-    String header = "interface Fun { Integer a(); } interface Fun2 { int a(); }";
-    String translation = translateSourceFile(header
-        + "class Test { int size() { return 42; } Integer size2() { return 43; }"
-        + "Fun f = this::size; Fun2 f2 = this::size2; }",
-        "Test", "Test.m");
+    String header =
+        """
+        interface Fun {
+          Integer a();
+        }
+        interface Fun2 {
+          int a();
+        }
+        """;
+    String translation =
+        translateSourceFile(
+            header
+                + """
+                class Test {
+                  int size() {
+                    return 42;
+                  }
+                  Integer size2() {
+                    return 43;
+                  }
+                  Fun f = this::size;
+                  Fun2 f2 = this::size2;
+                }
+                """,
+            "Test",
+            "Test.m");
     assertTranslatedLines(translation,
         "- (JavaLangInteger *)a {",
         "  return JavaLangInteger_valueOfWithInt_([target$_ size]);",
         "}");
     assertTranslatedLines(translation,
-        "- (jint)a {",
-        "  return [((JavaLangInteger *) nil_chk([target$_ size2])) intValue];",
+        "- (int32_t)a {",
+        "  return [((JavaLangInteger *) nil_chk(([target$_ size2]))) intValue];",
         "}");
   }
 
   // Creation references can be initialized only for side effects, and have a void return.
   public void testCreationReferenceVoidReturn() throws IOException {
     String header = "interface V { void f(); }";
-    String translation = translateSourceFile(header + "class Test { V v = Test::new; }", "Test",
-        "Test.m");
+    String translation =
+        translateSourceFile(
+            header
+                + """
+                class Test {
+                  V v = Test::new;
+                }
+                """,
+            "Test",
+            "Test.m");
     assertTranslatedLines(translation,
         "- (void)f {",
         "  create_Test_init();",
@@ -239,32 +377,60 @@ public class MethodReferenceTest extends GenerationTest {
 
   public void testCreationReferenceNonVoidReturn() throws IOException {
     String header = "interface V { Object f(); }";
-    String translation = translateSourceFile(header + "class Test { V v = Test::new; }", "Test",
-        "Test.m");
+    String translation =
+        translateSourceFile(
+            header
+                + """
+                class Test {
+                  V v = Test::new;
+                }
+                """,
+            "Test",
+            "Test.m");
     assertTranslatedLines(translation, "- (id)f {", "return create_Test_init();");
   }
 
   public void testArrayCreationReference() throws IOException {
-    String translation = translateSourceFile("import java.util.function.Supplier;"
-        + "interface IntFunction<R> {"
-        + "  R apply(int value);"
-        + "}"
-        + "class Test {"
-        + "  IntFunction<int[]> i = int[]::new;"
-        + "}", "Test", "Test.m");
+    String translation =
+        translateSourceFile(
+            """
+            import java.util.function.Supplier;
+            interface IntFunction<R> {
+              R apply(int value);
+            }
+            class Test {
+              IntFunction<int[]> i = int[]::new;
+            }
+            """,
+            "Test",
+            "Test.m");
     assertNotInTranslation(translation, "return create_IntFunction_initWithIntArray_");
     assertTranslatedLines(translation,
-        "- (id)applyWithInt:(jint)a {",
-        "  return [IOSIntArray arrayWithLength:a];",
+        "- (id)applyWithInt:(int32_t)a {",
+        "  return JreRetainedLocalValue([IOSIntArray arrayWithLength:a]);",
         "}");
   }
 
   public void testCreationReferenceOfLocalCapturingType() throws IOException {
-    String translation = translateSourceFile(
-        "interface Supplier<T> { T get(); }"
-        + "class Test { static Supplier<Runnable> test(Runnable r) {"
-        + "class Runner implements Runnable { public void run() { r.run(); } }"
-        + "return Runner::new; } }", "Test", "Test.m");
+    String translation =
+        translateSourceFile(
+            """
+            interface Supplier<T> {
+              T get();
+            }
+            class Test {
+              static Supplier<Runnable> test(Runnable r) {
+                class Runner implements Runnable {
+                  public void run() {
+                    r.run();
+                  }
+                }
+                return Runner::new;
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
     assertTranslatedLines(translation,
         "void Test_$Lambda$1_initWithJavaLangRunnable_("
             + "Test_$Lambda$1 *self, id<JavaLangRunnable> capture$0) {",
@@ -278,11 +444,26 @@ public class MethodReferenceTest extends GenerationTest {
   }
 
   public void testQualifiedSuperMethodReference() throws IOException {
-    String translation = translateSourceFile(
-        "interface I { void bar(); }"
-        + "class Test { void foo() {} static class TestSub extends Test { void foo() {}"
-        + "class Inner { I test() { return TestSub.super::foo; } } } }",
-        "Test", "Test.m");
+    String translation =
+        translateSourceFile(
+            """
+            interface I {
+              void bar();
+            }
+            class Test {
+              void foo() {}
+              static class TestSub extends Test {
+                void foo() {}
+                class Inner {
+                  I test() {
+                    return TestSub.super::foo;
+                  }
+                }
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
     assertTranslatedLines(translation,
         "- (void)bar {",
         "  Test_foo(this$0_->this$0_);",
@@ -290,20 +471,51 @@ public class MethodReferenceTest extends GenerationTest {
   }
 
   public void testMultipleMethodReferencesNilChecks() throws IOException {
-    String translation = translateSourceFile(
-        "interface Foo { void f(Test t); }"
-        + "class Test { void foo() {} void test() {"
-        + " Foo f1 = Test::foo; Foo f2 = Test::foo; } }", "Test", "Test.m");
+    String translation =
+        translateSourceFile(
+            """
+            interface Foo {
+              void f(Test t);
+            }
+            class Test {
+              void foo() {}
+              void test() {
+                Foo f1 = Test::foo;
+                Foo f2 = Test::foo;
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
     // Both lambdas must perform a nil_chk on their local variable "a".
     assertOccurrences(translation, "nil_chk(a)", 2);
   }
 
   public void testCapturingExpressionMethodReferences() throws IOException {
-    String translation = translateSourceFile(
-        "interface Supplier { int get(); }"
-        + "class Holder { private int num; public Holder(int i) {num = i;} int get() {return num;}}"
-        + "class Test { public void run() { Holder h = new Holder(1); Supplier s = h::get; } }",
-        "Test", "Test.m");
+    String translation =
+        translateSourceFile(
+            """
+            interface Supplier {
+              int get();
+            }
+            class Holder {
+              private int num;
+              public Holder(int i) {
+                num = i;
+              }
+              int get() {
+                return num;
+              }
+            }
+            class Test {
+              public void run() {
+                Holder h = new Holder(1);
+                Supplier s = h::get;
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
     // Make sure there is a captured variable.
     assertTranslatedLines(translation,
         "@interface Test_$Lambda$1 : NSObject < Supplier > {",
@@ -316,6 +528,6 @@ public class MethodReferenceTest extends GenerationTest {
         "  id<Supplier> s = create_Test_$Lambda$1_initWithHolder_(h);",
         "}");
     // Make sure the receiver field is initialized.
-    assertTranslation(translation, "JreStrongAssign(&self->target$_, outer$);");
+    assertInTranslation(translation, "JreStrongAssign(&self->target$_, outer$);");
   }
 }

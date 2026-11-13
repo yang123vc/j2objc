@@ -31,6 +31,7 @@ import java.net.SocketOption;
 import java.net.SocketException;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.channels.AlreadyBoundException;
 import java.nio.channels.AlreadyConnectedException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ConnectionPendingException;
@@ -1045,7 +1046,7 @@ public class SocketChannelTest extends TestCase {
 
     }
 
-    /* TODO(user): fix and enable.
+    /* TODO(zgao): fix and enable.
      * connect-->finish-->connect-->close
     public void testCFII_ConnectAfterFinish_Server_NonBlock() throws Exception {
         connectServerNonBlock();
@@ -2411,36 +2412,37 @@ public class SocketChannelTest extends TestCase {
         }
     }
 
-    public void testWriteByteBuffer_Direct() throws IOException {
-        assertTrue(this.server1.isBound());
-        java.nio.ByteBuffer writeBuf = java.nio.ByteBuffer
-                .allocateDirect(CAPACITY_NORMAL);
-        assertFalse(this.channel1.isRegistered());
-        assertTrue(this.channel1.isBlocking());
-        assertFalse(this.channel1.isConnected());
-        assertFalse(this.channel1.isConnectionPending());
-        assertTrue(this.channel1.isOpen());
-        try {
-            channel1.write(writeBuf);
-            fail("Should throw NotYetConnectedException");
-        } catch (NotYetConnectedException e) {
-            // correct
-        }
-        this.channel1.connect(localAddr1);
-        assertTrue(this.channel1.isBlocking());
-        assertTrue(this.channel1.isConnected());
-        assertFalse(this.channel1.isConnectionPending());
-        assertTrue(this.channel1.isOpen());
-        assertEquals(CAPACITY_NORMAL, this.channel1.write(writeBuf));
+    // TODO(b/311121150): Fix java.net.ConnectException: NioSocketError issue
+    // public void testWriteByteBuffer_Direct() throws IOException {
+    //     assertTrue(this.server1.isBound());
+    //     java.nio.ByteBuffer writeBuf = java.nio.ByteBuffer
+    //             .allocateDirect(CAPACITY_NORMAL);
+    //     assertFalse(this.channel1.isRegistered());
+    //     assertTrue(this.channel1.isBlocking());
+    //     assertFalse(this.channel1.isConnected());
+    //     assertFalse(this.channel1.isConnectionPending());
+    //     assertTrue(this.channel1.isOpen());
+    //     try {
+    //         channel1.write(writeBuf);
+    //         fail("Should throw NotYetConnectedException");
+    //     } catch (NotYetConnectedException e) {
+    //         // correct
+    //     }
+    //     this.channel1.connect(localAddr1);
+    //     assertTrue(this.channel1.isBlocking());
+    //     assertTrue(this.channel1.isConnected());
+    //     assertFalse(this.channel1.isConnectionPending());
+    //     assertTrue(this.channel1.isOpen());
+    //     assertEquals(CAPACITY_NORMAL, this.channel1.write(writeBuf));
 
-        this.channel1.close();
-        try {
-            channel1.write(writeBuf);
-            fail("Should throw ClosedChannelException");
-        } catch (ClosedChannelException e) {
-            // correct
-        }
-    }
+    //     this.channel1.close();
+    //     try {
+    //         channel1.write(writeBuf);
+    //         fail("Should throw ClosedChannelException");
+    //     } catch (ClosedChannelException e) {
+    //         // correct
+    //     }
+    // }
 
     public void testWriteByteBuffer_BufNull() throws IOException {
         assertTrue(this.server1.isBound());

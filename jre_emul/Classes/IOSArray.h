@@ -21,26 +21,28 @@
 #import "J2ObjC_common.h"
 #import "NSObject+JavaObject.h"
 
+#import <Foundation/NSArray.h>
+
 @class IOSClass;
 
 /**
  * An abstract class that represents a Java array.  Like a Java array,
  * an IOSArray is fixed-size but its elements are mutable.
  */
-@interface IOSArray : NSObject < NSCopying > {
+@interface IOSArray<__covariant ObjectType> : NSMutableArray<ObjectType> {
  @public
   /**
    * Size of the array. This field is read-only, visible only for
    * performance reasons. DO NOT MODIFY.
    */
-  jint size_;
+  int32_t size_;
 }
 
 /** Returns the size of this array. */
-- (jint)length;
+- (int32_t)length;
 
 /** Returns the description of a specified element in the array. */
-- (NSString *)descriptionOfElementAtIndex:(jint)index;
+- (NSString *)descriptionOfElementAtIndex:(int32_t)index;
 
 /** Returns the element type of this array. */
 - (IOSClass *)elementType;
@@ -59,33 +61,23 @@
 @end
 
 CF_EXTERN_C_BEGIN
-void IOSArray_throwOutOfBoundsWithMsg(jint size, jint index);
-void IOSArray_throwRangeOutOfBounds(jint size, jint offset, jint length);
+void IOSArray_throwOutOfBoundsWithMsg(int32_t size, int32_t index);
+void IOSArray_throwRangeOutOfBounds(int32_t size, int32_t offset, int32_t length);
 CF_EXTERN_C_END
 
-/** Implements the IOSArray |checkIndex| method as a C function. This
- * allows IOSArray index checks to be completely removed via the
- * J2OBJC_DISABLE_ARRAY_CHECKS macro to improve performance.
- */
-__attribute__((always_inline)) inline void IOSArray_checkIndex(jint size, jint index) {
-#if !defined(J2OBJC_DISABLE_ARRAY_BOUND_CHECKS)
+/** Implements the IOSArray |checkIndex| method as a C function. */
+__attribute__((always_inline)) inline void IOSArray_checkIndex(int32_t size, int32_t index) {
   if (__builtin_expect(index < 0 || index >= size, 0)) {
     IOSArray_throwOutOfBoundsWithMsg(size, index);
   }
-#endif
 }
 
-/** Implements the IOSArray |checkRange| method as a C function. This
- * allows IOSArray range checks to be completely removed via the
- * J2OBJC_DISABLE_ARRAY_CHECKS macro to improve performance.
- */
+/** Implements the IOSArray |checkRange| method as a C function. */
 __attribute__((always_inline)) inline void IOSArray_checkRange(
-    jint size, jint offset, jint length) {
-#if !defined(J2OBJC_DISABLE_ARRAY_BOUND_CHECKS)
+    int32_t size, int32_t offset, int32_t length) {
   if (__builtin_expect(length < 0 || offset < 0 || offset + length > size, 0)) {
     IOSArray_throwRangeOutOfBounds(size, offset, length);
   }
-#endif
 }
 
 #endif // IOSARRAY_H

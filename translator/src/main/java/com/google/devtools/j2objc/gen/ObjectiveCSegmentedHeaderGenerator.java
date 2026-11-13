@@ -40,7 +40,8 @@ public class ObjectiveCSegmentedHeaderGenerator extends ObjectiveCHeaderGenerato
   }
 
   @Override
-  protected void generateFileHeader() {
+  protected Set<String> generateFileHeader() {
+    println("#import <Foundation/Foundation.h>");
     println("#include \"J2ObjC_header.h\"");
     newline();
     printf("#pragma push_macro(\"INCLUDE_ALL_%s\")\n", varPrefix);
@@ -68,6 +69,7 @@ public class ObjectiveCSegmentedHeaderGenerator extends ObjectiveCHeaderGenerato
       }
       printf("\n#endif // %s_H\n", varPrefix);
     }
+    return Sets.newHashSet();
   }
 
   /**
@@ -120,8 +122,8 @@ public class ObjectiveCSegmentedHeaderGenerator extends ObjectiveCHeaderGenerato
     Set<Import> forwardDeclarations = Sets.newHashSet(type.getHeaderForwardDeclarations());
 
     for (Import imp : type.getHeaderIncludes()) {
-      // Verify this import isn't declared in this source file.
-      if (isLocalType(imp.getTypeName())) {
+      // Verify this import isn't declared in this source file or has no header.
+      if (isLocalType(imp.getTypeName()) || imp.getImportFileName().isEmpty()) {
         continue;
       }
       newline();

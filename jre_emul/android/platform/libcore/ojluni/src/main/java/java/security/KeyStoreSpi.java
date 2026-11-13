@@ -34,6 +34,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 
 import javax.crypto.SecretKey;
+
 import javax.security.auth.callback.*;
 
 /**
@@ -379,6 +380,12 @@ public abstract class KeyStoreSpi {
     public void engineLoad(KeyStore.LoadStoreParameter param)
                 throws IOException, NoSuchAlgorithmException,
                 CertificateException {
+        engineLoad(null, param);
+    }
+
+    void engineLoad(InputStream stream, KeyStore.LoadStoreParameter param)
+                throws IOException, NoSuchAlgorithmException,
+                CertificateException {
 
         if (param == null) {
             engineLoad((InputStream)null, (char[])null);
@@ -446,39 +453,71 @@ public abstract class KeyStoreSpi {
                         KeyStore.ProtectionParameter protParam)
                 throws KeyStoreException, NoSuchAlgorithmException,
                 UnrecoverableEntryException {
-
-        if (!engineContainsAlias(alias)) {
+        // Android-changed: add null check previously always done here inside engineContainsAlias
+        // if (!engineContainsAlias(alias)) {
+        if (alias == null) {
             return null;
         }
 
-        if (protParam != null &&
-                !(protParam instanceof KeyStore.PasswordProtection)) {
-            throw new UnsupportedOperationException();
+        // BEGIN Android-added: Figure out the type of entry once
+        // To avoid many redundant calls that for some providers like
+        // AndroidKeyStoreSpi are costly since it performs
+        // binder transactions everytime we call engineIsKeyEntry or
+        // engineContainsAlias methods and rely on the knowledge
+        // that the only two types of entries are keys or certificates.
+        boolean isCertificateEntry;
+        if (!engineIsKeyEntry(alias)){
+            if (!engineContainsAlias(alias)) {
+                return null;
+            }
+            // If it is not a key then it has to be a certificate
+            isCertificateEntry = true;
+        } else {
+            isCertificateEntry = false;
+        }
+        // END Android-added: Figure out the type of entry once
+
+        if (protParam == null) {
+            // Android-changed: Use cached value
+            // if (engineIsCertificateEntry(alias)) {
+            if (isCertificateEntry) {
+                return new KeyStore.TrustedCertificateEntry
+                                (engineGetCertificate(alias));
+            // Android-removed: Allow access to entries with no password.
+            // } else {
+            //    throw new UnrecoverableKeyException
+            //            ("requested entry requires a password");
+            }
         }
 
-        if (engineIsCertificateEntry(alias)) {
-            if (protParam == null) {
-                return new KeyStore.TrustedCertificateEntry
-                        (engineGetCertificate(alias));
-            } else {
+        // Android-changed: Add protParam == null to allow access to entries with no password.
+        if ((protParam == null) || protParam instanceof KeyStore.PasswordProtection) {
+            if (isCertificateEntry) {
                 throw new UnsupportedOperationException
                     ("trusted certificate entries are not password-protected");
+                // Android-changed: avoid redundant check
+                // else if (engineIsKeyEntry(alias)) {
+            } else {
+                // Android-changed: Allow access to entries with no password.
+                // KeyStore.PasswordProtection pp =
+                //         (KeyStore.PasswordProtection)protParam;
+                // char[] password = pp.getPassword();
+                char[] password = null;
+                if (protParam != null) {
+                    KeyStore.PasswordProtection pp =
+                        (KeyStore.PasswordProtection)protParam;
+                    password = pp.getPassword();
+                }
+                Key key = engineGetKey(alias, password);
+                if (key instanceof PrivateKey) {
+                    Certificate[] chain = engineGetCertificateChain(alias);
+                    return new KeyStore.PrivateKeyEntry((PrivateKey)key, chain);
+                } else if (key instanceof SecretKey) {
+                    return new KeyStore.SecretKeyEntry((SecretKey)key);
+                }
             }
-        } else if (engineIsKeyEntry(alias)) {
-          char[] password = null;
-          if (protParam != null) {
-              KeyStore.PasswordProtection pp =
-                      (KeyStore.PasswordProtection)protParam;
-              password = pp.getPassword();
-          }
-          Key key = engineGetKey(alias, password);
-          if (key instanceof PrivateKey) {
-              Certificate[] chain = engineGetCertificateChain(alias);
-              return new KeyStore.PrivateKeyEntry((PrivateKey)key, chain);
-          } else if (key instanceof SecretKey) {
-              return new KeyStore.SecretKeyEntry((SecretKey)key);
-          }
         }
+
         throw new UnsupportedOperationException();
     }
 
@@ -514,6 +553,7 @@ public abstract class KeyStoreSpi {
             pProtect = (KeyStore.PasswordProtection)protParam;
         }
 
+        // BEGIN Android-changed: Allow access to entries with no password.
         char[] password = (pProtect == null) ? null : pProtect.getPassword();
         // set entry
         if (entry instanceof KeyStore.TrustedCertificateEntry) {
@@ -536,6 +576,7 @@ public abstract class KeyStoreSpi {
                 (Certificate[])null);
             return;
         }
+        // END Android-changed: Allow access to entries with no password.
 
         throw new KeyStoreException
                 ("unsupported entry type: " + entry.getClass().getName());
@@ -569,6 +610,31 @@ public abstract class KeyStoreSpi {
         if (entryClass == KeyStore.SecretKeyEntry.class) {
             return engineIsKeyEntry(alias) &&
                         engineGetCertificate(alias) == null;
+        }
+        return false;
+    }
+
+    /**
+     * Probes the specified input stream to determine whether it contains a
+     * keystore that is supported by this implementation, or not.
+     *
+     * @implSpec
+     * This method returns false by default. Keystore implementations should
+     * override this method to peek at the data stream directly or to use other
+     * content detection mechanisms.
+     *
+     * @param  stream the keystore data to be probed
+     *
+     * @return true if the keystore data is supported, otherwise false
+     *
+     * @throws IOException if there is an I/O problem with the keystore data.
+     * @throws NullPointerException if stream is {@code null}.
+     *
+     * @since 9
+     */
+    public boolean engineProbe(InputStream stream) throws IOException {
+        if (stream == null) {
+            throw new NullPointerException("input stream must not be null");
         }
         return false;
     }

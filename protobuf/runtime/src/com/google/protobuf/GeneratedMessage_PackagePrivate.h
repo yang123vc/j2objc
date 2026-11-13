@@ -46,20 +46,13 @@
 }
 @end
 
-CGP_ALWAYS_INLINE inline ComGoogleProtobufGeneratedMessage *CGPNewMessage(
-    ComGoogleProtobufDescriptors_Descriptor *descriptor) {
-  ComGoogleProtobufGeneratedMessage *msg =
-      NSAllocateObject(descriptor->messageClass_, descriptor->storageSize_, nil);
-  msg->memoizedSize_ = -1;
-  return msg;
-}
-
-CGP_ALWAYS_INLINE inline ComGoogleProtobufGeneratedMessage_Builder *CGPNewBuilder(
-    ComGoogleProtobufDescriptors_Descriptor *descriptor) {
-  return NSAllocateObject(descriptor->builderClass_, descriptor->storageSize_, nil);
-}
-
 CF_EXTERN_C_BEGIN
+
+NS_RETURNS_RETAINED ComGoogleProtobufGeneratedMessage *CGPNewMessage(
+    ComGoogleProtobufDescriptors_Descriptor *descriptor);
+
+NS_RETURNS_RETAINED ComGoogleProtobufGeneratedMessage_Builder *CGPNewBuilder(
+    ComGoogleProtobufDescriptors_Descriptor *descriptor);
 
 ComGoogleProtobufGeneratedMessage_Builder *CGPBuilderFromPrototype(
     CGPDescriptor *descriptor, ComGoogleProtobufGeneratedMessage *prototype);
@@ -71,6 +64,9 @@ ComGoogleProtobufGeneratedMessage *CGPParseFromByteArray(
 
 ComGoogleProtobufGeneratedMessage *CGPParseFromInputStream(
     CGPDescriptor *descriptor, JavaIoInputStream *input, CGPExtensionRegistryLite *registry);
+
+ComGoogleProtobufGeneratedMessage *CGPParseFromByteString(CGPDescriptor *descriptor,
+    ComGoogleProtobufByteString *byteString, CGPExtensionRegistryLite *registry);
 
 ComGoogleProtobufGeneratedMessage *CGPParseDelimitedFromInputStream(
     CGPDescriptor *descriptor, JavaIoInputStream *input, CGPExtensionRegistryLite *registry);

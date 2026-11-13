@@ -17,7 +17,6 @@
 #
 # Author: Tom Ball
 
-SUFFIXES:
 .PHONY: translator dist test
 
 default: dist
@@ -39,7 +38,7 @@ install-man-pages: $(MAN_PAGES)
 	@mkdir -p $(DIST_DIR)/man/man1
 	@install -C -m 0644 $? $(DIST_DIR)/man/man1
 
-EXTRA_DIST_FILES = LICENSE WORKSPACE BUILD
+EXTRA_DIST_FILES = LICENSE BUILD MODULE.bazel MODULE.bazel.lock
 
 $(DIST_DIR)/%: %.dist
 	@mkdir -p $(@D)
@@ -59,17 +58,17 @@ frameworks: dist
 	@cd inject/javax_inject && $(MAKE) framework
 	@cd guava && $(MAKE) framework
 	@cd testing/mockito && $(MAKE) framework
+	@cd testing/truth && $(MAKE) framework
 	@cd xalan && $(MAKE) framework
 
 all_frameworks: frameworks protobuf_dist
 	@cd protobuf/runtime && $(MAKE) framework
 
 dist: print_environment translator_dist jre_emul_dist junit_dist jsr305_dist \
-  javax_inject_dist guava_dist mockito_dist cycle_finder_dist \
+  javax_inject_dist guava_dist mockito_dist truth_dist cycle_finder_dist \
   xalan_dist install-man-pages install-extras
 
 protobuf_dist: protobuf_compiler_dist protobuf_runtime_dist
-
 
 all_dist: dist all_frameworks examples_dist
 
@@ -84,14 +83,18 @@ clean:
 	@cd inject/javax_inject && $(MAKE) clean
 	@cd guava && $(MAKE) clean
 	@cd testing/mockito && $(MAKE) clean
+	@cd testing/truth && $(MAKE) clean
 	@cd cycle_finder && $(MAKE) clean
 	@cd protobuf/runtime && $(MAKE) clean
 	@cd protobuf/compiler && $(MAKE) clean
 	@cd protobuf/tests && $(MAKE) clean
 	@cd xalan && $(MAKE) clean
 
-test_translator: annotations_dist java_deps_dist jre_emul_jars_dist
+test_translator: annotations_dist java_deps_dist jre_emul_dist
 	@cd translator && $(MAKE) test
+
+test_all_translator: test_translator
+	@cd translator && $(MAKE) regression-test
 
 test_jre_emul: jre_emul_dist junit_dist
 	@cd jre_emul && $(MAKE) -f tests.mk test
@@ -110,19 +113,20 @@ test: test_translator test_jre_emul test_cycle_finder test_jre_cycles
 test_protobuf: junit_dist protobuf_compiler_dist protobuf_runtime_dist
 	@cd protobuf/tests && $(MAKE) test
 
-
-test_all: test test_protobuf
+test_all: test test_all_translator test_protobuf
 
 examples_dist: install_examples
 
 copy_examples:
+	@mkdir -p $(DIST_DIR)
 	@cp -r examples $(DIST_DIR)
 
 install_examples: copy_examples
-	@sed -i '' 's/\/dist//' $(DIST_DIR)/examples/Hello/Hello.xcconfig
+	@sed -i '' 's/\/dist//' $(DIST_DIR)/examples/Hello/config.xcconfig
+	@sed -i '' 's/\/dist//' $(DIST_DIR)/examples/Hello/Hello.xcodeproj/project.pbxproj
+	@sed -i '' 's/\/dist//' $(DIST_DIR)/examples/HelloSwift/config.xcconfig
+	@sed -i '' 's/\/dist//' $(DIST_DIR)/examples/HelloSwift/HelloSwift.xcodeproj/project.pbxproj
 	@sed -i '' 's/\/dist//' $(DIST_DIR)/examples/protobuf/Makefile
-	@sed -i '' 's/\<path to local j2objc distribution\>/..\/../' \
-	  $(DIST_DIR)/examples/Contacts/WORKSPACE
 
 print_environment:
 	@echo Locale: $${LANG}
@@ -130,5 +134,5 @@ print_environment:
 	@echo `xcodebuild -version`
 	@echo `xcrun cc -v`
 	@echo Environment:
-	@env | grep -v '^_' | sort
+	@env | grep -v '^_' | grep -v '^[ }]' | grep -v '^rvm_' | sort
 	@echo

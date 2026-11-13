@@ -126,7 +126,7 @@ public class GenerationBatch {
 
     // Warn if source debugging is specified for a jar file, since native debuggers
     // don't support Java-like source paths.
-    if (options.emitLineDirectives()) {
+    if (options.emitLineDirectives() && options.isVerbose()) {
       ErrorUtil.warning("source debugging of jar files is not supported: " + filename);
     }
 
@@ -139,6 +139,7 @@ public class GenerationBatch {
     try {
       ZipFile zfile = new ZipFile(f);
       try {
+        boolean containsJavaFile = false;
         Enumeration<? extends ZipEntry> enumerator = zfile.entries();
         File tempDir = FileUtil.createTempDir(J2OBJC_TEMP_DIR_PREFIX);
         String tempDirPath = tempDir.getAbsolutePath();
@@ -158,7 +159,11 @@ public class GenerationBatch {
             } else {
               addExtractedJarSource(newFile, filename, internalPath);
             }
+            containsJavaFile = true;
           }
+        }
+        if (!options.translateClassfiles() && !containsJavaFile && !options.ignoreJarWarnings()) {
+          ErrorUtil.warning(filename + " does not contain any Java source files.");
         }
       } finally {
         zfile.close();  // Also closes input stream.

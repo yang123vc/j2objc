@@ -16,7 +16,6 @@
 
 NATIVE_JRE_SOURCES_CORE = \
   AnnotationUtils.m \
-  Bits.m \
   DebugUtils.m \
   FastPointerLookup.m \
   FileDescriptor_md.m \
@@ -34,6 +33,9 @@ NATIVE_JRE_SOURCES_CORE = \
   J2ObjC_common.m \
   J2ObjC_icu.m \
   JavaThrowable.m \
+  JreCollectionAdapters.m \
+  JreExceptionAdapters.m \
+  JreRetainedLocalValue.m \
   JreRetainedWith.m \
   MappedByteBuffer.m \
   NSCopying+JavaCloneable.m \
@@ -43,6 +45,11 @@ NATIVE_JRE_SOURCES_CORE = \
   NSNumber+JavaNumber.m \
   NSObject+JavaObject.m \
   NSString+JavaString.m \
+  ObjectInputStream.m \
+  ObjectOutputStream.m \
+  UnixFileSystem_md.m \
+  canonicalize_md.m \
+  io_util.m \
   java/lang/AbstractStringBuilder.m \
   java/lang/reflect/AccessibleObject.m \
   java/lang/reflect/Constructor.m \
@@ -70,7 +77,11 @@ NATIVE_JRE_SOURCES_CORE = \
 # TypeKind is needed by the Checker Framework (https://checkerframework.org/).
 JAVA_PUBLIC_SOURCES_CORE = \
   android/system/ErrnoException.java \
+  android/system/Int32Ref.java \
+  android/system/Int64Ref.java \
+  com/google/j2objc/util/AutoreleasePool.java \
   com/google/j2objc/util/CurrencyNumericCodes.java \
+  com/google/j2objc/util/XmlLoader.java \
   com/google/j2objc/util/logging/IOSLogHandler.java \
   java/io/BufferedInputStream.java \
   java/io/BufferedOutputStream.java \
@@ -122,6 +133,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/io/PrintWriter.java \
   java/io/PushbackInputStream.java \
   java/io/Reader.java \
+  java/io/Serial.java \
   java/io/Serializable.java \
   java/io/SerializablePermission.java \
   java/io/SerializationHandleMap.java \
@@ -177,6 +189,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/lang/Iterable.java \
   java/lang/LinkageError.java \
   java/lang/Long.java \
+  java/lang/MatchException.java \
   java/lang/Math.java \
   java/lang/NegativeArraySizeException.java \
   java/lang/NoClassDefFoundError.java \
@@ -189,6 +202,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/lang/OutOfMemoryError.java \
   java/lang/Package.java \
   java/lang/Readable.java \
+  java/lang/Record.java \
   java/lang/ReflectiveOperationException.java \
   java/lang/Runnable.java \
   java/lang/Runtime.java \
@@ -253,11 +267,13 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/lang/reflect/InvocationHandler.java \
   java/lang/reflect/InvocationTargetException.java \
   java/lang/reflect/MalformedParameterizedTypeException.java \
+  java/lang/reflect/MalformedParametersException.java \
   java/lang/reflect/Member.java \
   java/lang/reflect/Modifier.java \
   java/lang/reflect/Parameter.java \
   java/lang/reflect/ParameterizedType.java \
   java/lang/reflect/Proxy.java \
+  java/lang/reflect/RecordComponent.java \
   java/lang/reflect/ReflectPermission.java \
   java/lang/reflect/Type.java \
   java/lang/reflect/TypeVariable.java \
@@ -285,10 +301,22 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/nio/InvalidMarkException.java \
   java/nio/LongBuffer.java \
   java/nio/MappedByteBuffer.java \
+  java/nio/NIOAccess.java \
   java/nio/NioUtils.java \
   java/nio/ReadOnlyBufferException.java \
   java/nio/ShortBuffer.java \
+  java/nio/channels/AsynchronousCloseException.java \
+  java/nio/channels/ByteChannel.java \
   java/nio/channels/Channel.java \
+  java/nio/channels/ClosedByInterruptException.java \
+  java/nio/channels/ClosedChannelException.java \
+  java/nio/channels/FileChannel.java \
+  java/nio/channels/GatheringByteChannel.java \
+  java/nio/channels/ReadableByteChannel.java \
+  java/nio/channels/ScatteringByteChannel.java \
+  java/nio/channels/SeekableByteChannel.java \
+  java/nio/channels/WritableByteChannel.java \
+  java/nio/channels/spi/AbstractInterruptibleChannel.java \
   java/nio/charset/CharacterCodingException.java \
   java/nio/charset/Charset.java \
   java/nio/charset/CharsetDecoder.java \
@@ -302,6 +330,9 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/nio/charset/UnmappableCharacterException.java \
   java/nio/charset/UnsupportedCharsetException.java \
   java/nio/charset/spi/CharsetProvider.java \
+  java/nio/file/Path.java \
+  java/nio/file/attribute/FileAttribute.java \
+  java/nio/file/attribute/FileTime.java \
   java/security/AccessControlContext.java \
   java/security/AccessController.java \
   java/security/AllPermission.java \
@@ -370,6 +401,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/util/HashMap.java \
   java/util/HashSet.java \
   java/util/Hashtable.java \
+  java/util/HexFormat.java \
   java/util/IdentityHashMap.java \
   java/util/IllegalFormatCodePointException.java \
   java/util/IllegalFormatConversionException.java \
@@ -459,6 +491,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/util/concurrent/ScheduledFuture.java \
   java/util/concurrent/ScheduledThreadPoolExecutor.java \
   java/util/concurrent/SynchronousQueue.java \
+  java/util/concurrent/ThreadFactory.java \
   java/util/concurrent/ThreadLocalRandom.java \
   java/util/concurrent/ThreadPoolExecutor.java \
   java/util/concurrent/TimeoutException.java \
@@ -473,6 +506,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/util/concurrent/locks/Condition.java \
   java/util/concurrent/locks/Lock.java \
   java/util/concurrent/locks/LockSupport.java \
+  java/util/concurrent/locks/ReadWriteLock.java \
   java/util/concurrent/locks/ReentrantLock.java \
   java/util/function/BiConsumer.java \
   java/util/function/BiFunction.java \
@@ -517,6 +551,7 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/util/function/ToLongBiFunction.java \
   java/util/function/ToLongFunction.java \
   java/util/function/UnaryOperator.java \
+  java/util/logging/ConsoleHandler.java \
   java/util/logging/ErrorManager.java \
   java/util/logging/Filter.java \
   java/util/logging/Formatter.java \
@@ -527,6 +562,8 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/util/logging/Logger.java \
   java/util/logging/LoggingMXBean.java \
   java/util/logging/LoggingPermission.java \
+  java/util/logging/SimpleFormatter.java \
+  java/util/logging/StreamHandler.java \
   java/util/regex/MatchResult.java \
   java/util/regex/Matcher.java \
   java/util/regex/Pattern.java \
@@ -540,14 +577,12 @@ JAVA_PUBLIC_SOURCES_CORE = \
   java/util/stream/Stream.java \
   java/util/stream/Streams.java \
   java/util/stream/StreamSupport.java \
-  javax/annotation/PostConstruct.java \
-  javax/annotation/PreDestroy.java \
-  javax/annotation/Resource.java \
-  javax/annotation/Resources.java \
+  javax/lang/model/element/Modifier.java \
   javax/lang/model/type/TypeKind.java \
   sun/misc/Unsafe.java
 
 JAVA_PRIVATE_SOURCES_CORE = \
+  android/compat/annotation/UnsupportedAppUsage.java \
   com/google/j2objc/LibraryNotLinkedError.java \
   com/google/j2objc/ReflectionStrippedError.java \
   com/google/j2objc/WeakProxy.java \
@@ -556,13 +591,24 @@ JAVA_PRIVATE_SOURCES_CORE = \
   com/google/j2objc/nio/charset/IconvCharsetEncoder.java \
   com/google/j2objc/util/NativeTimeZone.java \
   com/google/j2objc/util/ReflectionUtil.java \
+  dalvik/annotation/compat/UnsupportedAppUsage.java \
   dalvik/annotation/optimization/FastNative.java \
   dalvik/system/BlockGuard.java \
   dalvik/system/CloseGuard.java \
-  java/io/EmulatedFields.java \
-  java/io/EmulatedFieldsForDumping.java \
-  java/io/EmulatedFieldsForLoading.java \
+  dalvik/system/VersionCodes.java \
+  dalvik/system/VMStack.java \
+  dalvik/system/ZipPathValidator.java \
+  java/io/Bits.java \
+  java/io/DefaultFileSystem.java \
+  java/io/DeleteOnExitHook.java \
+  java/io/ExpiringCache.java \
+  java/io/FileChannelOpener.java \
+  java/io/FileSystem.java \
+  java/io/SerialCallbackContext.java \
+  java/io/UnixFileSystem.java \
   java/lang/JavaLangAccess.java \
+  java/lang/StringUTF16.java \
+  java/lang/reflect/WeakCache.java \
   java/math/BitSieve.java \
   java/math/MutableBigInteger.java \
   java/math/SignedMutableBigInteger.java \
@@ -583,7 +629,6 @@ JAVA_PRIVATE_SOURCES_CORE = \
   java/nio/HeapLongBuffer.java \
   java/nio/HeapShortBuffer.java \
   java/nio/StringCharBuffer.java \
-  java/nio/charset/Charsets.java \
   java/nio/charset/ModifiedUtf8.java \
   java/text/CalendarBuilder.java \
   java/text/CharacterIteratorFieldDelegate.java \
@@ -595,7 +640,10 @@ JAVA_PRIVATE_SOURCES_CORE = \
   java/util/DualPivotQuicksort.java \
   java/util/Grego.java \
   java/util/JumboEnumSet.java \
+  java/util/KeyValueHolder.java \
+  java/util/ImmutableCollections.java \
   java/util/RegularEnumSet.java \
+  java/util/Tripwire.java \
   java/util/logging/Logging.java \
   java/util/logging/LoggingProxyImpl.java \
   java/util/stream/AbstractPipeline.java \
@@ -622,12 +670,17 @@ JAVA_PRIVATE_SOURCES_CORE = \
   java/util/stream/StreamShape.java \
   java/util/stream/StreamSpliterators.java \
   java/util/stream/TerminalOp.java \
+  java/util/stream/Tripwire.java \
+  java/util/stream/WhileOps.java \
   jdk/internal/module/SystemModulesMap.java \
+  jdk/internal/util/Preconditions.java \
+  libcore/api/CorePlatformApi.java \
+  libcore/api/Hide.java \
+  libcore/api/IntraCoreApi.java \
   libcore/icu/ICU.java \
   libcore/icu/LocaleData.java \
   libcore/icu/TimeZoneNames.java \
   libcore/io/AsynchronousCloseMonitor.java \
-  libcore/io/DeleteOnExit.java \
   libcore/io/IoBridge.java \
   libcore/io/IoUtils.java \
   libcore/io/Libcore.java \
@@ -646,6 +699,7 @@ JAVA_PRIVATE_SOURCES_CORE = \
   libcore/io/StructStatVfs.java \
   libcore/io/StructTimeval.java \
   libcore/io/StructUtsname.java \
+  libcore/content/type/MimeMap.java \
   libcore/net/MimeUtils.java \
   libcore/net/url/UrlUtils.java \
   libcore/reflect/AnnotatedElements.java \
@@ -657,10 +711,13 @@ JAVA_PRIVATE_SOURCES_CORE = \
   libcore/reflect/TypeVariableImpl.java \
   libcore/reflect/Types.java \
   libcore/reflect/WildcardTypeImpl.java \
+  libcore/util/ArrayUtils.java \
   libcore/util/BasicLruCache.java \
   libcore/util/EmptyArray.java \
-  libcore/util/MutableInt.java \
-  libcore/util/MutableLong.java \
+  libcore/util/HexEncoding.java \
+  libcore/util/NonNull.java \
+  libcore/util/NullFromTypeParam.java \
+  libcore/util/Nullable.java \
   libcore/util/Objects.java \
   libcore/util/SneakyThrow.java \
   sun/misc/Cleaner.java \
@@ -682,6 +739,9 @@ JAVA_PRIVATE_SOURCES_CORE = \
   sun/reflect/CallerSensitive.java \
   sun/reflect/Reflection.java \
   sun/reflect/misc/ReflectUtil.java \
+  sun/security/action/GetBooleanAction.java \
+  sun/security/action/GetIntegerAction.java \
+  sun/security/action/GetPropertyAction.java \
   sun/util/ResourceBundleEnumeration.java \
   sun/util/calendar/AbstractCalendar.java \
   sun/util/calendar/BaseCalendar.java \
@@ -696,7 +756,9 @@ JAVA_PRIVATE_SOURCES_CORE = \
   sun/util/locale/Extension.java \
   sun/util/locale/InternalLocaleBuilder.java \
   sun/util/locale/LanguageTag.java \
+  sun/util/locale/LocaleEquivalentMaps.java \
   sun/util/locale/LocaleExtensions.java \
+  sun/util/locale/LocaleMatcher.java \
   sun/util/locale/LocaleObjectCache.java \
   sun/util/locale/LocaleSyntaxException.java \
   sun/util/locale/LocaleUtils.java \
@@ -811,7 +873,6 @@ JAVA_PRIVATE_SOURCES_NET = \
   java/net/ProxySelectorImpl.java \
   java/net/SocketInputStream.java \
   java/net/SocketOutputStream.java \
-  java/net/Socks4Message.java \
   java/net/SocksConsts.java \
   java/net/SocksSocketImpl.java \
   java/net/StandardSocketOptions.java \
@@ -819,6 +880,7 @@ JAVA_PRIVATE_SOURCES_NET = \
   libcore/icu/NativeIDN.java \
   libcore/io/NetworkBridge.java \
   libcore/io/NetworkOs.java \
+  libcore/net/InetAddressUtils.java \
   libcore/net/UriCodec.java \
   libcore/net/http/HttpDate.java \
   sun/misc/IoTrace.java \
@@ -864,11 +926,8 @@ JAVA_PUBLIC_SOURCES_UTIL = \
   java/util/Stack.java \
   java/util/Timer.java \
   java/util/TimerTask.java \
-  java/util/logging/ConsoleHandler.java \
   java/util/logging/FileHandler.java \
   java/util/logging/MemoryHandler.java \
-  java/util/logging/SimpleFormatter.java \
-  java/util/logging/StreamHandler.java \
   java/util/logging/XMLFormatter.java
 
 JAVA_PRIVATE_SOURCES_UTIL = \
@@ -887,6 +946,7 @@ JAVA_PUBLIC_SOURCES_CONCURRENT = \
   java/util/concurrent/CyclicBarrier.java \
   java/util/concurrent/DelayQueue.java \
   java/util/concurrent/Exchanger.java \
+  java/util/concurrent/Flow.java \
   java/util/concurrent/LinkedBlockingDeque.java \
   java/util/concurrent/LinkedTransferQueue.java \
   java/util/concurrent/Phaser.java \
@@ -894,7 +954,6 @@ JAVA_PUBLIC_SOURCES_CONCURRENT = \
   java/util/concurrent/RecursiveAction.java \
   java/util/concurrent/RecursiveTask.java \
   java/util/concurrent/Semaphore.java \
-  java/util/concurrent/ThreadFactory.java \
   java/util/concurrent/TransferQueue.java \
   java/util/concurrent/atomic/AtomicIntegerArray.java \
   java/util/concurrent/atomic/AtomicIntegerFieldUpdater.java \
@@ -903,32 +962,42 @@ JAVA_PUBLIC_SOURCES_CONCURRENT = \
   java/util/concurrent/atomic/AtomicMarkableReference.java \
   java/util/concurrent/atomic/AtomicReferenceArray.java \
   java/util/concurrent/atomic/AtomicStampedReference.java \
+  java/util/concurrent/atomic/DoubleAccumulator.java \
+  java/util/concurrent/atomic/DoubleAdder.java \
+  java/util/concurrent/atomic/LongAccumulator.java \
+  java/util/concurrent/atomic/LongAdder.java \
+  java/util/concurrent/atomic/Striped64.java \
   java/util/concurrent/locks/AbstractQueuedLongSynchronizer.java \
-  java/util/concurrent/locks/ReadWriteLock.java \
   java/util/concurrent/locks/ReentrantReadWriteLock.java
 
 JAVA_PRIVATE_SOURCES_CONCURRENT =
 
 JAVA_PUBLIC_SOURCES_CHANNELS = \
   java/nio/ChannelFactoryImpl.java \
+  java/nio/channels/AcceptPendingException.java \
   java/nio/channels/AlreadyBoundException.java \
   java/nio/channels/AlreadyConnectedException.java \
-  java/nio/channels/AsynchronousCloseException.java \
-  java/nio/channels/ByteChannel.java \
+  java/nio/channels/AsynchronousByteChannel.java \
+  java/nio/channels/AsynchronousChannel.java \
+  java/nio/channels/AsynchronousChannelGroup.java \
+  java/nio/channels/AsynchronousFileChannel.java \
+  java/nio/channels/AsynchronousServerSocketChannel.java \
+  java/nio/channels/AsynchronousSocketChannel.java \
   java/nio/channels/CancelledKeyException.java \
   java/nio/channels/Channels.java \
-  java/nio/channels/ClosedByInterruptException.java \
-  java/nio/channels/ClosedChannelException.java \
   java/nio/channels/ClosedSelectorException.java \
+  java/nio/channels/CompletionHandler.java \
   java/nio/channels/ConnectionPendingException.java \
   java/nio/channels/DatagramChannel.java \
-  java/nio/channels/FileChannel.java \
   java/nio/channels/FileLock.java \
   java/nio/channels/FileLockInterruptionException.java \
-  java/nio/channels/GatheringByteChannel.java \
   java/nio/channels/IllegalBlockingModeException.java \
+  java/nio/channels/IllegalChannelGroupException.java \
   java/nio/channels/IllegalSelectorException.java \
+  java/nio/channels/InterruptedByTimeoutException.java \
   java/nio/channels/InterruptibleChannel.java \
+  java/nio/channels/MembershipKey.java \
+  java/nio/channels/MulticastChannel.java \
   java/nio/channels/NetworkChannel.java \
   java/nio/channels/NoConnectionPendingException.java \
   java/nio/channels/NonReadableChannelException.java \
@@ -937,21 +1006,20 @@ JAVA_PUBLIC_SOURCES_CHANNELS = \
   java/nio/channels/NotYetConnectedException.java \
   java/nio/channels/OverlappingFileLockException.java \
   java/nio/channels/Pipe.java \
-  java/nio/channels/ReadableByteChannel.java \
-  java/nio/channels/ScatteringByteChannel.java \
-  java/nio/channels/SeekableByteChannel.java \
+  java/nio/channels/ReadPendingException.java \
   java/nio/channels/SelectableChannel.java \
   java/nio/channels/SelectionKey.java \
   java/nio/channels/Selector.java \
   java/nio/channels/ServerSocketChannel.java \
+  java/nio/channels/ShutdownChannelGroupException.java \
   java/nio/channels/SocketChannel.java \
   java/nio/channels/UnresolvedAddressException.java \
   java/nio/channels/UnsupportedAddressTypeException.java \
-  java/nio/channels/WritableByteChannel.java \
-  java/nio/channels/spi/AbstractInterruptibleChannel.java \
+  java/nio/channels/WritePendingException.java \
   java/nio/channels/spi/AbstractSelectableChannel.java \
   java/nio/channels/spi/AbstractSelectionKey.java \
   java/nio/channels/spi/AbstractSelector.java \
+  java/nio/channels/spi/AsynchronousChannelProvider.java \
   java/nio/channels/spi/SelectorProvider.java \
   java/util/InputMismatchException.java \
   java/util/Scanner.java
@@ -960,38 +1028,61 @@ JAVA_PRIVATE_SOURCES_CHANNELS = \
   dalvik/system/SocketTagger.java \
   java/net/ProtocolFamily.java \
   java/net/StandardProtocolFamily.java \
+  jdk/net/ExtendedSocketOptions.java \
+  jdk/net/NetworkPermission.java \
+  jdk/net/SocketFlow.java \
   sun/misc/LRUCache.java \
+  sun/net/ExtendedOptionsImpl.java \
   sun/net/spi/nameservice/NameService.java \
   sun/nio/ch/AbstractPollArrayWrapper.java \
   sun/nio/ch/AbstractPollSelectorImpl.java \
   sun/nio/ch/AllocatedNativeObject.java \
+  sun/nio/ch/AsynchronousChannelGroupImpl.java \
+  sun/nio/ch/AsynchronousFileChannelImpl.java \
+  sun/nio/ch/AsynchronousServerSocketChannelImpl.java \
+  sun/nio/ch/AsynchronousSocketChannelImpl.java \
+  sun/nio/ch/BsdAsynchronousChannelProvider.java \
+  sun/nio/ch/Cancellable.java \
   sun/nio/ch/ChannelInputStream.java \
+  sun/nio/ch/CompletedFuture.java \
   sun/nio/ch/DatagramChannelImpl.java \
   sun/nio/ch/DatagramDispatcher.java \
   sun/nio/ch/DatagramSocketAdaptor.java \
+  sun/nio/ch/DefaultAsynchronousChannelProvider.java \
   sun/nio/ch/DefaultSelectorProvider.java \
   sun/nio/ch/ExtendedSocketOption.java \
   sun/nio/ch/FileChannelImpl.java \
-  sun/nio/ch/FileLockTable.java \
-  sun/nio/ch/FileLockImpl.java \
   sun/nio/ch/FileKey.java \
+  sun/nio/ch/FileLockImpl.java \
+  sun/nio/ch/FileLockTable.java \
   sun/nio/ch/FileDescriptorHolderSocketImpl.java \
   sun/nio/ch/FileDispatcherImpl.java \
   sun/nio/ch/FileDispatcher.java \
+  sun/nio/ch/Groupable.java \
   sun/nio/ch/InheritedChannel.java \
+  sun/nio/ch/Invoker.java \
   sun/nio/ch/IOStatus.java \
   sun/nio/ch/IOUtil.java \
   sun/nio/ch/IOVecWrapper.java \
+  sun/nio/ch/KQueue.java \
+  sun/nio/ch/KQueueArrayWrapper.java \
+  sun/nio/ch/KQueuePort.java \
+  sun/nio/ch/KQueueSelectorImpl.java \
+  sun/nio/ch/KQueueSelectorProvider.java \
+  sun/nio/ch/MembershipKeyImpl.java \
+  sun/nio/ch/MembershipRegistry.java \
   sun/nio/ch/NativeDispatcher.java \
   sun/nio/ch/NativeObject.java \
   sun/nio/ch/NativeThread.java \
   sun/nio/ch/NativeThreadSet.java \
   sun/nio/ch/Net.java \
   sun/nio/ch/OptionKey.java \
+  sun/nio/ch/PendingFuture.java \
   sun/nio/ch/PipeImpl.java \
   sun/nio/ch/PollArrayWrapper.java \
   sun/nio/ch/PollSelectorImpl.java \
   sun/nio/ch/PollSelectorProvider.java \
+  sun/nio/ch/Port.java \
   sun/nio/ch/Reflect.java \
   sun/nio/ch/SelChImpl.java \
   sun/nio/ch/SelectionKeyImpl.java \
@@ -999,12 +1090,16 @@ JAVA_PRIVATE_SOURCES_CHANNELS = \
   sun/nio/ch/SelectorProviderImpl.java \
   sun/nio/ch/ServerSocketAdaptor.java \
   sun/nio/ch/ServerSocketChannelImpl.java \
+  sun/nio/ch/SimpleAsynchronousFileChannelImpl.java \
   sun/nio/ch/SinkChannelImpl.java \
   sun/nio/ch/SocketAdaptor.java \
   sun/nio/ch/SocketChannelImpl.java \
   sun/nio/ch/SocketDispatcher.java \
   sun/nio/ch/SocketOptionRegistry.java \
   sun/nio/ch/SourceChannelImpl.java \
+  sun/nio/ch/ThreadPool.java \
+  sun/nio/ch/UnixAsynchronousServerSocketChannelImpl.java \
+  sun/nio/ch/UnixAsynchronousSocketChannelImpl.java \
   sun/nio/ch/Util.java
 
 NATIVE_JRE_SOURCES_CHANNELS = \
@@ -1015,11 +1110,147 @@ NATIVE_JRE_SOURCES_CHANNELS = \
   FileKey.m \
   InheritedChannel.m \
   IOUtil.m \
+  KQueue.m \
+  KQueuePort.m \
   NativeThread.m \
   Net.m \
   PollArrayWrapper.m \
   ServerSocketChannelImpl.m \
-  SocketChannelImpl.m
+  SocketChannelImpl.m \
+  UnixAsynchronousServerSocketChannelImpl.m \
+  UnixAsynchronousSocketChannelImpl.m \
+
+JAVA_PUBLIC_SOURCES_FILE = \
+  java/nio/file/AccessDeniedException.java \
+  java/nio/file/AccessMode.java \
+  java/nio/file/AtomicMoveNotSupportedException.java \
+  java/nio/file/ClosedDirectoryStreamException.java \
+  java/nio/file/ClosedFileSystemException.java \
+  java/nio/file/ClosedWatchServiceException.java \
+  java/nio/file/CopyOption.java \
+  java/nio/file/DirectoryIteratorException.java \
+  java/nio/file/DirectoryNotEmptyException.java \
+  java/nio/file/DirectoryStream.java \
+  java/nio/file/FileAlreadyExistsException.java \
+  java/nio/file/FileStore.java \
+  java/nio/file/FileSystem.java \
+  java/nio/file/FileSystemAlreadyExistsException.java \
+  java/nio/file/FileSystemException.java \
+  java/nio/file/FileSystemLoopException.java \
+  java/nio/file/FileSystemNotFoundException.java \
+  java/nio/file/FileSystems.java \
+  java/nio/file/FileVisitOption.java \
+  java/nio/file/FileVisitResult.java \
+  java/nio/file/FileVisitor.java \
+  java/nio/file/Files.java \
+  java/nio/file/InvalidPathException.java \
+  java/nio/file/LinkOption.java \
+  java/nio/file/LinkPermission.java \
+  java/nio/file/NoSuchFileException.java \
+  java/nio/file/NotDirectoryException.java \
+  java/nio/file/NotLinkException.java \
+  java/nio/file/OpenOption.java \
+  java/nio/file/PathMatcher.java \
+  java/nio/file/Paths.java \
+  java/nio/file/ProviderMismatchException.java \
+  java/nio/file/ProviderNotFoundException.java \
+  java/nio/file/ReadOnlyFileSystemException.java \
+  java/nio/file/SecureDirectoryStream.java \
+  java/nio/file/SimpleFileVisitor.java \
+  java/nio/file/StandardCopyOption.java \
+  java/nio/file/StandardOpenOption.java \
+  java/nio/file/StandardWatchEventKinds.java \
+  java/nio/file/WatchEvent.java \
+  java/nio/file/WatchKey.java \
+  java/nio/file/WatchService.java \
+  java/nio/file/Watchable.java \
+  java/nio/file/attribute/AclEntry.java \
+  java/nio/file/attribute/AclEntryFlag.java \
+  java/nio/file/attribute/AclEntryPermission.java \
+  java/nio/file/attribute/AclEntryType.java \
+  java/nio/file/attribute/AclFileAttributeView.java \
+  java/nio/file/attribute/AttributeView.java \
+  java/nio/file/attribute/BasicFileAttributeView.java \
+  java/nio/file/attribute/BasicFileAttributes.java \
+  java/nio/file/attribute/DosFileAttributeView.java \
+  java/nio/file/attribute/DosFileAttributes.java \
+  java/nio/file/attribute/FileAttributeView.java \
+  java/nio/file/attribute/FileOwnerAttributeView.java \
+  java/nio/file/attribute/FileStoreAttributeView.java \
+  java/nio/file/attribute/GroupPrincipal.java \
+  java/nio/file/attribute/PosixFileAttributeView.java \
+  java/nio/file/attribute/PosixFileAttributes.java \
+  java/nio/file/attribute/PosixFilePermission.java \
+  java/nio/file/attribute/PosixFilePermissions.java \
+  java/nio/file/attribute/UserDefinedFileAttributeView.java \
+  java/nio/file/attribute/UserPrincipal.java \
+  java/nio/file/attribute/UserPrincipalLookupService.java \
+  java/nio/file/attribute/UserPrincipalNotFoundException.java \
+  java/nio/file/spi/FileSystemProvider.java \
+  java/nio/file/spi/FileTypeDetector.java
+
+JAVA_PRIVATE_SOURCES_FILE = \
+  com/sun/nio/file/ExtendedCopyOption.java \
+  com/sun/nio/file/ExtendedWatchEventModifier.java \
+  com/sun/nio/file/SensitivityWatchEventModifier.java \
+  java/nio/file/CopyMoveHelper.java \
+  java/nio/file/TempFileHelper.java \
+  java/nio/file/FileTreeIterator.java \
+  java/nio/file/FileTreeWalker.java \
+  sun/misc/JavaIOFileDescriptorAccess.java \
+  sun/misc/JavaObjectInputStreamAccess.java \
+  sun/misc/SharedSecrets.java \
+  sun/nio/fs/AbstractBasicFileAttributeView.java \
+  sun/nio/fs/AbstractFileSystemProvider.java \
+  sun/nio/fs/AbstractFileTypeDetector.java \
+  sun/nio/fs/AbstractPath.java \
+  sun/nio/fs/AbstractWatchKey.java \
+  sun/nio/fs/AbstractWatchService.java \
+  sun/nio/fs/BasicFileAttributesHolder.java \
+  sun/nio/fs/BsdFileStore.java \
+  sun/nio/fs/BsdFileSystem.java \
+  sun/nio/fs/BsdFileSystemProvider.java \
+  sun/nio/fs/BsdNativeDispatcher.java \
+  sun/nio/fs/Cancellable.java \
+  sun/nio/fs/DefaultFileSystemProvider.java \
+  sun/nio/fs/DefaultFileTypeDetector.java \
+  sun/nio/fs/DynamicFileAttributeView.java \
+  sun/nio/fs/FileOwnerAttributeViewImpl.java \
+  sun/nio/fs/Globs.java \
+  sun/nio/fs/MacOSXFileSystem.java \
+  sun/nio/fs/MacOSXFileSystemProvider.java \
+  sun/nio/fs/MacOSXNativeDispatcher.java \
+  sun/nio/fs/MimeTypesFileTypeDetector.java \
+  sun/nio/fs/NativeBuffer.java \
+  sun/nio/fs/NativeBuffers.java \
+  sun/nio/fs/PollingWatchService.java \
+  sun/nio/fs/UnixChannelFactory.java \
+  sun/nio/fs/UnixConstants.java \
+  sun/nio/fs/UnixCopyFile.java \
+  sun/nio/fs/UnixDirectoryStream.java \
+  sun/nio/fs/UnixException.java \
+  sun/nio/fs/UnixFileAttributeViews.java \
+  sun/nio/fs/UnixFileAttributes.java \
+  sun/nio/fs/UnixFileKey.java \
+  sun/nio/fs/UnixFileModeAttribute.java \
+  sun/nio/fs/UnixFileStore.java \
+  sun/nio/fs/UnixFileStoreAttributes.java \
+  sun/nio/fs/UnixFileSystem.java \
+  sun/nio/fs/UnixFileSystemProvider.java \
+  sun/nio/fs/UnixMountEntry.java \
+  sun/nio/fs/UnixNativeDispatcher.java \
+  sun/nio/fs/UnixPath.java \
+  sun/nio/fs/UnixSecureDirectoryStream.java \
+  sun/nio/fs/UnixUriUtils.java \
+  sun/nio/fs/UnixUserPrincipals.java \
+  sun/nio/fs/Util.java \
+  sun/security/util/SecurityConstants.java
+
+NATIVE_JRE_SOURCES_FILE = \
+  BsdNativeDispatcher.m \
+  MacOSXNativeDispatcher.m \
+  UnixCopyFile.m \
+  UnixNativeDispatcher.m
 
 JAVA_PUBLIC_SOURCES_SECURITY = \
   java/io/SerialVersionUIDDigest.java \
@@ -1126,6 +1357,7 @@ JAVA_PUBLIC_SOURCES_SECURITY = \
   java/security/cert/X509CRLSelector.java \
   java/security/cert/X509Extension.java \
   java/security/interfaces/DSAKey.java \
+  java/security/interfaces/DSAKeyPairGenerator.java \
   java/security/interfaces/DSAParams.java \
   java/security/interfaces/DSAPrivateKey.java \
   java/security/interfaces/DSAPublicKey.java \
@@ -1137,6 +1369,9 @@ JAVA_PUBLIC_SOURCES_SECURITY = \
   java/security/interfaces/RSAPrivateCrtKey.java \
   java/security/interfaces/RSAPrivateKey.java \
   java/security/interfaces/RSAPublicKey.java \
+  java/security/interfaces/XECKey.java \
+  java/security/interfaces/XECPrivateKey.java \
+  java/security/interfaces/XECPublicKey.java \
   java/security/spec/AlgorithmParameterSpec.java \
   java/security/spec/DSAParameterSpec.java \
   java/security/spec/DSAPrivateKeySpec.java \
@@ -1155,6 +1390,7 @@ JAVA_PUBLIC_SOURCES_SECURITY = \
   java/security/spec/InvalidParameterSpecException.java \
   java/security/spec/KeySpec.java \
   java/security/spec/MGF1ParameterSpec.java \
+  java/security/spec/NamedParameterSpec.java \
   java/security/spec/PKCS8EncodedKeySpec.java \
   java/security/spec/PSSParameterSpec.java \
   java/security/spec/RSAKeyGenParameterSpec.java \
@@ -1164,7 +1400,10 @@ JAVA_PUBLIC_SOURCES_SECURITY = \
   java/security/spec/RSAPrivateKeySpec.java \
   java/security/spec/RSAPublicKeySpec.java \
   java/security/spec/X509EncodedKeySpec.java \
+  java/security/spec/XECPrivateKeySpec.java \
+  java/security/spec/XECPublicKeySpec.java \
   java/util/UUID.java \
+  javax/crypto/AEADBadTagException.java \
   javax/crypto/BadPaddingException.java \
   javax/crypto/Cipher.java \
   javax/crypto/CipherInputStream.java \
@@ -1206,8 +1445,12 @@ JAVA_PUBLIC_SOURCES_SECURITY = \
   javax/crypto/spec/RC2ParameterSpec.java \
   javax/crypto/spec/RC5ParameterSpec.java \
   javax/crypto/spec/SecretKeySpec.java \
+  javax/security/auth/AuthPermission.java \
   javax/security/auth/DestroyFailedException.java \
   javax/security/auth/Destroyable.java \
+  javax/security/auth/PrivateCredentialPermission.java \
+  javax/security/auth/Subject.java \
+  javax/security/auth/SubjectDomainCombiner.java \
   javax/security/auth/callback/Callback.java \
   javax/security/auth/callback/CallbackHandler.java \
   javax/security/auth/callback/PasswordCallback.java \
@@ -1609,7 +1852,6 @@ JAVA_PRIVATE_SOURCES_XML = \
   org/kxml2/io/KXmlSerializer.java
 
 NATIVE_JRE_SOURCES_ZIP = \
-  io_util.m \
   java_util_zip_Deflater.m \
   java_util_zip_Inflater.m \
   java_util_zip_ZipFile.m \
@@ -1624,6 +1866,7 @@ JAVA_PUBLIC_SOURCES_ZIP = \
   java/util/jar/JarInputStream.java \
   java/util/jar/JarOutputStream.java \
   java/util/jar/Manifest.java \
+  java/util/jar/Pack200.java \
   java/util/zip/Adler32.java \
   java/util/zip/CRC32.java \
   java/util/zip/CheckedInputStream.java \
@@ -1651,11 +1894,11 @@ JAVA_PRIVATE_SOURCES_ZIP = \
   java/util/zip/ZStreamRef.java \
   java/util/zip/ZipCoder.java \
   java/util/zip/ZipConstants64.java \
+  java/util/zip/ZipUtils.java \
   libcore/io/Base64.java \
   libcore/io/BufferIterator.java \
   libcore/net/url/JarHandler.java \
   libcore/net/url/JarURLConnectionImpl.java \
-  libcore/util/CountingOutputStream.java \
   sun/misc/ASCIICaseInsensitiveComparator.java \
   sun/security/timestamp/TimestampToken.java \
   sun/security/util/SignatureFileVerifier.java \
@@ -1710,7 +1953,22 @@ JAVA_PUBLIC_SOURCES_SQL = \
   java/sql/Time.java \
   java/sql/Timestamp.java \
   java/sql/Types.java \
-  java/sql/Wrapper.java
+  java/sql/Wrapper.java \
+  javax/sql/CommonDataSource.java \
+  javax/sql/ConnectionEvent.java \
+  javax/sql/ConnectionEventListener.java \
+  javax/sql/ConnectionPoolDataSource.java \
+  javax/sql/DataSource.java \
+  javax/sql/PooledConnection.java \
+  javax/sql/RowSet.java \
+  javax/sql/RowSetEvent.java \
+  javax/sql/RowSetInternal.java \
+  javax/sql/RowSetListener.java \
+  javax/sql/RowSetMetaData.java \
+  javax/sql/RowSetReader.java \
+  javax/sql/RowSetWriter.java \
+  javax/sql/StatementEvent.java \
+  javax/sql/StatementEventListener.java
 
 JAVA_PRIVATE_SOURCES_SQL =
 
@@ -1747,6 +2005,7 @@ JAVA_PUBLIC_SOURCES_TIME = \
   java/time/DayOfWeek.java \
   java/time/Duration.java \
   java/time/Instant.java \
+  java/time/InstantSource.java \
   java/time/LocalDate.java \
   java/time/LocalDateTime.java \
   java/time/LocalTime.java \
@@ -1816,6 +2075,7 @@ JAVA_PRIVATE_SOURCES_TIME = \
   java/time/zone/ZoneRulesProvider.java \
   sun/util/locale/provider/CalendarDataUtility.java
 
+#ExtendedTimeZone, ExtendedCalendar and ExtendedDateFormatSymbols are really private but referenced from the java_time_lib#
 JAVA_PUBLIC_SOURCES_ICU = \
   android/icu/lang/UCharacter.java \
   android/icu/lang/UCharacterCategory.java \
@@ -1832,6 +2092,7 @@ JAVA_PUBLIC_SOURCES_ICU = \
   android/icu/text/DecimalFormat.java \
   android/icu/text/DecimalFormatSymbols.java \
   android/icu/text/DisplayContext.java \
+  android/icu/text/ListFormatter.java \
   android/icu/text/LocaleDisplayNames.java \
   android/icu/text/MessageFormat.java \
   android/icu/text/MessagePattern.java \
@@ -1872,10 +2133,15 @@ JAVA_PUBLIC_SOURCES_ICU = \
   android/icu/util/ULocale.java \
   android/icu/util/ValueIterator.java \
   android/icu/util/VersionInfo.java \
+  com/android/icu/util/ExtendedTimeZone.java \
+  com/android/icu/util/ExtendedCalendar.java \
+  com/android/icu/text/ExtendedDateFormatSymbols.java \
+  java/text/BreakIterator.java \
 
 JAVA_PRIVATE_SOURCES_ICU = \
   android/icu/impl/Assert.java \
   android/icu/impl/BMPSet.java \
+  android/icu/impl/CSCharacterIterator.java \
   android/icu/impl/CacheBase.java \
   android/icu/impl/CacheValue.java \
   android/icu/impl/CalendarCache.java \
@@ -1922,6 +2188,7 @@ JAVA_PRIVATE_SOURCES_ICU = \
   android/icu/impl/ResourceBundleWrapper.java \
   android/icu/impl/RuleCharacterIterator.java \
   android/icu/impl/SimpleCache.java \
+  android/icu/impl/SimpleFilteredSentenceBreakIterator.java \
   android/icu/impl/SimpleFormatterImpl.java \
   android/icu/impl/SoftCache.java \
   android/icu/impl/SortedSetRelation.java \
@@ -1968,12 +2235,14 @@ JAVA_PRIVATE_SOURCES_ICU = \
   android/icu/impl/locale/UnicodeLocaleExtension.java \
   android/icu/lang/CharSequences.java \
   android/icu/lang/UCharacterNameIterator.java \
+  android/icu/text/BreakIteratorFactory.java \
   android/icu/text/CurrencyDisplayNames.java \
   android/icu/text/CurrencyMetaInfo.java \
   android/icu/text/DictionaryBreakEngine.java \
   android/icu/text/DictionaryMatcher.java \
   android/icu/text/DigitList.java \
   android/icu/text/Edits.java \
+  android/icu/text/FilteredBreakIteratorBuilder.java \
   android/icu/text/FilteredNormalizer2.java \
   android/icu/text/LanguageBreakEngine.java \
   android/icu/text/NFRule.java \
@@ -2002,6 +2271,8 @@ JAVA_PRIVATE_SOURCES_ICU = \
   android/icu/util/AnnualTimeZoneRule.java \
   android/icu/util/BasicTimeZone.java \
   android/icu/util/BytesTrie.java \
+  android/icu/util/CharsTrie.java \
+  android/icu/util/CharsTrieBuilder.java \
   android/icu/util/DateTimeRule.java \
   android/icu/util/ICUCloneNotSupportedException.java \
   android/icu/util/ICUException.java \
@@ -2010,6 +2281,7 @@ JAVA_PRIVATE_SOURCES_ICU = \
   android/icu/util/RuleBasedTimeZone.java \
   android/icu/util/STZInfo.java \
   android/icu/util/SimpleTimeZone.java \
+  android/icu/util/StringTrieBuilder.java \
   android/icu/util/TimeArrayTimeZoneRule.java \
   android/icu/util/TimeZoneRule.java \
   android/icu/util/TimeZoneTransition.java \
@@ -2017,76 +2289,35 @@ JAVA_PRIVATE_SOURCES_ICU = \
   android/icu/util/UResourceBundleIterator.java \
   android/icu/util/UResourceTypeMismatchException.java \
   android/icu/util/VTimeZone.java \
+  java/text/IcuIteratorWrapper.java \
 
-NATIVE_JRE_SOURCES_ICU = \
-  ICUData.m
+NATIVE_JRE_ICU_EMBEDDED_DATA = ICUData.m
 
 # These sources are not included in any sub-library, only the full jre_emul.
-# javax.lang.model.element.Modifier is required by mockito, so it is only needed
+# The java.lang.management classes are used by JUnit 4.13, so they are only needed
 # in a testing environment. The other classes are errors only thrown by a JVM.
 JAVA_PUBLIC_SOURCES_OTHER = \
   java/lang/ClassCircularityError.java \
   java/lang/UnsupportedClassVersionError.java \
-  javax/lang/model/element/Modifier.java
+  java/lang/management/ManagementFactory.java \
+  java/lang/management/RuntimeMXBean.java \
+  java/lang/management/ThreadMXBean.java
 
-JAVA_PRIVATE_SOURCES_OTHER =
+JAVA_PRIVATE_SOURCES_OTHER = \
+  java/lang/management/ThreadInfo.java
 
-ANDROID_PUBLIC_SOURCES = \
-  android/os/AsyncTask.java \
-  android/os/SystemClock.java \
-  android/test/suitebuilder/annotation/LargeTest.java \
-  android/test/suitebuilder/annotation/MediumTest.java \
-  android/test/suitebuilder/annotation/SmallTest.java \
-  android/test/suitebuilder/annotation/Smoke.java \
-  android/test/suitebuilder/annotation/Suppress.java \
-  android/text/Editable.java \
-  android/text/GetChars.java \
-  android/text/InputFilter.java \
-  android/text/InputType.java \
-  android/text/NoCopySpan.java \
-  android/text/Selection.java \
-  android/text/SpanSet.java \
-  android/text/SpanWatcher.java \
-  android/text/Spannable.java \
-  android/text/SpannableString.java \
-  android/text/SpannableStringBuilder.java \
-  android/text/SpannableStringInternal.java \
-  android/text/Spanned.java \
-  android/text/SpannedString.java \
-  android/text/TextUtils.java \
-  android/text/TextWatcher.java \
-  android/text/util/Rfc822Token.java \
-  android/text/util/Rfc822Tokenizer.java \
-  android/util/ArrayMap.java \
-  android/util/ArraySet.java \
-  android/util/Base64.java \
-  android/util/Base64DataException.java \
-  android/util/Base64InputStream.java \
-  android/util/Base64OutputStream.java \
-  android/util/Log.java \
-  android/util/LruCache.java \
-  android/util/MapCollections.java \
-  android/util/Pair.java \
-  android/util/Printer.java \
-  android/util/SparseArray.java \
-  android/util/SparseBooleanArray.java \
-  android/util/SparseIntArray.java \
-  android/util/SparseLongArray.java \
-  org/json/JSON.java \
+JSON_PUBLIC_SOURCES = \
   org/json/JSONArray.java \
   org/json/JSONException.java \
   org/json/JSONObject.java \
   org/json/JSONStringer.java \
   org/json/JSONTokener.java
 
-ANDROID_PRIVATE_SOURCES = \
-  android/util/ContainerHelpers.java \
-  com/android/internal/util/ArrayUtils.java \
-  com/google/android/collect/Lists.java \
-  com/google/android/collect/Maps.java \
-  com/google/android/collect/Sets.java
+JSON_PRIVATE_SOURCES = \
+  org/json/JSON.java
 
 ANDROID_ANNOTATIONS = android/platform/libcore/annotations/ojluni.jaif
+J2OBJC_ANNOTATIONS = j2objc.jaif
 
 JAVA_SOURCES_CORE = $(JAVA_PUBLIC_SOURCES_CORE) $(JAVA_PRIVATE_SOURCES_CORE)
 JAVA_SOURCES_OTHER = $(JAVA_PUBLIC_SOURCES_OTHER) $(JAVA_PRIVATE_SOURCES_OTHER)
@@ -2095,6 +2326,7 @@ JAVA_SOURCES_NET = $(JAVA_PUBLIC_SOURCES_NET) $(JAVA_PRIVATE_SOURCES_NET)
 JAVA_SOURCES_UTIL = $(JAVA_PUBLIC_SOURCES_UTIL) $(JAVA_PRIVATE_SOURCES_UTIL)
 JAVA_SOURCES_CONCURRENT = $(JAVA_PUBLIC_SOURCES_CONCURRENT) $(JAVA_PRIVATE_SOURCES_CONCURRENT)
 JAVA_SOURCES_CHANNELS = $(JAVA_PUBLIC_SOURCES_CHANNELS) $(JAVA_PRIVATE_SOURCES_CHANNELS)
+JAVA_SOURCES_FILE = $(JAVA_PUBLIC_SOURCES_FILE) $(JAVA_PRIVATE_SOURCES_FILE)
 JAVA_SOURCES_SECURITY = $(JAVA_PUBLIC_SOURCES_SECURITY) $(JAVA_PRIVATE_SOURCES_SECURITY)
 JAVA_SOURCES_SSL = $(JAVA_PUBLIC_SOURCES_SSL) $(JAVA_PRIVATE_SOURCES_SSL)
 JAVA_SOURCES_XML = $(JAVA_PUBLIC_SOURCES_XML) $(JAVA_PUBLIC_SOURCES_XMLPULL) \
@@ -2104,7 +2336,7 @@ JAVA_SOURCES_SQL = $(JAVA_PUBLIC_SOURCES_SQL) $(JAVA_PRIVATE_SOURCES_SQL)
 JAVA_SOURCES_BEANS = $(JAVA_PUBLIC_SOURCES_BEANS) $(JAVA_PRIVATE_SOURCES_BEANS)
 JAVA_SOURCES_TIME = $(JAVA_PUBLIC_SOURCES_TIME) $(JAVA_PRIVATE_SOURCES_TIME)
 JAVA_SOURCES_ICU = $(JAVA_PUBLIC_SOURCES_ICU) $(JAVA_PRIVATE_SOURCES_ICU)
-JAVA_SOURCES_ANDROID = $(ANDROID_PUBLIC_SOURCES) $(ANDROID_PRIVATE_SOURCES)
+JAVA_SOURCES_JSON = $(JSON_PUBLIC_SOURCES) $(JSON_PRIVATE_SOURCES)
 
 # These annotations have a SOURCE retention, and so should not be part of the runtime.
 # They need to be included in the jre_emul.jar, however.
@@ -2112,7 +2344,12 @@ SOURCE_RETENTION_ANNOTATIONS = \
   java/lang/Override.java \
   java/lang/SuppressWarnings.java \
   java/lang/annotation/Native.java \
-  javax/annotation/Generated.java
+  javax/annotation/processing/Generated.java
+
+JSON_SOURCE_RETENTION_ANNOTATIONS = \
+  org/json/NonNull.java \
+  org/json/Nullable.java \
+  org/json/UnsupportedAppUsage.java
 
 # Java classes with hand written obj-c implementations. Shouldn't be translated,
 # but need to include the .java file in jre_emul.jar.
@@ -2145,6 +2382,7 @@ PUBLIC_NATIVE_HEADERS = \
   J2ObjC_types.h \
   JavaObject.h \
   JreEmulation.h \
+  JreExceptionAdapters.h \
   JreRetainedWith.h \
   NSCopying+JavaCloneable.h \
   NSDataInputStream.h \
@@ -2161,15 +2399,122 @@ PUBLIC_NATIVE_HEADERS = \
   java/lang/reflect/Method.h \
   jni.h
 
-# They are only needed while translating files in the corresponding packages,
-# but they do not need to be translated.
-ANNOTATED_PACKAGE_INFO = \
+JRE_PUBLIC_PACKAGES = \
+  java.awt.font \
+  java.beans \
+  java.io \
+  java.lang \
+  java.lang.annotation \
+  java.lang.ref \
+  java.lang.reflect \
+  java.math \
+  java.net \
+  java.nio \
+  java.nio.channels \
+  java.nio.channels.spi \
+  java.nio.charset \
+  java.nio.charset.spi \
+  java.nio.file \
+  java.nio.file.attribute \
+  java.nio.file.spi \
+  java.security \
+  java.security.cert \
+  java.security.interfaces \
+  java.security.spec \
+  java.sql \
+  java.text \
+  java.time \
+  java.time.chrono \
+  java.time.format \
+  java.time.temporal \
+  java.time.zone \
+  java.util \
+  java.util.concurrent \
+  java.util.concurrent.atomic \
+  java.util.concurrent.locks \
+  java.util.function \
+  java.util.jar \
+  java.util.logging \
+  java.util.regex \
+  java.util.stream \
+  java.util.zip \
+  javax.crypto \
+  javax.crypto.interfaces \
+  javax.crypto.spec \
+  javax.lang.model.element \
+  javax.lang.model.type \
+  javax.net \
+  javax.net.ssl \
+  javax.security.auth \
+  javax.security.auth.callback \
+  javax.security.auth.x500 \
+  javax.security.cert \
+  javax.sql \
+  javax.xml \
+  javax.xml.datatype \
+  javax.xml.namespace \
+  javax.xml.parsers \
+  javax.xml.transform \
+  javax.xml.transform.dom \
+  javax.xml.transform.sax \
+  javax.xml.transform.stream \
+  javax.xml.validation \
+  javax.xml.xpath \
+  org.w3c.dom \
+  org.w3c.dom.ls \
+  org.w3c.dom.traversal \
+  org.xml.sax \
+  org.xml.sax.ext \
+  org.xml.sax.helpers
+
+ANDROID_PUBLIC_PACKAGES = \
+  android.internal \
+  android.text \
+  android.text.util \
+  android.util \
+  org.json \
+  org.xmlpull.v1 \
+  org.xmlpull.v1.sax2
+
+# Doc-only package-info.java sources.
+PACKAGE_INFO = \
+  java/lang/annotation/package-info.java \
+  java/lang/package-info.java \
+  java/lang/ref/package-info.java \
+  java/lang/reflect/package-info.java \
+  java/math/package-info.java \
+  java/net/package-info.java \
+  java/nio/channels/package-info.java \
+  java/nio/charset/package-info.java \
+  java/nio/package-info.java \
+  java/security/cert/package-info.java \
+  java/security/interfaces/package-info.java \
+  java/security/package-info.java \
+  java/security/spec/package-info.java \
+  java/time/chrono/package-info.java \
+  java/time/format/package-info.java \
+  java/time/package-info.java \
+  java/time/temporal/package-info.java \
+  java/time/zone/package-info.java \
+  java/util/concurrent/atomic/package-info.java \
+  java/util/concurrent/locks/package-info.java \
   java/util/concurrent/package-info.java \
+  java/util/function/package-info.java \
+  java/util/stream/package-info.java \
+  javax/security/auth/callback/package-info.java \
+  javax/security/auth/package-info.java \
+  javax/security/auth/x500/package-info.java \
+  javax/security/cert/package-info.java
+
+# This is only needed while translating files in the corresponding packages,
+# but does not need to be translated.
+ANNOTATED_PACKAGE_INFO = \
   sun/security/x509/package-info.java
 
 NO_TRANSLATE_JAVA_SOURCES = \
   $(SOURCE_RETENTION_ANNOTATIONS) \
   $(EMULATED_JAVA_SOURCES) \
+  $(PACKAGE_INFO) \
   $(ANNOTATED_PACKAGE_INFO)
 
 JAVA_PUBLIC_SOURCES_JRE = \
@@ -2179,6 +2524,7 @@ JAVA_PUBLIC_SOURCES_JRE = \
   $(JAVA_PUBLIC_SOURCES_UTIL) \
   $(JAVA_PUBLIC_SOURCES_CONCURRENT) \
   $(JAVA_PUBLIC_SOURCES_CHANNELS) \
+  $(JAVA_PUBLIC_SOURCES_FILE) \
   $(JAVA_PUBLIC_SOURCES_SECURITY) \
   $(JAVA_PUBLIC_SOURCES_SSL) \
   $(JAVA_PUBLIC_SOURCES_XML) \
@@ -2195,6 +2541,7 @@ JAVA_PRIVATE_SOURCES = \
   $(JAVA_PRIVATE_SOURCES_UTIL) \
   $(JAVA_PRIVATE_SOURCES_CONCURRENT) \
   $(JAVA_PRIVATE_SOURCES_CHANNELS) \
+  $(JAVA_PRIVATE_SOURCES_FILE) \
   $(JAVA_PRIVATE_SOURCES_SECURITY) \
   $(JAVA_PRIVATE_SOURCES_SSL) \
   $(JAVA_PRIVATE_SOURCES_XML) \
@@ -2203,13 +2550,12 @@ JAVA_PRIVATE_SOURCES = \
   $(JAVA_PRIVATE_SOURCES_BEANS) \
   $(JAVA_PRIVATE_SOURCES_TIME) \
   $(JAVA_PRIVATE_SOURCES_ICU) \
-  $(JAVA_PRIVATE_SOURCES_OTHER) \
-  $(ANDROID_PRIVATE_SOURCES)
+  $(JAVA_PRIVATE_SOURCES_OTHER)
 
-JAVA_PUBLIC_SOURCES = $(JAVA_PUBLIC_SOURCES_JRE) $(ANDROID_PUBLIC_SOURCES) \
+JAVA_PUBLIC_SOURCES = $(JAVA_PUBLIC_SOURCES_JRE) \
   $(JAVA_PUBLIC_SOURCES_XMLPULL)
 JAVA_SOURCES = $(JAVA_PUBLIC_SOURCES) $(JAVA_PRIVATE_SOURCES)
 
 NATIVE_JRE_SOURCES = $(NATIVE_JRE_SOURCES_CORE) $(NATIVE_JRE_SOURCES_ZIP) \
-  $(NATIVE_JRE_SOURCES_CHANNELS) $(NATIVE_JRE_SOURCES_NET) $(NATIVE_JRE_SOURCES_SSL) \
-  $(NATIVE_JRE_SOURCES_ICU)
+  $(NATIVE_JRE_SOURCES_CHANNELS) $(NATIVE_JRE_SOURCES_FILE) $(NATIVE_JRE_SOURCES_NET) \
+  $(NATIVE_JRE_SOURCES_SSL) $(NATIVE_JRE_ICU_EMBEDDED_DATA)

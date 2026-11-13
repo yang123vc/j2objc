@@ -29,9 +29,11 @@ import com.google.devtools.j2objc.ast.EnumDeclaration;
 import com.google.devtools.j2objc.ast.Expression;
 import com.google.devtools.j2objc.ast.FieldDeclaration;
 import com.google.devtools.j2objc.ast.FunctionDeclaration;
+import com.google.devtools.j2objc.ast.FunctionInvocation;
 import com.google.devtools.j2objc.ast.MethodDeclaration;
 import com.google.devtools.j2objc.ast.NativeExpression;
 import com.google.devtools.j2objc.ast.NativeStatement;
+import com.google.devtools.j2objc.ast.RecordDeclaration;
 import com.google.devtools.j2objc.ast.ReturnStatement;
 import com.google.devtools.j2objc.ast.SingleVariableDeclaration;
 import com.google.devtools.j2objc.ast.Statement;
@@ -39,6 +41,7 @@ import com.google.devtools.j2objc.ast.TreeUtil;
 import com.google.devtools.j2objc.ast.TypeDeclaration;
 import com.google.devtools.j2objc.ast.UnitTreeVisitor;
 import com.google.devtools.j2objc.ast.VariableDeclarationFragment;
+import com.google.devtools.j2objc.types.FunctionElement;
 import com.google.devtools.j2objc.types.GeneratedExecutableElement;
 import com.google.devtools.j2objc.types.GeneratedTypeElement;
 import com.google.devtools.j2objc.types.NativeType;
@@ -47,15 +50,18 @@ import com.google.devtools.j2objc.util.ElementUtil;
 import com.google.devtools.j2objc.util.ErrorUtil;
 import com.google.devtools.j2objc.util.TypeUtil;
 import com.google.devtools.j2objc.util.UnicodeUtils;
+import java.lang.annotation.Repeatable;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ArrayType;
+import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -93,6 +99,11 @@ public class MetadataWriter extends UnitTreeVisitor {
     visitType(node);
   }
 
+  @Override
+  public void endVisit(RecordDeclaration node) {
+    visitType(node);
+  }
+
   private void visitType(AbstractTypeDeclaration node) {
     if (node.isDeadClass()) {
       return;
@@ -111,7 +122,7 @@ public class MetadataWriter extends UnitTreeVisitor {
     Block body = new Block();
     metadataDecl.setBody(body);
 
-    new MetadataGenerator(node, body.getStatements()).generateClassMetadata();
+    new MetadataGenerator(node, body.getStatements()).generateClassMetadata(metadataElement);
 
     node.addBodyDeclaration(metadataDecl);
   }
@@ -136,11 +147,11 @@ public class MetadataWriter extends UnitTreeVisitor {
       this.stmts = stmts;
     }
 
-    private void generateClassMetadata() {
+    private void generateClassMetadata(ExecutableElement element) {
       String fullName = nameTable.getFullName(type);
       int methodMetadataCount = generateMethodsMetadata();
       int fieldMetadataCount = generateFieldsMetadata();
-      String annotationsFunc = createAnnotationsFunction(typeNode);
+      String annotationsFunc = createAnnotationsFunction(typeNode, element);
       String metadata = UnicodeUtils.format(
           "static const J2ObjcClassInfo _%s = { "
           + "%s, %s, %%s, %s, %s, %d, 0x%x, %d, %d, %s, %s, %s, %s, %s };",
@@ -195,7 +206,7 @@ public class MetadataWriter extends UnitTreeVisitor {
             || (ElementUtil.isEnum(type) && ElementUtil.isConstructor(element))) {
           continue;
         }
-        String annotationsFunc = createAnnotationsFunction(decl);
+        String annotationsFunc = createAnnotationsFunction(decl, element);
         String paramAnnotationsFunc = createParamAnnotationsFunction(decl);
         methodMetadata.add(getMethodMetadata(element, annotationsFunc, paramAnnotationsFunc));
         String selector = nameTable.getMethodSelector(element);
@@ -207,7 +218,7 @@ public class MetadataWriter extends UnitTreeVisitor {
       if (typeNode instanceof AnnotationTypeDeclaration) {
         // Add property accessor and static default methods.
         for (AnnotationTypeMemberDeclaration decl : TreeUtil.getAnnotationMembers(typeNode)) {
-          String name = ElementUtil.getName(decl.getExecutableElement());
+          String name = nameTable.getMethodSelector(decl.getExecutableElement());
           String returnType = getTypeName(decl.getExecutableElement().getReturnType());
           String metadata = UnicodeUtils.format("    { NULL, %s, 0x%x, -1, -1, -1, -1, -1, -1 },\n",
               cStr(returnType),
@@ -244,15 +255,23 @@ public class MetadataWriter extends UnitTreeVisitor {
       String methodName = ElementUtil.getName(method);
       String selector = nameTable.getMethodSelector(method);
       boolean isConstructor = ElementUtil.isConstructor(method);
-      if (selector.equals(methodName) || isConstructor) {
+      if (selector.equals(methodName) || isConstructor || translationUtil.isJUnit3TestClass(type)) {
         methodName = null;  // Reduce redundant data.
       }
 
       int modifiers = getMethodModifiers(method) & ElementUtil.ACC_FLAG_MASK;
       String returnTypeStr = isConstructor ? null : getTypeName(method.getReturnType());
+      List<VariableElement> params = new ArrayList<>();
+      if (isConstructor) {
+        Iterables.addAll(params, unit.getEnv().captureInfo().getImplicitPrefixParams(type));
+      }
+      params.addAll(method.getParameters());
+      if (isConstructor) {
+        Iterables.addAll(params, unit.getEnv().captureInfo().getImplicitPostfixParams(type));
+      }
       return UnicodeUtils.format("    { NULL, %s, 0x%x, %s, %s, %s, %s, %s, %s },\n",
           cStr(returnTypeStr), modifiers, cStrIdx(methodName),
-          cStrIdx(getTypeList(ElementUtil.asTypes(method.getParameters()))),
+          cStrIdx(getTypeList(ElementUtil.asTypes(params))),
           cStrIdx(getTypeList(method.getThrownTypes())),
           cStrIdx(signatureGenerator.createMethodTypeSignature(method)),
           funcPtrIdx(annotationsFunc), funcPtrIdx(paramAnnotationsFunc));
@@ -262,18 +281,17 @@ public class MetadataWriter extends UnitTreeVisitor {
       List<String> fieldMetadata = new ArrayList<>();
       if (typeNode instanceof EnumDeclaration) {
         for (EnumConstantDeclaration decl : ((EnumDeclaration) typeNode).getEnumConstants()) {
-          String annotationsFunc = createAnnotationsFunction(decl);
+          String annotationsFunc = createAnnotationsFunction(decl, null);
           fieldMetadata.add(generateFieldMetadata(decl.getVariableElement(), annotationsFunc));
         }
       }
       for (FieldDeclaration decl : TreeUtil.getFieldDeclarations(typeNode)) {
         // Fields that share a declaration can share an annotations function.
-        String annotationsFunc = createAnnotationsFunction(decl);
-        for (VariableDeclarationFragment f : decl.getFragments()) {
-          String metadata = generateFieldMetadata(f.getVariableElement(), annotationsFunc);
-          if (metadata != null) {
-            fieldMetadata.add(metadata);
-          }
+        String annotationsFunc = createAnnotationsFunction(decl, null);
+        VariableDeclarationFragment f = decl.getFragment();
+        String metadata = generateFieldMetadata(f.getVariableElement(), annotationsFunc);
+        if (metadata != null) {
+          fieldMetadata.add(metadata);
         }
       }
       if (fieldMetadata.size() > 0) {
@@ -350,20 +368,18 @@ public class MetadataWriter extends UnitTreeVisitor {
       return idx.toString();
     }
 
-    /**
-     * Generate a function that returns the annotations for a BodyDeclarations node.
-     */
-    private String createAnnotationsFunction(BodyDeclaration decl) {
+    /** Generate a function that returns the annotations for a BodyDeclarations node. */
+    private String createAnnotationsFunction(BodyDeclaration decl, ExecutableElement element) {
       List<Annotation> runtimeAnnotations =
           TreeUtil.getRuntimeAnnotationsList(decl.getAnnotations());
       if (runtimeAnnotations.isEmpty()) {
         return null;
       }
-      return addAnnotationsFunction(createAnnotations(runtimeAnnotations));
+      return addAnnotationsFunction(createAnnotations(runtimeAnnotations), element);
     }
 
     /**
-     * Generate a function that returns the 2-dimentional array of annotations for method
+     * Generate a function that returns the 2-dimensional array of annotations for method
      * parameters.
      */
     private String createParamAnnotationsFunction(MethodDeclaration method) {
@@ -382,18 +398,30 @@ public class MetadataWriter extends UnitTreeVisitor {
       }
 
       List<Expression> subArrays = new ArrayList<>();
+      boolean isConstructor = ElementUtil.isConstructor(method.getExecutableElement());
+      if (isConstructor) {
+        for (VariableElement unused : unit.getEnv().captureInfo().getImplicitPrefixParams(type)) {
+          subArrays.add(createAnnotations(new ArrayList<>()));
+        }
+      }
       for (SingleVariableDeclaration param : params) {
         subArrays.add(createAnnotations(
             TreeUtil.getRuntimeAnnotationsList(param.getAnnotations())));
       }
+      if (isConstructor) {
+        for (VariableElement unused : unit.getEnv().captureInfo().getImplicitPostfixParams(type)) {
+          subArrays.add(createAnnotations(new ArrayList<>()));
+        }
+      }
 
       return addAnnotationsFunction(
-          translationUtil.createObjectArray(subArrays, annotationArray2D));
+          translationUtil.createObjectArray(subArrays, annotationArray2D),
+          method.getExecutableElement());
     }
 
-    private String addAnnotationsFunction(Expression result) {
+    private String addAnnotationsFunction(Expression result, ExecutableElement element) {
       String name = className + "__Annotations$" + annotationFuncCount++;
-      FunctionDeclaration decl = new FunctionDeclaration(name, result.getTypeMirror());
+      FunctionDeclaration decl = new FunctionDeclaration(name, result.getTypeMirror(), element);
       decl.addModifiers(java.lang.reflect.Modifier.PRIVATE);
       Block body = new Block();
       decl.setBody(body);
@@ -404,11 +432,39 @@ public class MetadataWriter extends UnitTreeVisitor {
   }
 
   private Expression createAnnotations(List<Annotation> annotations) {
-    List<Expression> expressions = new ArrayList<>();
+    // Group repeated annotations.
+    LinkedHashMap<DeclaredType, List<Annotation>> groupedAnnotations = new LinkedHashMap<>();
     for (Annotation annotation : annotations) {
-      expressions.add(translationUtil.createAnnotation(annotation.getAnnotationMirror()));
+      DeclaredType type = annotation.getAnnotationMirror().getAnnotationType();
+      groupedAnnotations.computeIfAbsent(type, k -> new ArrayList<>()).add(annotation);
+    }
+
+    List<Expression> expressions = new ArrayList<>();
+    for (List<Annotation> group : groupedAnnotations.values()) {
+      if (group.size() == 1) {
+        expressions.add(translationUtil.createAnnotation(group.get(0).getAnnotationMirror()));
+      } else {
+        expressions.add(createContainerAnnotation(group));
+      }
     }
     return translationUtil.createObjectArray(expressions, annotationArray);
+  }
+
+  // Creates the container annotation which value is an array with the repeated annotations.
+  private Expression createContainerAnnotation(List<Annotation> annotations) {
+    DeclaredType annotationType = annotations.get(0).getAnnotationMirror().getAnnotationType();
+    ArrayType arrayType = typeUtil.getArrayType(annotationType);
+    DeclaredType containerType = (DeclaredType) ElementUtil.getAnnotationValue(
+        ElementUtil.getAnnotation(annotationType.asElement(), Repeatable.class), "value");
+    TypeElement containerElement = (TypeElement) containerType.asElement();
+    FunctionElement element = new FunctionElement(
+        "create_" + nameTable.getFullName(containerElement), containerType, containerElement);
+    FunctionInvocation invocation = new FunctionInvocation(element, containerType);
+    element.addParameters(arrayType);
+    List<Expression> array = annotations.stream().map(Annotation::getAnnotationMirror)
+        .map(translationUtil::createAnnotation).collect(Collectors.toList());
+    invocation.addArgument(translationUtil.createObjectArray(array, arrayType));
+    return invocation;
   }
 
   private static String getRawValueField(VariableElement var) {

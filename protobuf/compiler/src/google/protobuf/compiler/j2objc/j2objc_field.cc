@@ -33,8 +33,13 @@
 //  Sanjay Ghemawat, Jeff Dean, Cyrus Najmabadi, and others.
 
 #include <google/protobuf/compiler/j2objc/j2objc_field.h>
-
 #include <google/protobuf/compiler/j2objc/j2objc_helpers.h>
+
+#include <map>
+#include <set>
+#include <string>
+
+#include "google/protobuf/compiler/j2objc/common.h"
 
 namespace google {
 namespace protobuf {
@@ -43,108 +48,151 @@ namespace j2objc {
 
 namespace {
 
-  string GetParameterType(const FieldDescriptor *descriptor) {
-    switch (GetJavaType(descriptor)) {
-      case JAVATYPE_INT: return "Int";
-      case JAVATYPE_LONG: return "Long";
-      case JAVATYPE_FLOAT: return "Float";
-      case JAVATYPE_DOUBLE: return "Double";
-      case JAVATYPE_BOOLEAN: return "Boolean";
-      case JAVATYPE_STRING: return "NSString";
-      case JAVATYPE_BYTES: return "ComGoogleProtobufByteString";
-      case JAVATYPE_ENUM: return ClassName(descriptor->enum_type());
-      case JAVATYPE_MESSAGE: return ClassName(descriptor->message_type());
+std::string GetParameterType(const FieldDescriptor* descriptor) {
+  switch (GetJavaType(descriptor)) {
+    case JAVATYPE_INT:
+      return "Int";
+    case JAVATYPE_LONG:
+      return "Long";
+    case JAVATYPE_FLOAT:
+      return "Float";
+    case JAVATYPE_DOUBLE:
+      return "Double";
+    case JAVATYPE_BOOLEAN:
+      return "Boolean";
+    case JAVATYPE_STRING:
+      return "NSString";
+    case JAVATYPE_BYTES:
+      return "ComGoogleProtobufByteString";
+    case JAVATYPE_ENUM:
+      return ClassName(descriptor->enum_type());
+    case JAVATYPE_MESSAGE:
+      return ClassName(descriptor->message_type());
+  }
+}
+
+std::string GetStorageType(const FieldDescriptor* descriptor) {
+  switch (GetJavaType(descriptor)) {
+    case JAVATYPE_INT:
+      return "jint";
+    case JAVATYPE_LONG:
+      return "jlong";
+    case JAVATYPE_FLOAT:
+      return "jfloat";
+    case JAVATYPE_DOUBLE:
+      return "jdouble";
+    case JAVATYPE_BOOLEAN:
+      return "bool";
+    case JAVATYPE_STRING:
+      return "NSString *";
+    case JAVATYPE_BYTES:
+      return "ComGoogleProtobufByteString *";
+    case JAVATYPE_ENUM:
+      return ClassName(descriptor->enum_type()) + " *";
+    case JAVATYPE_MESSAGE:
+      return ClassName(descriptor->message_type()) + " *";
+  }
+}
+
+std::string GetGenericType(const FieldDescriptor* descriptor) {
+  switch (GetJavaType(descriptor)) {
+    case JAVATYPE_INT:
+    case JAVATYPE_LONG:
+    case JAVATYPE_FLOAT:
+    case JAVATYPE_DOUBLE:
+    case JAVATYPE_BOOLEAN:
+      return "NSNumber *";
+    case JAVATYPE_STRING:
+      return "NSString *";
+    case JAVATYPE_BYTES:
+      return "ComGoogleProtobufByteString *";
+    case JAVATYPE_ENUM:
+      return ClassName(descriptor->enum_type()) + " *";
+    case JAVATYPE_MESSAGE:
+      return ClassName(descriptor->message_type()) + " *";
+  }
+}
+
+std::string GetNonNullType(const FieldDescriptor* descriptor) {
+  switch (GetJavaType(descriptor)) {
+    case JAVATYPE_INT:
+    case JAVATYPE_LONG:
+    case JAVATYPE_FLOAT:
+    case JAVATYPE_DOUBLE:
+    case JAVATYPE_BOOLEAN:
+      return GetStorageType(descriptor);
+    case JAVATYPE_STRING:
+    case JAVATYPE_BYTES:
+    case JAVATYPE_ENUM:
+    case JAVATYPE_MESSAGE:
+      return GetStorageType(descriptor) + " _Nonnull";
+  }
+}
+
+absl::string_view GetFieldName(const FieldDescriptor* descriptor) {
+  if (internal::cpp::IsGroupLike(*descriptor)) {
+    return descriptor->message_type()->name();
+  } else {
+    return descriptor->name();
+  }
+}
+
+std::string GetListType(const FieldDescriptor* descriptor) {
+  if (GetJavaType(descriptor) == JAVATYPE_STRING) {
+    return "ComGoogleProtobufProtocolStringList";
+  }
+  return "JavaUtilList";
+}
+
+void SetCommonFieldVariables(const FieldDescriptor* descriptor,
+                             std::map<std::string, std::string>* variables) {
+  (*variables)["classname"] = ClassName(descriptor->containing_type());
+  (*variables)["camelcase_name"] = UnderscoresToCamelCase(descriptor);
+  (*variables)["property_name"] = PropertyName(descriptor);
+  (*variables)["capitalized_name"] =
+      UnderscoresToCapitalizedCamelCase(descriptor);
+  (*variables)["field_number"] = SimpleItoa(descriptor->number());
+  (*variables)["constant_name"] = FieldConstantName(descriptor);
+  (*variables)["parameter_type"] = GetParameterType(descriptor);
+  (*variables)["storage_type"] = GetStorageType(descriptor);
+  (*variables)["nonnull_type"] = GetNonNullType(descriptor);
+  (*variables)["generic_type"] = GetGenericType(descriptor);
+  (*variables)["field_name"] = GetFieldName(descriptor);
+  (*variables)["flags"] = GetFieldFlags(descriptor);
+  (*variables)["field_type"] = GetFieldTypeEnumValue(descriptor);
+  (*variables)["default_value_type"] = GetDefaultValueTypeName(descriptor);
+  (*variables)["default_value"] = DefaultValue(descriptor);
+  (*variables)["has_bit_index"] = "0";
+  (*variables)["options_data"] = GetFieldOptionsData(descriptor);
+  (*variables)["list_type"] = GetListType(descriptor);
+}
+
+void CollectForwardDeclarationsForFieldType(std::set<std::string>* declarations,
+                                            const FieldDescriptor* descriptor,
+                                            bool includeBuilder) {
+  JavaType type = GetJavaType(descriptor);
+  if (type == JAVATYPE_BYTES) {
+    declarations->insert("@class ComGoogleProtobufByteString");
+  } else if (type == JAVATYPE_ENUM) {
+    declarations->insert("@class " + ClassName(descriptor->enum_type()));
+    declarations->insert("@class ComGoogleProtobufDescriptors_EnumDescriptor");
+    declarations->insert("J2OBJC_CLASS_DECLARATION(" +
+                         ClassName(descriptor->enum_type()) + ")");
+  } else if (type == JAVATYPE_MESSAGE) {
+    std::string classname = ClassName(descriptor->message_type());
+    declarations->insert("@class " + classname);
+    declarations->insert("J2OBJC_CLASS_DECLARATION(" + classname + ")");
+    if (includeBuilder) {
+      declarations->insert("@class " + classname + "_Builder");
+      declarations->insert("J2OBJC_CLASS_DECLARATION(" + classname +
+                           "_Builder)");
     }
   }
-
-  string GetStorageType(const FieldDescriptor *descriptor) {
-    switch (GetJavaType(descriptor)) {
-      case JAVATYPE_INT: return "jint";
-      case JAVATYPE_LONG: return "jlong";
-      case JAVATYPE_FLOAT: return "jfloat";
-      case JAVATYPE_DOUBLE: return "jdouble";
-      case JAVATYPE_BOOLEAN: return "jboolean";
-      case JAVATYPE_STRING: return "NSString *";
-      case JAVATYPE_BYTES: return "ComGoogleProtobufByteString *";
-      case JAVATYPE_ENUM:
-        return ClassName(descriptor->enum_type()) + " *";
-      case JAVATYPE_MESSAGE:
-        return ClassName(descriptor->message_type()) + " *";
-    }
-  }
-
-  string GetDeclarationSpace(const FieldDescriptor *descriptor) {
-    switch (GetJavaType(descriptor)) {
-      case JAVATYPE_INT:
-      case JAVATYPE_LONG:
-      case JAVATYPE_FLOAT:
-      case JAVATYPE_DOUBLE:
-      case JAVATYPE_BOOLEAN:
-        return " ";
-      case JAVATYPE_STRING:
-      case JAVATYPE_BYTES:
-      case JAVATYPE_ENUM:
-      case JAVATYPE_MESSAGE:
-        return "";
-    }
-  }
-
-  string GetFieldName(const FieldDescriptor *descriptor) {
-    if (descriptor->type() == FieldDescriptor::TYPE_GROUP) {
-      return descriptor->message_type()->name();
-    } else {
-      return descriptor->name();
-    }
-  }
-
-  string GetListType(const FieldDescriptor *descriptor) {
-    if (GetJavaType(descriptor) == JAVATYPE_STRING) {
-      return "ComGoogleProtobufProtocolStringList";
-    }
-    return "JavaUtilList";
-  }
-
-  void SetCommonFieldVariables(const FieldDescriptor* descriptor,
-      std::map<string, string>* variables) {
-    (*variables)["classname"] = ClassName(descriptor->containing_type());
-    (*variables)["camelcase_name"] = UnderscoresToCamelCase(descriptor);
-    (*variables)["capitalized_name"] =
-        UnderscoresToCapitalizedCamelCase(descriptor);
-    (*variables)["field_number"] = SimpleItoa(descriptor->number());
-    (*variables)["constant_name"] = FieldConstantName(descriptor);
-    (*variables)["parameter_type"] = GetParameterType(descriptor);
-    (*variables)["storage_type"] = GetStorageType(descriptor);
-    (*variables)["decl_space"] = GetDeclarationSpace(descriptor);
-    (*variables)["field_name"] = GetFieldName(descriptor);
-    (*variables)["flags"] = GetFieldFlags(descriptor);
-    (*variables)["field_type"] = GetFieldTypeEnumValue(descriptor);
-    (*variables)["default_value_type"] = GetDefaultValueTypeName(descriptor);
-    (*variables)["default_value"] = DefaultValue(descriptor);
-    (*variables)["has_bit_index"] = "0";
-    (*variables)["options_data"] = GetFieldOptionsData(descriptor);
-    (*variables)["list_type"] = GetListType(descriptor);
-  }
-
-  void CollectForwardDeclarationsForFieldType(
-      std::set<string>* declarations, const FieldDescriptor *descriptor,
-      bool includeBuilder) {
-    JavaType type = GetJavaType(descriptor);
-    if (type == JAVATYPE_BYTES) {
-      declarations->insert("@class ComGoogleProtobufByteString");
-    } else if (type == JAVATYPE_ENUM) {
-      declarations->insert("@class " + ClassName(descriptor->enum_type()));
-    } else if (type == JAVATYPE_MESSAGE) {
-      string classname = ClassName(descriptor->message_type());
-      declarations->insert("@class " + classname);
-      if (includeBuilder) {
-        declarations->insert("@class " + classname + "_Builder");
-      }
-    }
-  }
+}
 }  // namespace
 
-void CollectSourceImportsForField(
-    std::set<string>* imports, const FieldDescriptor *descriptor) {
+void CollectSourceImportsForField(std::set<std::string>* imports,
+                                  const FieldDescriptor* descriptor) {
   // Enums and messages have their Class referenced in the field metadata.
   switch (GetJavaType(descriptor)) {
     case JAVATYPE_ENUM:
@@ -159,23 +207,20 @@ void CollectSourceImportsForField(
   }
 }
 
-void GenerateObjcClass(
-    io::Printer *printer, const FieldDescriptor *descriptor,
-    const string& arr_name, uint32_t idx) {
+void GenerateObjcClassRef(
+    io::Printer *printer, const FieldDescriptor *descriptor) {
   JavaType type = GetJavaType(descriptor);
-  string classname;
+  std::string classref;
   if (type == JAVATYPE_ENUM) {
-    classname = ClassName(descriptor->enum_type());
+    classref =
+        "J2OBJC_CLASS_REFERENCE(" + ClassName(descriptor->enum_type()) + ")";
   } else if (type == JAVATYPE_MESSAGE) {
-    classname = ClassName(descriptor->message_type());
+    classref =
+        "J2OBJC_CLASS_REFERENCE(" + ClassName(descriptor->message_type()) + ")";
   } else {
-    return;  // Other types remain NULL.
+    classref = "NULL";
   }
-  printer->Print(
-      "$field_arr$[$idx$].objcType = [$classname$ class];\n",
-      "field_arr", arr_name,
-      "idx", SimpleItoa(idx),
-      "classname", classname);
+  printer->Print("  .objcType = $classref$,\n", "classref", classref);
 }
 
 FieldGenerator::FieldGenerator(const FieldDescriptor *descriptor)
@@ -183,44 +228,43 @@ FieldGenerator::FieldGenerator(const FieldDescriptor *descriptor)
   SetCommonFieldVariables(descriptor, &variables_);
 }
 
-FieldGenerator::~FieldGenerator() {
-}
+FieldGenerator::~FieldGenerator() = default;
 
-void FieldGenerator::CollectForwardDeclarations(std::set<string>* declarations)
-    const {
+void FieldGenerator::CollectForwardDeclarations(
+    std::set<std::string>* declarations) const {
   CollectForwardDeclarationsForFieldType(declarations, descriptor_, true);
 }
 
 void FieldGenerator::CollectMessageOrBuilderForwardDeclarations(
-    std::set<string>* declarations) const {
+    std::set<std::string>* declarations) const {
   CollectForwardDeclarationsForFieldType(declarations, descriptor_, false);
 }
 
-void FieldGenerator::CollectSourceImports(std::set<string>* imports) const {
+void FieldGenerator::CollectSourceImports(
+    std::set<std::string>* imports) const {
   // Imports needed for generated metadata of enum and message fields.
   CollectSourceImportsForField(imports, descriptor_);
 }
 
 void FieldGenerator::CollectMessageOrBuilderImports(
-    std::set<string>* imports) const {}
+    std::set<std::string>* imports) const {}
 
 void FieldGenerator::GenerateFieldHeader(io::Printer *printer) const {
   printer->Print(variables_,
       "#define $classname$_$constant_name$ $field_number$\n");
 }
 
-void FieldGenerator::GenerateMapEntryFieldData(io::Printer *printer) const {
-}
+void FieldGenerator::GenerateFieldSource(io::Printer* printer) const {}
 
-void FieldGenerator::GenerateMapEntryNonStaticFieldData(
-    io::Printer *printer, const string& arr_name) const {
+void FieldGenerator::GenerateFieldBuilderSource(io::Printer* printer) const {}
+
+void FieldGenerator::GenerateMapEntryFieldData(io::Printer *printer) const {
 }
 
 void FieldGenerator::GenerateFieldData(io::Printer *printer) const {
   printer->Print(variables_,
       "{\n"
       "  .name = \"$field_name$\",\n"
-      "  .javaName = \"$capitalized_name$\",\n"
       "  .number = $field_number$,\n"
       "  .flags = $flags$,\n"
       "  .type = ComGoogleProtobufDescriptors_FieldDescriptor_Type_Enum_"
@@ -242,62 +286,103 @@ void FieldGenerator::GenerateFieldDataOffset(io::Printer *printer) const {
 }
 
 void FieldGenerator::GenerateClassNameOrMapData(io::Printer *printer) const {
-  printer->Print("  .objcType = NULL,\n");
-}
-
-void FieldGenerator::GenerateNonStaticFieldData(
-    io::Printer *printer, const string &arr_name, uint32_t idx) const {
-  GenerateObjcClass(printer, descriptor_, arr_name, idx);
+  GenerateObjcClassRef(printer, descriptor_);
 }
 
 SingleFieldGenerator::SingleFieldGenerator(
     const FieldDescriptor *descriptor, uint32_t *numHasBits)
   : FieldGenerator(descriptor) {
-  if (descriptor->containing_oneof() == NULL) {
+  if (descriptor->real_containing_oneof() == nullptr) {
     variables_["has_bit_index"] = SimpleItoa((*numHasBits)++);
   }
 }
 
+void SingleFieldGenerator::GenerateFieldSource(io::Printer* printer) const {
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(variables_, "\n@dynamic $property_name$;\n");
+  }
+}
+
 void SingleFieldGenerator::GenerateFieldBuilderHeader(io::Printer* printer)
+    // clang-format off
     const {
   printer->Print(variables_, "\n"
-      "- ($classname$_Builder *)set$capitalized_name$With$parameter_type$:\n"
-      "    ($storage_type$)value;\n"
-      "- ($classname$_Builder *)clear$capitalized_name$;\n");
+      "- (nonnull $classname$_Builder *)set$capitalized_name$With$parameter_type$:\n"
+      "    ($nonnull_type$)value;\n"
+      "- (nonnull $classname$_Builder *)clear$capitalized_name$;\n");
+
+  if (GetJavaType(descriptor_) == JAVATYPE_ENUM) {
+    printer->Print(variables_,
+        "- (nonnull $classname$_Builder *)set$capitalized_name$ValueWithInt:(jint)value;\n");
+  }
+
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(GetStorageType(descriptor_) == GetNonNullType(descriptor_)
+                   ? "@property (" : "@property (nonnull, retain, ");
+    printer->Print(
+        variables_,
+        "getter=_get$capitalized_name$, "
+        "setter=_set$capitalized_name$With$parameter_type$:) "
+        "$storage_type$ $property_name$;\n");
+  }
+
   if (GetJavaType(descriptor_) == JAVATYPE_MESSAGE) {
     printer->Print(variables_,
-        "- ($classname$_Builder*)\n"
+        "- (nonnull $classname$_Builder*)\n"
         "    set$capitalized_name$With$parameter_type$_Builder:\n"
-        "    ($parameter_type$_Builder *)value;\n");
+        "    (nonnull $parameter_type$_Builder *)value;\n");
+  }
+  // clang-format on
+}
+
+void SingleFieldGenerator::GenerateFieldBuilderSource(
+    io::Printer* printer) const {
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(variables_, "\n@dynamic $property_name$;\n");
   }
 }
 
 void SingleFieldGenerator::GenerateMessageOrBuilderProtocol(io::Printer* printer)
     const {
-  printer->Print(variables_, "\n"
-      "- (BOOL)has$capitalized_name$;\n"
-      "- ($storage_type$)get$capitalized_name$;\n"
-  );
+  printer->Print("\n");
+  if (descriptor_->has_presence()) {
+    printer->Print(variables_, "- (BOOL)has$capitalized_name$;\n");
+  }
+
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(GetStorageType(descriptor_) == GetNonNullType(descriptor_)
+                       ? "@property ("
+                       : "@property (nonnull, ");
+
+    printer->Print(variables_,
+                   "readonly, getter=_get$capitalized_name$) "
+                   "$storage_type$ $property_name$;\n");
+  }
+
+  printer->Print(variables_, "- ($nonnull_type$)get$capitalized_name$;\n");
+  if (GetJavaType(descriptor_) == JAVATYPE_ENUM) {
+    printer->Print(variables_, "- (jint)get$capitalized_name$Value;\n");
+  }
 }
 
 void SingleFieldGenerator::GenerateDeclaration(io::Printer* printer) const {
-  printer->Print(variables_, "$storage_type$$decl_space$$camelcase_name$_;\n");
+  printer->Print(variables_, "$nonnull_type$ $camelcase_name$_;\n");
 }
 
 void RepeatedFieldGenerator::CollectForwardDeclarations(
-    std::set<string>* declarations) const {
+    std::set<std::string>* declarations) const {
   FieldGenerator::CollectForwardDeclarations(declarations);
   declarations->insert("@protocol JavaLangIterable");
 }
 
 void RepeatedFieldGenerator::CollectMessageOrBuilderForwardDeclarations(
-    std::set<string>* declarations) const {
+    std::set<std::string>* declarations) const {
   FieldGenerator::CollectMessageOrBuilderForwardDeclarations(declarations);
   declarations->insert("@protocol " + GetListType(descriptor_));
 }
 
 void RepeatedFieldGenerator::CollectMessageOrBuilderImports(
-    std::set<string>* imports) const {
+    std::set<std::string>* imports) const {
   if (GetJavaType(descriptor_) == JAVATYPE_STRING) {
     // When translated against an older Java protobuf runtime, the caller
     // will need the full type info for ProtocolStringList.
@@ -306,31 +391,92 @@ void RepeatedFieldGenerator::CollectMessageOrBuilderImports(
 }
 
 void RepeatedFieldGenerator::GenerateFieldBuilderHeader(io::Printer* printer)
+    // clang-format off
     const {
   printer->Print(variables_, "\n"
-      "- ($classname$_Builder *)set$capitalized_name$WithInt:(int)index\n"
-      "    with$parameter_type$:($storage_type$)value;\n"
-      "- ($classname$_Builder *)add$capitalized_name$With$parameter_type$:\n"
-      "    ($storage_type$)value;\n"
-      "- ($classname$_Builder *)addAll$capitalized_name$WithJavaLangIterable:\n"
+      "- (nonnull $classname$_Builder *)set$capitalized_name$WithInt:(int)index\n"
+      "    with$parameter_type$:($nonnull_type$)value;\n"
+      "- (nonnull $classname$_Builder *)add$capitalized_name$With$parameter_type$:\n"
+      "    ($nonnull_type$)value;\n"
+      "- (nonnull $classname$_Builder *)addAll$capitalized_name$WithJavaLangIterable:\n"
       "    (id<JavaLangIterable>)values;\n"
-      "- ($classname$_Builder *)clear$capitalized_name$;\n"
+      "- (nonnull $classname$_Builder *)clear$capitalized_name$;\n"
   );
+  if (GetJavaType(descriptor_) == JAVATYPE_ENUM) {
+    printer->Print(variables_,
+        "- (nonnull $classname$_Builder *)set$capitalized_name$ValueWithInt:(int)index\n"
+        "    withInt:(jint)value;\n"
+        "- (nonnull $classname$_Builder *)add$capitalized_name$ValueWithInt:(jint)value;\n"
+        "- (nonnull $classname$_Builder *)addAll$capitalized_name$ValueWithJavaLangIterable:\n"
+        "    (id<JavaLangIterable>)values;\n"
+    );
+  }
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(
+        variables_,
+        "- (nonnull $classname$_Builder *)add$capitalized_name$:\n"
+        "    ($nonnull_type$)value NS_SWIFT_NAME(add$capitalized_name$(_:));\n"
+        "- (nonnull $classname$_Builder *)addAll$capitalized_name$:\n"
+        "    (id<NSFastEnumeration>)values"
+        " NS_SWIFT_NAME(addAll$capitalized_name$(_:));\n");
+  }
   if (GetJavaType(descriptor_) == JAVATYPE_MESSAGE) {
     printer->Print(variables_,
-        "- ($classname$_Builder*)\n"
+        "- (nonnull $classname$_Builder*)\n"
         "    add$capitalized_name$With$parameter_type$_Builder:\n"
-        "    ($parameter_type$_Builder *)value;\n");
+        "    (nonnull $parameter_type$_Builder *)value;\n"
+        "- (nonnull $classname$_Builder *)remove$capitalized_name$WithInt:(int)index;\n"
+    );
   }
+// clang-format off
 }
 
 void RepeatedFieldGenerator::GenerateMessageOrBuilderProtocol(
     io::Printer* printer) const {
-  printer->Print(variables_, "\n"
+  printer->Print(
+      variables_,
+      "\n"
       "- (jint)get$capitalized_name$Count;\n"
       "- (id<$list_type$>)get$capitalized_name$List;\n"
-      "- ($storage_type$)get$capitalized_name$WithInt:(int)index;\n"
-  );
+      "- ($nonnull_type$)get$capitalized_name$WithInt:(int)index;\n");
+
+  if (GetJavaType(descriptor_) == JAVATYPE_ENUM) {
+    printer->Print(
+        variables_,
+        "- (nonnull id<JavaUtilList>)get$capitalized_name$ValueList;\n"
+        "- (jint)get$capitalized_name$ValueWithInt:(int)index;\n");
+  }
+
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(
+        variables_,
+        "@property (readonly, getter=_get$capitalized_name$Count)"
+        " jint $camelcase_name$Count;\n"
+        "@property (nonnull, readonly, getter=_get$capitalized_name$Array)"
+        " NSArray<$generic_type$> *$property_name$;\n"
+        "- ($nonnull_type$)get$capitalized_name$Index:(int)index"
+        " NS_SWIFT_NAME(get$capitalized_name$(_:));\n");
+  }
+}
+
+void RepeatedFieldGenerator::GenerateFieldSource(io::Printer* printer) const {
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(
+        variables_,
+        "\n"
+        "@dynamic $camelcase_name$Count;\n"
+        "@dynamic $property_name$;\n");
+  }
+}
+
+void RepeatedFieldGenerator::GenerateFieldBuilderSource(io::Printer* printer) const {
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(
+      variables_,
+      "\n"
+      "@dynamic $camelcase_name$Count;\n"
+      "@dynamic $property_name$;\n");
+  }
 }
 
 void RepeatedFieldGenerator::GenerateDeclaration(io::Printer* printer) const {
@@ -348,25 +494,27 @@ MapFieldGenerator::MapFieldGenerator(
   value_field_ = entry_message->FindFieldByName("value");
 
   variables_["key_storage_type"] = GetStorageType(key_field_);
+  variables_["key_generic_type"] = GetGenericType(key_field_);
   variables_["key_parameter_type"] = GetParameterType(key_field_);
   variables_["key_descriptor_type"] = GetFieldTypeEnumValue(key_field_);
-  variables_["value_storage_type"] = GetStorageType(value_field_);
+  variables_["value_generic_type"] = GetGenericType(value_field_);
+  variables_["value_nonnull_type"] = GetNonNullType(value_field_);
   variables_["value_parameter_type"] = GetParameterType(value_field_);
   variables_["value_descriptor_type"] = GetFieldTypeEnumValue(value_field_);
   variables_["map_entry_fields_idx"] = SimpleItoa(entry_fields_idx_);
 }
 
 void MapFieldGenerator::CollectForwardDeclarations(
-    std::set<string>* declarations) const {
-}
+    std::set<std::string>* declarations) const {}
 
 void MapFieldGenerator::CollectMessageOrBuilderForwardDeclarations(
-    std::set<string>* declarations) const {
+    std::set<std::string>* declarations) const {
   CollectForwardDeclarationsForFieldType(declarations, value_field_, false);
   declarations->insert("@protocol JavaUtilMap");
 }
 
-void MapFieldGenerator::CollectSourceImports(std::set<string>* imports) const {
+void MapFieldGenerator::CollectSourceImports(
+    std::set<std::string>* imports) const {
   // Don't call super. Map fields are a special case.
   imports->insert("com/google/protobuf/MapField.h");
   CollectSourceImportsForField(imports, key_field_);
@@ -374,29 +522,84 @@ void MapFieldGenerator::CollectSourceImports(std::set<string>* imports) const {
 }
 
 void MapFieldGenerator::GenerateFieldBuilderHeader(io::Printer* printer) const {
-  printer->Print(variables_, "\n"
-      "- ($classname$_Builder *)clear$capitalized_name$;\n"
-      "- ($classname$_Builder *)remove$capitalized_name$With"
-          "$key_parameter_type$:($key_storage_type$)key;\n"
-      "- ($classname$_Builder *)put$capitalized_name$With$key_parameter_type$:"
-          "($key_storage_type$)key with$value_parameter_type$:"
-          "($value_storage_type$)value;\n"
-  );
+  printer->Print(variables_,
+                 "\n"
+                 "- (nonnull $classname$_Builder *)clear$capitalized_name$;\n"
+                 "- (nonnull $classname$_Builder *)remove$capitalized_name$With"
+                 "$key_parameter_type$:($key_storage_type$)key;\n"
+                 "- (nonnull $classname$_Builder "
+                 "*)put$capitalized_name$With$key_parameter_type$:"
+                 "($key_storage_type$)key with$value_parameter_type$:"
+                 "($value_nonnull_type$)value;\n");
+
+  if (GetJavaType(value_field_) == JAVATYPE_ENUM) {
+    printer->Print(
+        variables_,
+        "- (nonnull $classname$_Builder "
+        "*)put$capitalized_name$ValueWith$key_parameter_type$:"
+        "($key_storage_type$)key withInt:(jint)value;\n");
+  }
+
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(
+        variables_,
+        "- (nonnull $classname$_Builder *)put$capitalized_name$:"
+        "($key_storage_type$)key value:($value_nonnull_type$)value;\n");
+  }
+}
+
+void MapFieldGenerator::GenerateFieldSource(io::Printer* printer) const {
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(
+        variables_,
+        "\n"
+        "@dynamic $property_name$;\n");
+  }
+}
+
+void MapFieldGenerator::GenerateFieldBuilderSource(io::Printer* printer) const {
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(
+      variables_,
+      "\n"
+      "@dynamic $property_name$;\n");
+  }
 }
 
 void MapFieldGenerator::GenerateMessageOrBuilderProtocol(
     io::Printer* printer) const {
-  printer->Print(variables_, "\n"
+  // clang-format off
+  printer->Print(
+      variables_,
+      "\n"
       "- (jint)get$capitalized_name$Count;\n"
-      "- (jboolean)contains$capitalized_name$With$key_parameter_type$:"
-          "($key_storage_type$)key;\n"
-      "- (id<JavaUtilMap>)get$capitalized_name$Map;\n"
-      "- ($value_storage_type$)get$capitalized_name$OrDefaultWith"
-          "$key_parameter_type$:($key_storage_type$)key "
-          "with$value_parameter_type$:($value_storage_type$)defaultValue;\n"
-      "- ($value_storage_type$)get$capitalized_name$OrThrowWith"
-          "$key_parameter_type$:($key_storage_type$)key;\n"
-  );
+      "- (bool)contains$capitalized_name$With$key_parameter_type$:"
+      "($key_storage_type$)key;\n"
+      "- (nonnull id<JavaUtilMap>)get$capitalized_name$Map;\n"
+      "- ($value_nonnull_type$)get$capitalized_name$OrDefaultWith"
+      "$key_parameter_type$:($key_storage_type$)key "
+      "with$value_parameter_type$:($value_nonnull_type$)defaultValue;\n"
+      "- ($value_nonnull_type$)get$capitalized_name$OrThrowWith"
+      "$key_parameter_type$:($key_storage_type$)key;\n");
+
+  if (GetJavaType(value_field_) == JAVATYPE_ENUM) {
+    printer->Print(
+        variables_,
+        "- (jint)get$capitalized_name$ValueOrDefaultWith"
+        "$key_parameter_type$:($key_storage_type$)key "
+        "withInt:(jint)defaultValue;\n"
+        "- (jint)get$capitalized_name$ValueOrThrowWith"
+        "$key_parameter_type$:($key_storage_type$)key;\n");
+  }
+
+  if (IsGenerateProperties(descriptor_->file())) {
+    printer->Print(
+        variables_,
+        "@property (nonnull, readonly, getter=_get$capitalized_name$Dict)"
+        " NSDictionary<$key_generic_type$, $value_generic_type$>"
+        " *$camelcase_name$;\n");
+  }
+  // clang-format on
 }
 
 void MapFieldGenerator::GenerateDeclaration(io::Printer* printer) const {
@@ -408,20 +611,9 @@ void MapFieldGenerator::GenerateMapEntryFieldData(io::Printer *printer) const {
   MapEntryFieldGenerator(value_field_).GenerateFieldData(printer);
 }
 
-void MapFieldGenerator::GenerateMapEntryNonStaticFieldData(
-    io::Printer *printer, const string& arr_name) const {
-  GenerateObjcClass(printer, key_field_, arr_name, entry_fields_idx_);
-  GenerateObjcClass(printer, value_field_, arr_name, entry_fields_idx_ + 1);
-}
-
 void MapFieldGenerator::GenerateClassNameOrMapData(io::Printer *printer) const {
   printer->Print(variables_,
       "  .mapEntryFields = &mapEntryFields[$map_entry_fields_idx$],\n");
-}
-
-void MapFieldGenerator::GenerateNonStaticFieldData(
-    io::Printer *printer, const string& arr_name, uint32_t idx) const {
-  // Generate nothing.
 }
 
 void MapEntryFieldGenerator::GenerateFieldDataOffset(io::Printer *printer)
@@ -465,8 +657,7 @@ FieldGenerator* FieldGeneratorMap::MakeGenerator(
   }
 }
 
-FieldGeneratorMap::~FieldGeneratorMap() {
-}
+FieldGeneratorMap::~FieldGeneratorMap() = default;
 
 const FieldGenerator& FieldGeneratorMap::get(
   const FieldDescriptor* field) const {

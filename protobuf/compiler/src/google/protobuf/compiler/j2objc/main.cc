@@ -29,18 +29,29 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <google/protobuf/compiler/command_line_interface.h>
-#include <google/protobuf/compiler/java/java_generator.h>
+#include <google/protobuf/compiler/java/generator.h>
 #include "j2objc_generator.h"
 
 int main(int argc, const char* const argv[]) {
   CommandLineInterface cli;
 
   ::java::JavaGenerator java_generator;
-  cli.RegisterGenerator("--java_out", &java_generator, "");
+  cli.RegisterGenerator("--java_out", "--java_opt", &java_generator,
+                        "Generate Java source file.");
 
   google::protobuf::compiler::j2objc::J2ObjCGenerator j2objc_generator;
-  cli.RegisterGenerator("--j2objc_out", &j2objc_generator,
-                        "Generate J2ObjC-compatible Objective-C files.");
+  std::string j2objc_opt_help_text = R"(
+  --j2objc_opt=<opt1,opt2,..>
+                              Options to generate Objective-C files.
+                              prefixes: specifies prefixes for package names.
+                              generate_class_mappings: generates a properties
+                                file that maps Java classes to their proto
+                                files.
+                              lite: enable to generate lite version of the
+                                Objective-C files.)";
+  cli.RegisterGenerator(
+      "--j2objc_out", "--j2objc_opt", &j2objc_generator,
+      "Generate J2ObjC-compatible Objective-C files." + j2objc_opt_help_text);
 
   return cli.Run(argc, argv);
 }

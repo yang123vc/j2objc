@@ -19,6 +19,7 @@ import com.google.common.collect.MultimapBuilder;
 import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.ast.AbstractTypeDeclaration;
 import com.google.devtools.j2objc.ast.CompilationUnit;
+import com.google.devtools.j2objc.ast.FieldDeclaration;
 import com.google.devtools.j2objc.ast.Javadoc;
 import com.google.devtools.j2objc.ast.NativeDeclaration;
 import com.google.devtools.j2objc.ast.TreeUtil;
@@ -28,6 +29,7 @@ import java.io.File;
 import java.util.Collection;
 import java.util.TreeMap;
 import javax.annotation.Nullable;
+import javax.lang.model.element.VariableElement;
 
 /**
  * A single unit of generated code, to be turned into a single pair of .h and .m files.
@@ -56,6 +58,7 @@ public class GenerationUnit {
   private boolean hasIncompleteProtocol = false;
   private boolean hasIncompleteImplementation = false;
   private boolean hasNullabilityAnnotations = false;
+  private boolean hasWeakFields = false;
   private final Options options;
 
   private enum State {
@@ -66,7 +69,7 @@ public class GenerationUnit {
 
   @VisibleForTesting
   public GenerationUnit(String sourceName, Options options) {
-    this.sourceName = sourceName;
+    this.sourceName = relativePath(sourceName);
     this.options = options;
   }
 
@@ -115,6 +118,10 @@ public class GenerationUnit {
 
   public boolean hasNullabilityAnnotations() {
     return hasNullabilityAnnotations;
+  }
+
+  public boolean hasWeakFields() {
+    return hasWeakFields;
   }
 
   public Collection<String> getJavadocBlocks() {
@@ -179,6 +186,15 @@ public class GenerationUnit {
       if (ElementUtil.isEnum(type.getTypeElement())) {
         hasNullabilityAnnotations = true;
       }
+      for (FieldDeclaration field : TreeUtil.getFieldDeclarations(type)) {
+        VariableElement var = field.getFragment().getVariableElement();
+        if (ElementUtil.isInstanceVar(var)
+            && !ElementUtil.isVolatile(var)
+            && ElementUtil.isWeakReference(var)) {
+          hasWeakFields = true;
+          break;
+        }
+      }
     }
   }
 
@@ -240,6 +256,19 @@ public class GenerationUnit {
   @Nullable
   public String getOutputPath() {
     return outputPath;
+  }
+
+  /**
+   * If path is for a jar file entry ("jar:file:jar-file-path!entry-path"), return just the entry's
+   * relative path. Otherwise, return the specified path as is.
+   */
+  private static final String relativePath(String path) {
+    int jarPathOffset = path.indexOf("!");
+    if (jarPathOffset != -1) {
+      return path.substring(jarPathOffset + 1);
+    } else {
+      return path;
+    }
   }
 
   @Override

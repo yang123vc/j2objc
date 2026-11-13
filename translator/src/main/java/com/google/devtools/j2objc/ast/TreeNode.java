@@ -14,6 +14,8 @@
 
 package com.google.devtools.j2objc.ast;
 
+import com.google.common.base.Supplier;
+
 /**
  * Base class for nodes in the J2ObjC AST.
  */
@@ -50,9 +52,20 @@ public abstract class TreeNode {
     }
   }
 
+  public boolean canReplaceWith(Class<? extends TreeNode> type) {
+    return owner != null && owner.getChildType().isAssignableFrom(type);
+  }
+
   public void replaceWith(TreeNode other) {
     assert owner != null : "Can't replace a parentless node.";
     owner.setDynamic(other);
+  }
+
+  public void replaceWith(Supplier<? extends TreeNode> supplier) {
+    ChildLink<? extends TreeNode> owner = this.owner;
+    assert owner != null : "Can't replace a parentless node.";
+    owner.set(null);
+    owner.setDynamic(supplier.get());
   }
 
   public final int getStartPosition() {
@@ -135,12 +148,14 @@ public abstract class TreeNode {
   public enum Kind {
     ANNOTATION_TYPE_DECLARATION,
     ANNOTATION_TYPE_MEMBER_DECLARATION,
+    ANY_PATTERN,
     ARRAY_ACCESS,
     ARRAY_CREATION,
     ARRAY_INITIALIZER,
     ARRAY_TYPE,
     ASSERT_STATEMENT,
     ASSIGNMENT,
+    BINDING_PATTERN,
     BLOCK,
     BLOCK_COMMENT,
     BOOLEAN_LITERAL,
@@ -156,8 +171,10 @@ public abstract class TreeNode {
     CONSTRUCTOR_INVOCATION,
     CONTINUE_STATEMENT,
     CREATION_REFERENCE,
+    DECONSTRUCTION_PATTERN,
     DIMENSION,
     DO_STATEMENT,
+    EMBEDDED_STATEMENT_EXPRESSION,
     EMPTY_STATEMENT,
     ENHANCED_FOR_STATEMENT,
     ENUM_CONSTANT_DECLARATION,
@@ -191,13 +208,13 @@ public abstract class TreeNode {
     NUMBER_LITERAL,
     PACKAGE_DECLARATION,
     PARAMETERIZED_TYPE,
-    PARENTHESIZED_EXPRESSION,
     POSTFIX_EXPRESSION,
     PREFIX_EXPRESSION,
     PRIMITIVE_TYPE,
     PROPERTY_ANNOTATION,
     QUALIFIED_NAME,
     QUALIFIED_TYPE,
+    RECORD_DECLARATION,
     RETURN_STATEMENT,
     SIMPLE_NAME,
     SIMPLE_TYPE,
@@ -209,6 +226,7 @@ public abstract class TreeNode {
     SUPER_METHOD_REFERENCE,
     SUPER_FIELD_ACCESS,
     SWITCH_CASE,
+    SWITCH_EXPRESSION,
     SWITCH_STATEMENT,
     SYNCHRONIZED_STATEMENT,
     TAG_ELEMENT,
@@ -224,6 +242,7 @@ public abstract class TreeNode {
     VARIABLE_DECLARATION_EXPRESSION,
     VARIABLE_DECLARATION_FRAGMENT,
     VARIABLE_DECLARATION_STATEMENT,
-    WHILE_STATEMENT
+    WHILE_STATEMENT,
+    YIELD_STATEMENT
   }
 }

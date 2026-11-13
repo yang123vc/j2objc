@@ -14,7 +14,6 @@
 #
 # Author: Tom Ball
 
-.SUFFIXES:
 .PHONY: default clean
 
 include environment.mk
@@ -48,18 +47,16 @@ FAT_LIB_SOURCE_DIRS = $(GEN_OBJC_DIR)
 FAT_LIB_COMPILE = $(J2OBJCC) -fobjc-abi-version=2 -fobjc-legacy-dispatch
 include $(J2OBJC_ROOT)/make/fat_lib.mk
 
-STATIC_FRAMEWORK_NAME = JavaxInject
-include $(J2OBJC_ROOT)/make/static_framework.mk
+FRAMEWORK_NAME = JavaxInject
+include $(J2OBJC_ROOT)/make/framework.mk
 
 JSR330_LICENSE = LICENSE
 JSR330_LICENSE_DIST = $(DIST_LICENSE_DIR)/jsr330_license.txt
 
-default: lib
+default: $(FAT_LIBS)
+	@:
 
 java: jar
-
-lib: $(FAT_LIBS)
-	@:
 
 $(BUILD_DIR)/.extracted: $(INJECT_SRC_JAR) | $(BUILD_DIR)
 	@mkdir -p $(JAVA_SRC_DIR)
@@ -102,6 +99,8 @@ $(BUILD_DIR):
 clean:
 	@rm -rf $(BUILD_DIR) $(FAT_LIBS_DIST) $(JSR330_LICENSE_DIST)
 	@rm -rf $(ARCH_INCLUDE_DIR)/javax/inject
-	@rm -rf $(STATIC_FRAMEWORK_DIR)
+	@rm -rf $(FRAMEWORK_DIR)
 
-dist: $(FAT_LIBS_DIST) $(ARCH_HEADERS) $(JSR330_LICENSE_DIST)
+dist: framework
+
+lib: $(FAT_LIBS_DIST) $(ARCH_HEADERS) $(JSR330_LICENSE_DIST)

@@ -15,12 +15,23 @@
 package com.google.devtools.j2objc.ast;
 
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import java.util.Locale;
 import javax.lang.model.element.VariableElement;
 
 /**
  * Node type for the declaration of a single local variable.
  */
 public abstract class VariableDeclaration extends TreeNode {
+
+  /** Objective-C modifiers that can be applied to a variable declaration. */
+  public enum ObjectiveCModifier {
+    BLOCK;
+
+    public String asString() {
+      return "__" + name().toLowerCase(Locale.ROOT);
+    }
+  }
 
   private VariableElement variableElement;
   private int extraDimensions = 0;
@@ -45,6 +56,7 @@ public abstract class VariableDeclaration extends TreeNode {
     return variableElement;
   }
 
+  @CanIgnoreReturnValue
   public VariableDeclaration setVariableElement(VariableElement newElement) {
     variableElement = newElement;
     return this;
@@ -54,6 +66,7 @@ public abstract class VariableDeclaration extends TreeNode {
     return extraDimensions;
   }
 
+  @CanIgnoreReturnValue
   public VariableDeclaration setExtraDimensions(int newExtraDimensions) {
     extraDimensions = newExtraDimensions;
     return this;
@@ -63,6 +76,7 @@ public abstract class VariableDeclaration extends TreeNode {
     return initializer.get();
   }
 
+  @CanIgnoreReturnValue
   public VariableDeclaration setInitializer(Expression newInitializer) {
     initializer.set(newInitializer);
     return this;

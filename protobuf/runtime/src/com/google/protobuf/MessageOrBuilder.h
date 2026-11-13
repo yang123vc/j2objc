@@ -42,7 +42,7 @@
 
 @protocol ComGoogleProtobufMessageOrBuilder <JavaObject>
 
-- (id<ComGoogleProtobufMessage>)getDefaultInstanceForType;
+- (instancetype)getDefaultInstanceForType;
 
 - (jint)getRepeatedFieldCountWithComGoogleProtobufDescriptors_FieldDescriptor:
     (ComGoogleProtobufDescriptors_FieldDescriptor *)descriptor;
@@ -52,7 +52,7 @@
 
 - (id<JavaUtilMap>)getAllFields;
 
-- (jboolean)hasFieldWithComGoogleProtobufDescriptors_FieldDescriptor:
+- (bool)hasFieldWithComGoogleProtobufDescriptors_FieldDescriptor:
     (ComGoogleProtobufDescriptors_FieldDescriptor *)descriptor;
 
 - (id)getFieldWithComGoogleProtobufDescriptors_FieldDescriptor:

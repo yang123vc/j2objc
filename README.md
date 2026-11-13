@@ -33,10 +33,10 @@ code for their Android app, which they either own or are licensed to use.
 
 ## Requirements ##
 
-* JDK 1.8 or higher
+* JDK 21
 * Mac workstation or laptop
-* OS X 10.12 or higher
-* Xcode 8 or higher
+* OS X 15.6.1 or higher
+* Xcode 16.3 or higher
 
 ## License ##
 
@@ -46,3 +46,37 @@ The protocol buffers library is distributed under the same BSD license as
 Google's protocol buffers. See its
 [README](https://github.com/protocolbuffers/protobuf/blob/master/README.md) and
 [LICENSE](https://github.com/protocolbuffers/protobuf/blob/master/LICENSE).
+
+## Running on GNU/Linux ##
+
+To build and run on GNU/Linux, install [the Darling project](http://www.darlinghq.org/), then following [its Compile and Run a Program example](https://wiki.darlinghq.org/what_to_try#compile_and_run_a_program). Please note that j2objc is only supported on iOS/macOS.
+
+## Artifact Signatures ##
+
+This project publishes some artifacts through Maven Central with a `groupId` of `com.google.j2objc`.
+These artifacts are currently signed with [the following PGP/GPG key]
+(https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC3259D20DAEC4ACE6D57CC83340B090F727518D8):
+
+```
+---------
+pub   ed25519 2025-08-13 [SC] [expires: 2028-08-12]
+      C3259D20DAEC4ACE6D57CC83340B090F727518D8
+uid           [ultimate] Thomas Ball <tball@google.com>
+sub   cv25519 2025-08-13 [E] [expires: 2028-08-12]
+```
+
+Older artifacts are signed with the following PGP/GPG keys:
+
+```
+pub   rsa2048 2023-01-10 [SC] [expires: 2025-01-09]
+      EB1B3DE71713C9EC2E87CC26EE92349AD86DE446
+uid           [ unknown] Thomas Ball <tball@google.com>
+sub   rsa2048 2023-01-10 [E] [expires: 2025-01-09]
+```
+
+```
+pub   rsa2048 2015-09-25 [SC]
+      B801E2F8EF035068EC1139CC29579F18FA8FD93B
+uid           [ unknown] Tom Ball <tball724@gmail.com>
+sub   rsa2048 2015-09-25 [E]
+```

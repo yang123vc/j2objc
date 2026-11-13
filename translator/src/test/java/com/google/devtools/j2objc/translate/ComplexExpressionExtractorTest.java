@@ -15,7 +15,6 @@
 package com.google.devtools.j2objc.translate;
 
 import com.google.devtools.j2objc.GenerationTest;
-
 import java.io.IOException;
 
 /**
@@ -44,13 +43,13 @@ public class ComplexExpressionExtractorTest extends GenerationTest {
         + ".append(\"g\"); } }", "Test", "Test.m");
     assertTranslatedLines(translation,
         "JavaLangStringBuilder *complex$1 = [((JavaLangStringBuilder *) "
-            + "nil_chk([sb appendWithNSString:@\"a\"])) appendWithNSString:@\"b\"];",
-        "JavaLangStringBuilder *complex$2 = nil_chk([((JavaLangStringBuilder *) "
-            + "nil_chk(complex$1)) appendWithNSString:@\"c\"]);",
+            + "nil_chk(([sb appendWithNSString:@\"a\"]))) appendWithNSString:@\"b\"];",
+        "JavaLangStringBuilder *complex$2 = nil_chk(([((JavaLangStringBuilder *) "
+            + "nil_chk(complex$1)) appendWithNSString:@\"c\"]));",
         "JavaLangStringBuilder *complex$3 = [((JavaLangStringBuilder *) "
-            + "nil_chk([complex$2 appendWithNSString:@\"d\"])) appendWithNSString:@\"e\"];",
-        "JavaLangStringBuilder *complex$4 = nil_chk([((JavaLangStringBuilder *) "
-            + "nil_chk(complex$3)) appendWithNSString:@\"f\"]);",
+            + "nil_chk(([complex$2 appendWithNSString:@\"d\"]))) appendWithNSString:@\"e\"];",
+        "JavaLangStringBuilder *complex$4 = nil_chk(([((JavaLangStringBuilder *) "
+            + "nil_chk(complex$3)) appendWithNSString:@\"f\"]));",
         "[complex$4 appendWithNSString:@\"g\"];");
   }
 
@@ -61,9 +60,10 @@ public class ComplexExpressionExtractorTest extends GenerationTest {
         "Test", "Test.m");
     assertTranslatedLines(translation,
         "JavaLangStringBuilder *complex$1 = [((JavaLangStringBuilder *) "
-        + "nil_chk([create_JavaLangStringBuilder_init() appendWithChar:'a'])) appendWithChar:'b'];",
-        "JavaLangStringBuilder *complex$2 = nil_chk([((JavaLangStringBuilder *) "
-        + "nil_chk(complex$1)) appendWithChar:'c']);",
+        + "nil_chk(([create_JavaLangStringBuilder_init() appendWithChar:'a']))) "
+        + "appendWithChar:'b'];",
+        "JavaLangStringBuilder *complex$2 = nil_chk(([((JavaLangStringBuilder *) "
+        + "nil_chk(complex$1)) appendWithChar:'c']));",
         "JreStrongAssign(&Test_s, [complex$2 description]);");
   }
 
@@ -71,37 +71,68 @@ public class ComplexExpressionExtractorTest extends GenerationTest {
     String translation = translateSourceFile(
         "class Test { int test() { return 1 + 2 - 3 + 4 - 5 + 6 - 7 + 8 - 9; } }",
         "Test", "Test.m");
-    assertTranslation(translation, "int complex$1 = 1 + 2 - 3 + 4;");
-    assertTranslation(translation, "int complex$2 = complex$1 - 5 + 6 - 7;");
-    assertTranslation(translation, "return complex$2 + 8 - 9;");
+    assertInTranslation(
+        translation, "int32_t complex$1 = JreIntPlus(JreIntMinus(JreIntPlus(1, 2), 3), 4);");
+    assertInTranslation(
+        translation,
+        "int32_t complex$2 = JreIntMinus(JreIntPlus(JreIntMinus(complex$1, 5), 6), 7);");
+    assertInTranslation(translation, "return JreIntMinus(JreIntPlus(complex$2, 8), 9);");
+  }
+
+  public void testParenthesizedLongExpression() throws IOException {
+    // Parentheses are not represented in the AST, so they don't hide the depth of the expression.
+    String translation =
+        translateSourceFile(
+            "class Test { int test(int i) { return i - (i - (i - (i - (i - i)))); } }",
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        int32_t complex$1 = JreIntMinus(i, JreIntMinus(i, JreIntMinus(i, i)));
+        return JreIntMinus(i, JreIntMinus(i, complex$1));
+        """);
+  }
+
+  public void testExtractedIncrementOperand() throws IOException {
+    String translation =
+        translateSourceFile(
+            "class Test { void test(double[] d, int i) { d[i - (i - i)]++; } }", "Test", "Test.m");
+    // Without parentheses "*complex$1++" would compile and increment the pointer.
+    assertTranslatedLines(
+        translation,
+        """
+        double *complex$1 = IOSDoubleArray_GetRef(nil_chk(d), JreIntMinus(i, JreIntMinus(i, i)));
+        (*complex$1)++;
+        """);
   }
 
   public void testAssignCompareExpression() throws IOException {
     String translation = translateSourceFile(
         "class Test { boolean b; void test(int i) { if (b = i == 0) {} } }",
         "Test", "Test.m");
-    assertTranslation(translation, "if ((b_ = (i == 0))) {");
+    assertInTranslation(translation, "if ((b_ = i == 0)) {");
   }
 
   public void testIfAssignExpression() throws IOException {
     String translation = translateSourceFile(
         "class Test { boolean foo; void test(boolean b) { if (foo = b) {} } }",
         "Test", "Test.m");
-    assertTranslation(translation, "if ((foo_ = b)) {");
+    assertInTranslation(translation, "if ((foo_ = b)) {");
   }
 
   public void testWhileAssignExpression() throws IOException {
     String translation = translateSourceFile(
         "class Test { boolean foo; void test(boolean b) { while (foo = b) {} } }",
         "Test", "Test.m");
-    assertTranslation(translation, "while ((foo_ = b)) {");
+    assertInTranslation(translation, "while ((foo_ = b)) {");
   }
 
   public void testDoAssignExpression() throws IOException {
     String translation = translateSourceFile(
         "class Test { boolean foo; void test(boolean b) { do {} while (foo = b); } }",
         "Test", "Test.m");
-    assertTranslation(translation, "while ((foo_ = b));");
+    assertInTranslation(translation, "while ((foo_ = b));");
   }
 
   // Verify that multiple parentheses are removed from equality (==) expressions.
@@ -112,7 +143,7 @@ public class ComplexExpressionExtractorTest extends GenerationTest {
         + "  boolean test(int b) { return (((((foo == b))))); } "
         + "  int test2(int b) { if ((bar == b)) { return 42; } else { return 666; }}}",
         "Test", "Test.m");
-    assertTranslation(translation, "return (foo_ == b);");
-    assertTranslation(translation, "if (bar_ == b) {");
+    assertInTranslation(translation, "return foo_ == b;");
+    assertInTranslation(translation, "if (bar_ == b) {");
   }
 }

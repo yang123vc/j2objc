@@ -41,6 +41,8 @@
 #import "java/lang/ArrayIndexOutOfBoundsException.h"
 #import "java/lang/Byte.h"
 #import "java/lang/IndexOutOfBoundsException.h"
+#import "java/lang/NumberFormatException.h"
+#import "java/lang/RuntimeException.h"
 #import "java/lang/UnsupportedOperationException.h"
 #import "java/util/NoSuchElementException.h"
 
@@ -88,7 +90,7 @@ ComGoogleProtobufByteString *ComGoogleProtobufByteString_copyFromUtf8WithNSStrin
 }
 
 - (instancetype)initWithComGoogleProtobufByteString:(ComGoogleProtobufByteString *)byteString;
-- (jboolean)hasNext;
+- (bool)hasNext;
 - (JavaLangByte *)next;
 - (jbyte)nextByte;
 - (void)remove;
@@ -110,9 +112,18 @@ static ByteStringIterator *create_ByteStringIterator_initWithComGoogleProtobufBy
   return ComGoogleProtobufByteString_copyFromWithByteArray_(bytes);
 }
 
++ (ComGoogleProtobufByteString *)empty {
+  return ComGoogleProtobufByteString_empty();
+}
+
++ (ComGoogleProtobufByteString *)fromHexWithNSString:(NSString *)hexString {
+  return ComGoogleProtobufByteString_fromHexWithNSString_(hexString);
+}
+
 - (jbyte)byteAtWithInt:(jint)index {
   if (index < 0 || index >= size_) {
-    @throw [[[JavaLangArrayIndexOutOfBoundsException alloc] initWithInt:size_ withInt:index]
+    @throw [[[JavaLangArrayIndexOutOfBoundsException alloc]
+        initWithNSString:[NSString stringWithFormat:@"this.length=%d; index=%d", size_, index]]
         autorelease];
   }
   return buffer_[index];
@@ -122,7 +133,7 @@ static ByteStringIterator *create_ByteStringIterator_initWithComGoogleProtobufBy
   return size_;
 }
 
-- (jboolean)isEmpty {
+- (bool)isEmpty {
   return size_ == 0;
 }
 
@@ -334,6 +345,53 @@ ComGoogleProtobufByteString *ComGoogleProtobufByteString_readFromWithJavaIoInput
       streamToDrain, chunkSize, chunkSize);
 }
 
+jint ComGoogleProtobufByteString_hexDigitWithChar_(jchar c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  } else if (c >= 'A' && c <= 'F') {
+    return c - 'A' + 10;
+  } else if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  }
+  return -1;
+}
+
+jint ComGoogleProtobufByteString_extractHexDigitWithNSString_withInt_(
+    NSString *hexString, jint index) {
+  jint digit = ComGoogleProtobufByteString_hexDigitWithChar_(
+      [hexString charAtWithInt:index]);
+  if (digit == -1) {
+    @throw create_JavaLangNumberFormatException_initWithNSString_(
+        JreStrcat("$$$C$I", @"Invalid hexString ", hexString,
+                  @" must only contain [0-9a-fA-F] but contained ", [hexString charAtWithInt:index],
+                  @" at index ", index));
+  }
+  return digit;
+}
+
+ComGoogleProtobufByteString *ComGoogleProtobufByteString_fromHexWithNSString_(NSString *hexString) {
+  ComGoogleProtobufByteString_initialize();
+  (void)nil_chk(hexString);
+  if (JreIntMod([hexString java_length], 2) != 0) {
+    @throw create_JavaLangNumberFormatException_initWithNSString_(
+        JreStrcat("$$$I$", @"Invalid hexString ", hexString, @" of length ",
+                  [hexString java_length], @" must be even."));
+  }
+  IOSByteArray *bytes = [IOSByteArray arrayWithLength:JreIntDiv([hexString java_length], 2)];
+  for (jint i = 0; i < bytes->size_; i++) {
+    jint d1 = ComGoogleProtobufByteString_extractHexDigitWithNSString_withInt_(hexString, 2 * i);
+    jint d2 =
+        ComGoogleProtobufByteString_extractHexDigitWithNSString_withInt_(hexString, 2 * i + 1);
+    *IOSByteArray_GetRef(bytes, i) = (jbyte)((JreLShift32(d1, 4)) | d2);
+  }
+  ComGoogleProtobufByteString *result = ComGoogleProtobufByteString_copyFromWithByteArray_(bytes);
+  return result;
+}
+
+ComGoogleProtobufByteString *ComGoogleProtobufByteString_empty() {
+  return ComGoogleProtobufByteString_get_EMPTY();
+}
+
 J2OBJC_CLASS_TYPE_LITERAL_SOURCE(ComGoogleProtobufByteString)
 
 @implementation ByteStringIterator
@@ -343,7 +401,7 @@ J2OBJC_CLASS_TYPE_LITERAL_SOURCE(ComGoogleProtobufByteString)
   return self;
 }
 
-- (jboolean)hasNext {
+- (bool)hasNext {
   return position_ < limit_;
 }
 
@@ -373,6 +431,8 @@ J2OBJC_CLASS_TYPE_LITERAL_SOURCE(ComGoogleProtobufByteString)
 }
 
 @end
+
+J2OBJC_INTERFACE_TYPE_LITERAL_SOURCE(ComGoogleProtobufByteString_ByteIterator)
 
 void ByteStringIterator_initWithComGoogleProtobufByteString_(
     ByteStringIterator *self, ComGoogleProtobufByteString *byteString) {

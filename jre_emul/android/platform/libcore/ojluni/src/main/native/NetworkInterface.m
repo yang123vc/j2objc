@@ -99,7 +99,6 @@ static jclass ni_ibcls;
 static jmethodID ni_ia4ctrID;
 static jmethodID ni_ia6ctrID;
 static jmethodID ni_ibctrID;
-static jfieldID ni_ia6ipaddressID;
 static jfieldID ni_ibaddressID;
 static jfieldID ni_ib4broadcastID;
 static jfieldID ni_ib4maskID;
@@ -161,8 +160,6 @@ JNIEXPORT void JNICALL Java_java_net_NetworkInterface_init(JNIEnv *env) {
     [(id) ni_ia6ctrID retain];
     ni_ibctrID = (*env)->GetMethodID(env, ni_ibcls, "<init>", "()V");
     [(id) ni_ibctrID retain];
-    ni_ia6ipaddressID = (*env)->GetFieldID(env, ni_ia6cls, "ipaddress", "[B");
-    [(id) ni_ia6ipaddressID retain];
     ni_ibaddressID = (*env)->GetFieldID(env, ni_ibcls, "address", "Ljava/net/InetAddress;");
     [(id) ni_ibaddressID retain];
     ni_ib4broadcastID = (*env)->GetFieldID(env, ni_ibcls, "broadcast", "Ljava/net/Inet4Address;");
@@ -182,7 +179,7 @@ JNIEXPORT jobject JNICALL Java_java_net_NetworkInterface_getByName0
     (JNIEnv *env, jclass cls, jstring name) {
 
     netif *ifs, *curr;
-    jboolean isCopy;
+    bool isCopy;
     const char* name_utf;
     jobject obj = NULL;
 
@@ -270,7 +267,7 @@ JNIEXPORT jobject JNICALL Java_java_net_NetworkInterface_getByInetAddress0
     int family = (getInetAddress_family(env, iaObj) == IPv4) ? AF_INET : AF_INET6;
 
     jobject obj = NULL;
-    jboolean match = JNI_FALSE;
+    bool match = JNI_FALSE;
 
     ifs = enumInterfaces(env);
     if (ifs == NULL) {
@@ -299,7 +296,8 @@ JNIEXPORT jobject JNICALL Java_java_net_NetworkInterface_getByInetAddress0
 
                 if (family == AF_INET6) {
                     jbyte *bytes = (jbyte *)&(((struct sockaddr_in6*)addrP->addr)->sin6_addr);
-                    jbyteArray ipaddress = (*env)->GetObjectField(env, iaObj, ni_ia6ipaddressID);
+                    jbyteArray ipaddress = ((JavaNetInet6Address *)iaObj)->holder6_->ipaddress_;
+
                     jbyte caddr[16];
                     int i;
 
@@ -403,9 +401,10 @@ JNIEXPORT jobjectArray JNICALL Java_java_net_NetworkInterface_getAll
  * Method:    isUp0
  * Signature: (Ljava/lang/String;I)Z
  */
-JNIEXPORT jboolean JNICALL Java_java_net_NetworkInterface_isUp0(JNIEnv *env, jclass cls, jstring name, jint index) {
-    int ret = getFlags0(env, name);
-    return ((ret & IFF_UP) && (ret & IFF_RUNNING)) ? JNI_TRUE :  JNI_FALSE;
+JNIEXPORT bool JNICALL Java_java_net_NetworkInterface_isUp0(JNIEnv *env, jclass cls, jstring name,
+                                                            jint index) {
+  int ret = getFlags0(env, name);
+  return ((ret & IFF_UP) && (ret & IFF_RUNNING)) ? JNI_TRUE : JNI_FALSE;
 }
 
 /*
@@ -413,9 +412,10 @@ JNIEXPORT jboolean JNICALL Java_java_net_NetworkInterface_isUp0(JNIEnv *env, jcl
  * Method:    isP2P0
  * Signature: (Ljava/lang/String;I)Z
  */
-JNIEXPORT jboolean JNICALL Java_java_net_NetworkInterface_isP2P0(JNIEnv *env, jclass cls, jstring name, jint index) {
-    int ret = getFlags0(env, name);
-    return (ret & IFF_POINTOPOINT) ? JNI_TRUE :  JNI_FALSE;
+JNIEXPORT bool JNICALL Java_java_net_NetworkInterface_isP2P0(JNIEnv *env, jclass cls, jstring name,
+                                                             jint index) {
+  int ret = getFlags0(env, name);
+  return (ret & IFF_POINTOPOINT) ? JNI_TRUE : JNI_FALSE;
 }
 
 /*
@@ -423,7 +423,8 @@ JNIEXPORT jboolean JNICALL Java_java_net_NetworkInterface_isP2P0(JNIEnv *env, jc
  * Method:    isLoopback0
  * Signature: (Ljava/lang/String;I)Z
  */
-JNIEXPORT jboolean JNICALL Java_java_net_NetworkInterface_isLoopback0(JNIEnv *env, jclass cls, jstring name, jint index) {
+JNIEXPORT bool JNICALL Java_java_net_NetworkInterface_isLoopback0(JNIEnv *env, jclass cls,
+                                                                  jstring name, jint index) {
   int ret = getFlags0(env, name);
   return (ret & IFF_LOOPBACK) ? JNI_TRUE :  JNI_FALSE;
 }
@@ -433,7 +434,8 @@ JNIEXPORT jboolean JNICALL Java_java_net_NetworkInterface_isLoopback0(JNIEnv *en
  * Method:    supportsMulticast0
  * Signature: (Ljava/lang/String;I)Z
  */
-JNIEXPORT jboolean JNICALL Java_java_net_NetworkInterface_supportsMulticast0(JNIEnv *env, jclass cls, jstring name, jint index) {
+JNIEXPORT bool JNICALL Java_java_net_NetworkInterface_supportsMulticast0(JNIEnv *env, jclass cls,
+                                                                         jstring name, jint index) {
   int ret = getFlags0(env, name);
   return (ret & IFF_MULTICAST) ? JNI_TRUE :  JNI_FALSE;
 }
@@ -445,7 +447,7 @@ JNIEXPORT jboolean JNICALL Java_java_net_NetworkInterface_supportsMulticast0(JNI
  */
 
 JNIEXPORT jint JNICALL Java_java_net_NetworkInterface_getMTU0(JNIEnv *env, jclass class, jstring name, jint index) {
-  jboolean isCopy;
+  bool isCopy;
   int ret = -1;
   int sock;
   const char* name_utf;
@@ -469,7 +471,7 @@ JNIEXPORT jint JNICALL Java_java_net_NetworkInterface_getMTU0(JNIEnv *env, jclas
 /*** Private methods definitions ****/
 
 static int getFlags0(JNIEnv *env, jstring name) {
-  jboolean isCopy;
+  bool isCopy;
   int ret, sock;
   const char* name_utf;
   int flags = 0;
@@ -605,11 +607,11 @@ jobject createNetworkInterface(JNIEnv *env, netif *ifs) {
         scope = ((struct sockaddr_in6*)addrP->addr)->sin6_scope_id;
 
         if (scope != 0) { /* zero is default value, no need to set */
-          ((JavaNetInet6Address *)iaObj)->scope_id_ = scope;
-          ((JavaNetInet6Address *)iaObj)->scope_id_set_ = JNI_TRUE;
-          ((JavaNetInet6Address *)iaObj)->scope_ifname_ = netifObj;
+          ((JavaNetInet6Address *)iaObj)->holder6_->scope_id_ = scope;
+          ((JavaNetInet6Address *)iaObj)->holder6_->scope_id_set_ = JNI_TRUE;
+          ((JavaNetInet6Address *)iaObj)->holder6_->scope_ifname_ = netifObj;
         }
-        (*env)->SetObjectField(env, iaObj, ni_ia6ipaddressID, ipaddress);
+        ((JavaNetInet6Address *)iaObj)->holder6_->ipaddress_ = [ipaddress retain];
       }
       ibObj = (*env)->NewObject(env, ni_ibcls, ni_ibctrID);
       if (ibObj) {
@@ -692,7 +694,7 @@ static netif *enumInterfaces(JNIEnv *env) {
 
   int sock = openSocket(env, AF_INET);
 
-  // TODO(user): fix ExceptionOccurred().
+  // TODO(zgao): fix ExceptionOccurred().
   // if (sock < 0 && (*env)->ExceptionOccurred(env)) {
   if (sock < 0) {
     return NULL;

@@ -75,25 +75,23 @@ ThrowZipException(JNIEnv *env, const char *msg)
     @throw create_JavaUtilZipZipException_initWithNSString_(s);
 }
 
-JNIEXPORT jlong JNICALL
-Java_java_util_zip_ZipFile_open(JNIEnv *env, jclass cls, jstring name,
-                                        jint mode, jlong lastModified,
-                                        jboolean usemmap)
-{
-    const char *path = JNU_GetStringPlatformChars(env, name, 0);
-    char *msg = 0;
-    jlong result = 0;
-    int flag = 0;
-    jzfile *zip = 0;
+JNIEXPORT jlong JNICALL Java_java_util_zip_ZipFile_open(JNIEnv *env, jclass cls, jstring name,
+                                                        jint mode, jlong lastModified,
+                                                        bool usemmap) {
+  const char *path = JNU_GetStringPlatformChars(env, name, 0);
+  char *msg = 0;
+  jlong result = 0;
+  int flag = 0;
+  jzfile *zip = 0;
 
-    if (mode & OPEN_READ) flag |= O_RDONLY;
-    // Android changed, JVM_O_DELETE/unlink is problematic, see b/28901232.
-    //if (mode & OPEN_DELETE) flag |= JVM_O_DELETE;
+  if (mode & OPEN_READ) flag |= O_RDONLY;
+  // Android changed, JVM_O_DELETE/unlink is problematic, see b/28901232.
+  // if (mode & OPEN_DELETE) flag |= JVM_O_DELETE;
 
-    if (path != 0) {
-        zip = ZIP_Get_From_Cache(path, &msg, lastModified);
-        if (zip == 0 && msg == 0) {
-            ZFILE zfd = 0;
+  if (path != 0) {
+    zip = ZIP_Get_From_Cache(path, &msg, lastModified);
+    if (zip == 0 && msg == 0) {
+      ZFILE zfd = 0;
 #ifdef WIN32
             zfd = winFileHandleOpen(env, name, flag);
             if (zfd == -1) {
@@ -127,6 +125,14 @@ finally:
 }
 
 JNIEXPORT jint JNICALL
+Java_java_util_zip_ZipFile_getFileDescriptor(JNIEnv *env, jclass cls, jlong zfile)
+{
+    jzfile *zip = jlong_to_ptr(zfile);
+    
+    return zip->zfd;
+}
+
+JNIEXPORT jint JNICALL
 Java_java_util_zip_ZipFile_getTotal(JNIEnv *env, jclass cls, jlong zfile)
 {
     jzfile *zip = jlong_to_ptr(zfile);
@@ -134,12 +140,11 @@ Java_java_util_zip_ZipFile_getTotal(JNIEnv *env, jclass cls, jlong zfile)
     return zip->total;
 }
 
-JNIEXPORT jboolean JNICALL
-Java_java_util_zip_ZipFile_startsWithLOC(JNIEnv *env, jclass cls, jlong zfile)
-{
-    jzfile *zip = jlong_to_ptr(zfile);
+JNIEXPORT bool JNICALL Java_java_util_zip_ZipFile_startsWithLOC(JNIEnv *env, jclass cls,
+                                                                jlong zfile) {
+  jzfile *zip = jlong_to_ptr(zfile);
 
-    return zip->locsig;
+  return zip->locsig;
 }
 
 JNIEXPORT void JNICALL
@@ -148,10 +153,8 @@ Java_java_util_zip_ZipFile_close(JNIEnv *env, jclass cls, jlong zfile)
     ZIP_Close(jlong_to_ptr(zfile));
 }
 
-JNIEXPORT jlong JNICALL
-Java_java_util_zip_ZipFile_getEntry(JNIEnv *env, jclass cls, jlong zfile,
-                 IOSByteArray *name, jboolean addSlash)
-{
+JNIEXPORT jlong JNICALL Java_java_util_zip_ZipFile_getEntry(JNIEnv *env, jclass cls, jlong zfile,
+                                                            IOSByteArray *name, bool addSlash) {
 #define MAXNAME 1024
     jzfile *zip = jlong_to_ptr(zfile);
     jsize ulen = name->size_;
@@ -297,21 +300,23 @@ Java_java_util_zip_ZipFile_read(JNIEnv *env, jclass cls, jlong zfile,
     jzfile *zip = jlong_to_ptr(zfile);
     char *msg;
 
-#define BUFSIZE 8192
-    /* copy via tmp stack buffer: */
-    jbyte buf[BUFSIZE];
-
-    if (len > BUFSIZE) {
-        len = BUFSIZE;
+    // BEGIN Android-changed: Removed tmp stack buffer.
+    long long length = (long long)(*env)->GetArrayLength(env, bytes);
+    if (off < 0 || len < 0 || off + len > length) {
+        char errmsg[128];
+        snprintf(errmsg, sizeof(errmsg), "len: %d, off: %d are not valid for array sized %lld\n",
+                 len, off, length);
+        JNU_ThrowArrayIndexOutOfBoundsException(env, errmsg);
+        return -1;
     }
 
+    jbyte *buf = (*env)->GetByteArrayElements(env, bytes, NULL);
     ZIP_Lock(zip);
-    len = ZIP_Read(zip, jlong_to_ptr(zentry), pos, buf, len);
+    len = ZIP_Read(zip, jlong_to_ptr(zentry), pos, buf + off, len);
     msg = zip->msg;
     ZIP_Unlock(zip);
-    if (len != -1) {
-        (*env)->SetByteArrayRegion(env, bytes, off, len, buf);
-    }
+    (*env)->ReleaseByteArrayElements(env, bytes, buf, 0);
+
 
     if (len == -1) {
         if (msg != 0) {

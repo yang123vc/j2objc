@@ -24,7 +24,9 @@
  */
 package java.lang.reflect;
 
-import java.lang.annotation.Annotation;
+import java.lang.annotation.*;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import libcore.reflect.AnnotatedElements;
 
@@ -36,9 +38,11 @@ import libcore.reflect.AnnotatedElements;
  * means of obtaining attributes for the parameter.
  *
  * @since 1.8
- * @hide Hidden pending tests
  */
 public final class Parameter implements AnnotatedElement {
+    // Android-changed: Extensive modifications made throughout the class for ART.
+    // Android-removed: Type annotations runtime code. Not supported on Android.
+    // Android-removed: Annotation retrieval is implemented natively in ART.
 
     private final String name;
     private final int modifiers;
@@ -93,7 +97,7 @@ public final class Parameter implements AnnotatedElement {
         return executable.hashCode() ^ index;
     }
 
-    // Android-changed: Removed references to the class file format.
+    // Android-changed: Removed references in javadoc to the class file format.
     /**
      * Returns true if the parameter has a name; returns false otherwise.
      * Whether a parameter has a name is determined by compiler options
@@ -171,7 +175,7 @@ public final class Parameter implements AnnotatedElement {
      *         a name.
      */
     public String getName() {
-        // Note: empty strings as paramete names are now outlawed.
+        // Note: empty strings as parameter names are now outlawed.
         // The .equals("") is for compatibility with current JVM
         // behavior.  It may be removed at some point.
         if(name == null || name.equals(""))
@@ -203,7 +207,7 @@ public final class Parameter implements AnnotatedElement {
         return tmp;
     }
 
-    private transient volatile Type parameterTypeCache = null;
+    private transient volatile Type parameterTypeCache;
 
     /**
      * Returns a {@code Class} object that identifies the
@@ -269,8 +273,13 @@ public final class Parameter implements AnnotatedElement {
      */
     public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
         Objects.requireNonNull(annotationClass);
-        T[] annotations = getAnnotationsByType(annotationClass);
-        return annotations.length > 0 ? annotations[0] : null;
+        Annotation[] annotations = getDeclaredAnnotations();
+        for (int i = 0; i < annotations.length; ++i) {
+          if (annotationClass.isInstance(annotations[i])) {
+            return (T)annotations[i];
+          }
+        }
+        return null;
     }
 
     /**
@@ -279,7 +288,7 @@ public final class Parameter implements AnnotatedElement {
      */
     @Override
     public <T extends Annotation> T[] getAnnotationsByType(Class<T> annotationClass) {
-        // Android-changed: Uses AnnotatedElements instead.
+        // Android-changed: getAnnotationsByType(Class), Android uses AnnotatedElements instead.
         return AnnotatedElements.getDirectOrIndirectAnnotationsByType(this, annotationClass);
     }
 
@@ -317,4 +326,5 @@ public final class Parameter implements AnnotatedElement {
     public Annotation[] getAnnotations() {
         return getDeclaredAnnotations();
     }
+
 }

@@ -26,10 +26,14 @@
 package java.util;
 
 /**
- * A task that can be scheduled for one-time or repeated execution by a Timer.
+ * A task that can be scheduled for one-time or repeated execution by a
+ * {@link Timer}.
+ *
+ * <p>A timer task is <em>not</em> reusable.  Once a task has been scheduled
+ * for execution on a {@code Timer} or cancelled, subsequent attempts to
+ * schedule it for execution will throw {@code IllegalStateException}.
  *
  * @author  Josh Bloch
- * @see     Timer
  * @since   1.3
  */
 
@@ -98,7 +102,7 @@ public abstract class TimerTask implements Runnable {
      * will never run again.  (If the task is running when this call occurs,
      * the task will run to completion, but will never run again.)
      *
-     * <p>Note that calling this method from within the <tt>run</tt> method of
+     * <p>Note that calling this method from within the {@code run} method of
      * a repeating timer task absolutely guarantees that the timer task will
      * not run again.
      *
@@ -110,7 +114,7 @@ public abstract class TimerTask implements Runnable {
      *         Returns false if the task was scheduled for one-time execution
      *         and has already run, or if the task was never scheduled, or if
      *         the task was already cancelled.  (Loosely speaking, this method
-     *         returns <tt>true</tt> if it prevents one or more scheduled
+     *         returns {@code true} if it prevents one or more scheduled
      *         executions from taking place.)
      */
     public boolean cancel() {
@@ -121,6 +125,34 @@ public abstract class TimerTask implements Runnable {
         }
     }
 
+    /**
+     * Returns the <i>scheduled</i> execution time of the most recent
+     * <i>actual</i> execution of this task.  (If this method is invoked
+     * while task execution is in progress, the return value is the scheduled
+     * execution time of the ongoing task execution.)
+     *
+     * <p>This method is typically invoked from within a task's run method, to
+     * determine whether the current execution of the task is sufficiently
+     * timely to warrant performing the scheduled activity:
+     * <pre>{@code
+     *   public void run() {
+     *       if (System.currentTimeMillis() - scheduledExecutionTime() >=
+     *           MAX_TARDINESS)
+     *               return;  // Too late; skip this execution.
+     *       // Perform the task
+     *   }
+     * }</pre>
+     * This method is typically <i>not</i> used in conjunction with
+     * <i>fixed-delay execution</i> repeating tasks, as their scheduled
+     * execution times are allowed to drift over time, and so are not terribly
+     * significant.
+     *
+     * @return the time at which the most recent execution of this task was
+     *         scheduled to occur, in the format returned by Date.getTime().
+     *         The return value is undefined if the task has yet to commence
+     *         its first execution.
+     * @see Date#getTime()
+     */
     public long scheduledExecutionTime() {
         synchronized(lock) {
             return (period < 0 ? nextExecutionTime + period

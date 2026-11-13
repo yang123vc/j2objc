@@ -13,15 +13,16 @@
  */
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.ExtensionRegistry;
-
-import protos.StringMsg;
-import protos.StringMsgOrBuilder;
-import protos.StringFields;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import protos.StringFields;
+import protos.StringMsg;
+import protos.StringMsgOrBuilder;
 
 /**
  * Tests for correct serialization and deserialization of string fields.
@@ -87,6 +88,27 @@ public class StringsTest extends ProtobufTest {
     StringMsg msg2 = StringMsg.parseFrom(in);
     assertEquals(str, msg2.getAsciiF());
   }
+
+  public void testIncompleteSurrogatePairs() throws Exception {
+    // Suppress ill-formed UTF-16 warning, which is expected.
+    Logger logger = Logger.getLogger(CodedOutputStream.class.getName());
+    Level oldLevel = logger.getLevel();
+    logger.setLevel(Level.SEVERE);
+    try {
+      StringMsg msg = StringMsg.newBuilder().setNonAsciiF("Hello\uDFFFWorld\uD800").build();
+
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      msg.writeTo(out);
+      byte[] bytes = out.toByteArray();
+
+      ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+      StringMsg msg2 = StringMsg.parseFrom(in);
+      assertEquals("Hello?World?", msg2.getNonAsciiF());
+    } finally {
+      logger.setLevel(oldLevel);
+    }
+  }
+
 
   public void testReallyLongNonAsciiString() throws Exception {
     char[] chars = new char[10000];
@@ -155,27 +177,27 @@ public class StringsTest extends ProtobufTest {
         .setEmptyF("")
         .setAsciiF("foo")
         .setNonAsciiF("你好")
-        .setBytesF(ByteString.copyFrom("dog".getBytes()))
+        .setBytesF(ByteString.copyFromUtf8("dog"))
         .addEmptyR("")
         .addEmptyR("")
         .addAsciiR("bar")
         .addAsciiR("baz")
         .addNonAsciiR("مرحبا")
         .addNonAsciiR("привет")
-        .addBytesR(ByteString.copyFrom("cat".getBytes()))
-        .addBytesR(ByteString.copyFrom("rat".getBytes()))
+        .addBytesR(ByteString.copyFromUtf8("cat"))
+        .addBytesR(ByteString.copyFromUtf8("rat"))
         .setExtension(StringFields.emptyFe, "")
         .setExtension(StringFields.asciiFe, "abc")
         .setExtension(StringFields.nonAsciiFe, "γειά σου")
-        .setExtension(StringFields.bytesFe, ByteString.copyFrom("pig".getBytes()))
+        .setExtension(StringFields.bytesFe, ByteString.copyFromUtf8("pig"))
         .addExtension(StringFields.emptyRe, "")
         .addExtension(StringFields.emptyRe, "")
         .addExtension(StringFields.asciiRe, "def")
         .addExtension(StringFields.asciiRe, "ghi")
         .addExtension(StringFields.nonAsciiRe, "नमस्ते")
         .addExtension(StringFields.nonAsciiRe, "halló")
-        .addExtension(StringFields.bytesRe, ByteString.copyFrom("cow".getBytes()))
-        .addExtension(StringFields.bytesRe, ByteString.copyFrom("moo".getBytes()))
+        .addExtension(StringFields.bytesRe, ByteString.copyFromUtf8("cow"))
+        .addExtension(StringFields.bytesRe, ByteString.copyFromUtf8("moo"))
         .build();
   }
 

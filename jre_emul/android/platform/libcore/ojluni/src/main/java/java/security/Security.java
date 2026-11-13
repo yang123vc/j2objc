@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014 The Android Open Source Project
- * Copyright (c) 1996, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1996, 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -31,7 +31,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.io.*;
-
 import sun.security.jca.GetInstance;
 import sun.security.jca.ProviderList;
 import sun.security.jca.Providers;
@@ -39,6 +38,10 @@ import sun.security.jca.Providers;
 /**
  * <p>This class centralizes all security properties and common security
  * methods. One of its primary uses is to manage providers.
+ *
+ * <p>The default values of security properties are read from an
+ * implementation-specific location, which is typically the properties file
+ * {@code lib/security/java.security} in the Java installation directory.
  *
  * @author Benjamin Renaud
  */
@@ -58,6 +61,24 @@ public final class Security {
 
     // j2objc: reworked to allow security.properties to be optional resource.
     static {
+// BEGIN Android-changed: doPrivileged is stubbed on Android.
+// Also, because props is final it must be assigned in the static block, not a method.
+        /*
+        // doPrivileged here because there are multiple
+        // things in initialize that might require privs.
+        // (the FileInputStream call and the File.exists call,
+        // the securityPropFile call, etc)
+        AccessController.doPrivileged(new PrivilegedAction<Void>() {
+            public Void run() {
+                initialize();
+                return null;
+            }
+        });
+    }
+
+    private static void initialize() {
+        */
+// END Android-changed: doPrivileged is stubbed on Android.
         props = new Properties();
         boolean loadedProps = false;
         InputStream propStream = Security.class.getResourceAsStream("security.properties");
@@ -69,6 +90,7 @@ public final class Security {
                 System.logE("Failed loading 'security.properties' resource", ex);
             }
         }
+        // END Android-changed: Use a resource file, Android logging, and only one file.
 
         if (!loadedProps) {
             initializeStatic();
@@ -172,7 +194,7 @@ public final class Security {
      * property in the master file of the "SUN" Cryptographic Service
      * Provider in order to determine how to parse algorithm-specific
      * parameters. Use the new provider-based and algorithm-independent
-     * <code>AlgorithmParameters</code> and <code>KeyFactory</code> engine
+     * {@code AlgorithmParameters} and {@code KeyFactory} engine
      * classes (introduced in the J2SE version 1.2 platform) instead.
      */
     @Deprecated
@@ -195,22 +217,18 @@ public final class Security {
      *
      * <p>If the given provider is installed at the requested position,
      * the provider that used to be at that position, and all providers
-     * with a position greater than <code>position</code>, are shifted up
+     * with a position greater than {@code position}, are shifted up
      * one position (towards the end of the list of installed providers).
      *
      * <p>A provider cannot be added if it is already installed.
      *
-     * <p>First, if there is a security manager, its
-     * <code>checkSecurityAccess</code>
-     * method is called with the string
-     * <code>"insertProvider."+provider.getName()</code>
-     * to see if it's ok to add a new provider.
-     * If the default implementation of <code>checkSecurityAccess</code>
-     * is used (i.e., that method is not overriden), then this will result in
-     * a call to the security manager's <code>checkPermission</code> method
-     * with a
-     * <code>SecurityPermission("insertProvider."+provider.getName())</code>
-     * permission.
+     * <p>If there is a security manager, the
+     * {@link java.lang.SecurityManager#checkSecurityAccess} method is called
+     * with the {@code "insertProvider"} permission target name to see if
+     * it's ok to add a new provider. If this permission check is denied,
+     * {@code checkSecurityAccess} is called again with the
+     * {@code "insertProvider."+provider.getName()} permission target name. If
+     * both checks are denied, a {@code SecurityException} is thrown.
      *
      * @param provider the provider to be added.
      *
@@ -223,8 +241,8 @@ public final class Security {
      *
      * @throws  NullPointerException if provider is null
      * @throws  SecurityException
-     *          if a security manager exists and its <code>{@link
-     *          java.lang.SecurityManager#checkSecurityAccess}</code> method
+     *          if a security manager exists and its {@link
+     *          java.lang.SecurityManager#checkSecurityAccess} method
      *          denies access to add a new provider
      *
      * @see #getProvider
@@ -234,7 +252,10 @@ public final class Security {
     public static synchronized int insertProviderAt(Provider provider,
             int position) {
         String providerName = provider.getName();
-        check("insertProvider." + providerName);
+        // Android-removed
+        // Checks using SecurityManager, which is not functional in Android.
+        // checkInsertProvider(providerName);
+        // Android-removed
         ProviderList list = Providers.getFullProviderList();
         ProviderList newList = ProviderList.insertAt(list, provider, position - 1);
         if (list == newList) {
@@ -248,17 +269,13 @@ public final class Security {
     /**
      * Adds a provider to the next position available.
      *
-     * <p>First, if there is a security manager, its
-     * <code>checkSecurityAccess</code>
-     * method is called with the string
-     * <code>"insertProvider."+provider.getName()</code>
-     * to see if it's ok to add a new provider.
-     * If the default implementation of <code>checkSecurityAccess</code>
-     * is used (i.e., that method is not overriden), then this will result in
-     * a call to the security manager's <code>checkPermission</code> method
-     * with a
-     * <code>SecurityPermission("insertProvider."+provider.getName())</code>
-     * permission.
+     * <p>If there is a security manager, the
+     * {@link java.lang.SecurityManager#checkSecurityAccess} method is called
+     * with the {@code "insertProvider"} permission target name to see if
+     * it's ok to add a new provider. If this permission check is denied,
+     * {@code checkSecurityAccess} is called again with the
+     * {@code "insertProvider."+provider.getName()} permission target name. If
+     * both checks are denied, a {@code SecurityException} is thrown.
      *
      * @param provider the provider to be added.
      *
@@ -268,8 +285,8 @@ public final class Security {
      *
      * @throws  NullPointerException if provider is null
      * @throws  SecurityException
-     *          if a security manager exists and its <code>{@link
-     *          java.lang.SecurityManager#checkSecurityAccess}</code> method
+     *          if a security manager exists and its {@link
+     *          java.lang.SecurityManager#checkSecurityAccess} method
      *          denies access to add a new provider
      *
      * @see #getProvider
@@ -298,20 +315,20 @@ public final class Security {
      * if name is null.
      *
      * <p>First, if there is a security manager, its
-     * <code>checkSecurityAccess</code>
-     * method is called with the string <code>"removeProvider."+name</code>
+     * {@code checkSecurityAccess}
+     * method is called with the string {@code "removeProvider."+name}
      * to see if it's ok to remove the provider.
-     * If the default implementation of <code>checkSecurityAccess</code>
+     * If the default implementation of {@code checkSecurityAccess}
      * is used (i.e., that method is not overriden), then this will result in
-     * a call to the security manager's <code>checkPermission</code> method
-     * with a <code>SecurityPermission("removeProvider."+name)</code>
+     * a call to the security manager's {@code checkPermission} method
+     * with a {@code SecurityPermission("removeProvider."+name)}
      * permission.
      *
      * @param name the name of the provider to remove.
      *
      * @throws  SecurityException
-     *          if a security manager exists and its <code>{@link
-     *          java.lang.SecurityManager#checkSecurityAccess}</code> method
+     *          if a security manager exists and its {@link
+     *          java.lang.SecurityManager#checkSecurityAccess} method
      *          denies
      *          access to remove the provider
      *
@@ -356,8 +373,8 @@ public final class Security {
      * Returns an array containing all installed providers that satisfy the
      * specified selection criterion, or null if no such providers have been
      * installed. The returned providers are ordered
-     * according to their <a href=
-     * "#insertProviderAt(java.security.Provider, int)">preference order</a>.
+     * according to their
+     * {@linkplain #insertProviderAt(java.security.Provider, int) preference order}.
      *
      * <p> A cryptographic service is always associated with a particular
      * algorithm or type. For example, a digital signature service is
@@ -368,8 +385,8 @@ public final class Security {
      * <p>The selection criterion must be specified in one of the following two
      * formats:
      * <ul>
-     * <li> <i>&lt;crypto_service>.&lt;algorithm_or_type></i> <p> The
-     * cryptographic service name must not contain any dots.
+     * <li> <i>{@literal <crypto_service>.<algorithm_or_type>}</i>
+     * <p> The cryptographic service name must not contain any dots.
      * <p> A
      * provider satisfies the specified selection criterion iff the provider
      * implements the
@@ -377,11 +394,12 @@ public final class Security {
      * <p> For example, "CertificateFactory.X.509"
      * would be satisfied by any provider that supplied
      * a CertificateFactory implementation for X.509 certificates.
-     * <li> <i>&lt;crypto_service>.&lt;algorithm_or_type>
-     * &lt;attribute_name>:&lt attribute_value></i>
+     * <li> <i>{@literal <crypto_service>.<algorithm_or_type>
+     * <attribute_name>:<attribute_value>}</i>
      * <p> The cryptographic service name must not contain any dots. There
-     * must be one or more space charaters between the
-     * <i>&lt;algorithm_or_type></i> and the <i>&lt;attribute_name></i>.
+     * must be one or more space characters between the
+     * <i>{@literal <algorithm_or_type>}</i> and the
+     * <i>{@literal <attribute_name>}</i>.
      *  <p> A provider satisfies this selection criterion iff the
      * provider implements the specified algorithm or type for the specified
      * cryptographic service and its implementation meets the
@@ -434,8 +452,9 @@ public final class Security {
      * Returns an array containing all installed providers that satisfy the
      * specified* selection criteria, or null if no such providers have been
      * installed. The returned providers are ordered
-     * according to their <a href=
-     * "#insertProviderAt(java.security.Provider, int)">preference order</a>.
+     * according to their
+     * {@linkplain #insertProviderAt(java.security.Provider, int)
+     * preference order}.
      *
      * <p>The selection criteria are represented by a map.
      * Each map entry represents a selection criterion.
@@ -443,16 +462,18 @@ public final class Security {
      * criteria. The key for any entry in such a map must be in one of the
      * following two formats:
      * <ul>
-     * <li> <i>&lt;crypto_service>.&lt;algorithm_or_type></i>
+     * <li> <i>{@literal <crypto_service>.<algorithm_or_type>}</i>
      * <p> The cryptographic service name must not contain any dots.
      * <p> The value associated with the key must be an empty string.
      * <p> A provider
      * satisfies this selection criterion iff the provider implements the
      * specified algorithm or type for the specified cryptographic service.
-     * <li>  <i>&lt;crypto_service>.&lt;algorithm_or_type> &lt;attribute_name></i>
+     * <li>  <i>{@literal <crypto_service>}.
+     * {@literal <algorithm_or_type> <attribute_name>}</i>
      * <p> The cryptographic service name must not contain any dots. There
-     * must be one or more space charaters between the <i>&lt;algorithm_or_type></i>
-     * and the <i>&lt;attribute_name></i>.
+     * must be one or more space characters between the
+     * <i>{@literal <algorithm_or_type>}</i>
+     * and the <i>{@literal <attribute_name>}</i>.
      * <p> The value associated with the key must be a non-empty string.
      * A provider satisfies this selection criterion iff the
      * provider implements the specified algorithm or type for the specified
@@ -538,15 +559,16 @@ public final class Security {
     }
 
     // Map containing cached Spi Class objects of the specified type
-    private static final Map<String, Class> spiMap = new ConcurrentHashMap<>();
+    private static final Map<String, Class<?>> spiMap =
+            new ConcurrentHashMap<>();
 
     /**
      * Return the Class object for the given engine type
      * (e.g. "MessageDigest"). Works for Spis in the java.security package
      * only.
      */
-    private static Class getSpiClass(String type) {
-        Class clazz = spiMap.get(type);
+    private static Class<?> getSpiClass(String type) {
+        Class<?> clazz = spiMap.get(type);
         if (clazz != null) {
             return clazz;
         }
@@ -564,7 +586,7 @@ public final class Security {
      * an instance of an implementation of the requested algorithm
      * and type, and the second object in the array identifies the provider
      * of that implementation.
-     * The <code>provider</code> argument can be null, in which case all
+     * The {@code provider} argument can be null, in which case all
      * configured providers will be searched in order of preference.
      */
     static Object[] getImpl(String algorithm, String type, String provider)
@@ -595,7 +617,7 @@ public final class Security {
      * an instance of an implementation of the requested algorithm
      * and type, and the second object in the array identifies the provider
      * of that implementation.
-     * The <code>provider</code> argument cannot be null.
+     * The {@code provider} argument cannot be null.
      */
     static Object[] getImpl(String algorithm, String type, Provider provider)
             throws NoSuchAlgorithmException {
@@ -614,8 +636,8 @@ public final class Security {
      * Gets a security property value.
      *
      * <p>First, if there is a security manager, its
-     * <code>checkPermission</code>  method is called with a
-     * <code>java.security.SecurityPermission("getProperty."+key)</code>
+     * {@code checkPermission}  method is called with a
+     * {@code java.security.SecurityPermission("getProperty."+key)}
      * permission to see if it's ok to retrieve the specified
      * security property value..
      *
@@ -624,8 +646,8 @@ public final class Security {
      * @return the value of the security property corresponding to key.
      *
      * @throws  SecurityException
-     *          if a security manager exists and its <code>{@link
-     *          java.lang.SecurityManager#checkPermission}</code> method
+     *          if a security manager exists and its {@link
+     *          java.lang.SecurityManager#checkPermission} method
      *          denies
      *          access to retrieve the specified security property value
      * @throws  NullPointerException is key is null
@@ -634,11 +656,11 @@ public final class Security {
      * @see java.security.SecurityPermission
      */
     public static String getProperty(String key) {
-        SecurityManager sm = System.getSecurityManager();
-        if (sm != null) {
-            sm.checkPermission(new SecurityPermission("getProperty."+
-                                                      key));
-        }
+        // SecurityManager sm = System.getSecurityManager();
+        // if (sm != null) {
+        //     sm.checkPermission(new SecurityPermission("getProperty."+
+        //                                               key));
+        // }
         String name = props.getProperty(key);
         if (name != null)
             name = name.trim(); // could be a class name with trailing ws
@@ -649,8 +671,8 @@ public final class Security {
      * Sets a security property value.
      *
      * <p>First, if there is a security manager, its
-     * <code>checkPermission</code> method is called with a
-     * <code>java.security.SecurityPermission("setProperty."+key)</code>
+     * {@code checkPermission} method is called with a
+     * {@code java.security.SecurityPermission("setProperty."+key)}
      * permission to see if it's ok to set the specified
      * security property value.
      *
@@ -659,8 +681,8 @@ public final class Security {
      * @param datum the value of the property to be set.
      *
      * @throws  SecurityException
-     *          if a security manager exists and its <code>{@link
-     *          java.lang.SecurityManager#checkPermission}</code> method
+     *          if a security manager exists and its {@link
+     *          java.lang.SecurityManager#checkPermission} method
      *          denies access to set the specified security property value
      * @throws  NullPointerException if key or datum is null
      *
@@ -694,7 +716,7 @@ public final class Security {
                 public Void run() {
                     try {
                         /* Get the class via the bootstrap class loader. */
-                        Class cl = Class.forName(
+                        Class<?> cl = Class.forName(
                             "java.lang.SecurityManager", false, null);
                         Field f = null;
                         boolean accessible = false;
@@ -729,10 +751,10 @@ public final class Security {
     }
 
     private static void check(String directive) {
-        SecurityManager security = System.getSecurityManager();
-        if (security != null) {
-            security.checkSecurityAccess(directive);
-        }
+        // SecurityManager security = System.getSecurityManager();
+        // if (security != null) {
+        //     security.checkSecurityAccess(directive);
+        // }
     }
 
     /*
@@ -957,7 +979,7 @@ public final class Security {
 
         if ((serviceName == null) || (serviceName.length() == 0) ||
             (serviceName.endsWith("."))) {
-            return Collections.EMPTY_SET;
+            return Collections.emptySet();
         }
 
         HashSet<String> result = new HashSet<>();
@@ -967,8 +989,10 @@ public final class Security {
             // Check the keys for each provider.
             for (Enumeration<Object> e = providers[i].keys();
                                                 e.hasMoreElements(); ) {
-                String currentKey = ((String)e.nextElement()).toUpperCase();
-                if (currentKey.startsWith(serviceName.toUpperCase())) {
+                String currentKey =
+                        ((String)e.nextElement()).toUpperCase(Locale.ENGLISH);
+                if (currentKey.startsWith(
+                        serviceName.toUpperCase(Locale.ENGLISH))) {
                     // We should skip the currentKey if it contains a
                     // whitespace. The reason is: such an entry in the
                     // provider property contains attributes for the
@@ -976,7 +1000,8 @@ public final class Security {
                     // in entries which lead to the implementation
                     // classes.
                     if (currentKey.indexOf(" ") < 0) {
-                        result.add(currentKey.substring(serviceName.length() + 1));
+                        result.add(currentKey.substring(
+                                                serviceName.length() + 1));
                     }
                 }
             }

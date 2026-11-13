@@ -10,10 +10,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax = "proto2";
+edition = "2023";
 
 package protos;
 
+option features.utf8_validation = NONE;
 option java_package = "protos";
 option java_multiple_files = true;
 
@@ -21,19 +22,87 @@ message MapMsg {
   map<string, string> string_string = 1;
   map<string, int32> string_int = 2;
   map<string, MapValue> string_message = 3;
-
   map<int32, string> int_string = 4;
   map<int32, int32> int_int = 5;
   map<int32, MapValue> int_message = 6;
 
   enum Color {
+    option features.enum_type = CLOSED;
+
     GREEN = 0;
     YELLOW = 1;
     RED = 2;
   }
+
   map<bool, Color> bool_enum = 7;
 }
 
 message MapValue {
-  required string foo = 1;
+  string foo = 1 [features.field_presence = LEGACY_REQUIRED];
+}
+
+// Verifying conversion from RepeatedFields to Maps for string, string.
+message FakeStringStringMapFieldEntry {
+  string key = 1;
+  string value = 2;
+}
+
+message FakeStringStringMap {
+  repeated FakeStringStringMapFieldEntry map_field = 1;
+}
+
+message RealStringStringMap {
+  map<string, string> map_field = 1;
+}
+
+// Verifying conversion from RepeatedFields to Maps for scalar, bytes.
+message FakeScalarBytesMapFieldEntry {
+  int32 key = 1;
+  bytes value = 2;
+}
+
+message FakeScalarBytesMap {
+  repeated FakeScalarBytesMapFieldEntry map_field = 1;
+}
+
+message RealScalarBytesMap {
+  map<int32, bytes> map_field = 1;
+}
+
+// Verifying conversion from RepeatedFields to Maps for scalar, msg.
+message RandomMessage {
+  string foo = 1;
+}
+
+message FakeScalarMsgMapFieldEntry {
+  int32 key = 1;
+  RandomMessage value = 2;
+}
+
+message FakeScalarMsgMap {
+  repeated FakeScalarMsgMapFieldEntry map_field = 1;
+}
+
+message RealScalarMsgMap {
+  map<int32, RandomMessage> map_field = 1;
+}
+
+// Verifying conversion from RepeatedFields to Maps for scalar, enum.
+// Specifically making sure the default value is used when the value is
+// missing.
+message FakeScalarEnumMapFieldEntry {
+  int32 key = 1;
+  MapMsg.Color value = 2;
+}
+
+message FakeScalarEnumMap {
+  repeated FakeScalarEnumMapFieldEntry map_field = 1;
+}
+
+message RealScalarEnumMap {
+  map<int32, MapMsg.Color> map_field = 1;
+}
+
+message RealStringBytesMap {
+  map<string, bytes> map_field = 1;
 }

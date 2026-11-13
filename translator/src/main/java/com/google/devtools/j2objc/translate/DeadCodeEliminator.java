@@ -22,6 +22,7 @@ import com.google.devtools.j2objc.ast.CompilationUnit;
 import com.google.devtools.j2objc.ast.EnumDeclaration;
 import com.google.devtools.j2objc.ast.FieldDeclaration;
 import com.google.devtools.j2objc.ast.MethodDeclaration;
+import com.google.devtools.j2objc.ast.RecordDeclaration;
 import com.google.devtools.j2objc.ast.TreeNode.Kind;
 import com.google.devtools.j2objc.ast.TypeDeclaration;
 import com.google.devtools.j2objc.ast.UnitTreeVisitor;
@@ -73,6 +74,12 @@ public class DeadCodeEliminator extends UnitTreeVisitor {
   }
 
   @Override
+  public void endVisit(RecordDeclaration node) {
+    TypeElement type = node.getTypeElement();
+    eliminateDeadCode(type, node);
+  }
+
+  @Override
   public void endVisit(AnnotationTypeDeclaration node) {
     TypeElement type = node.getTypeElement();
     if (!ElementUtil.isGeneratedAnnotation(type)) {
@@ -109,20 +116,33 @@ public class DeadCodeEliminator extends UnitTreeVisitor {
         }
       }
 
+      // Do not strip live enum declarations.
+      if (decl instanceof EnumDeclaration) {
+        EnumDeclaration enumDeclaration = (EnumDeclaration) decl;
+        if (!deadCodeMap.containsClass(
+            elementUtil.getBinaryName(enumDeclaration.getTypeElement()))) {
+          continue;
+        }
+      }
+
+      // Or live annotations.
+      if (decl instanceof AnnotationTypeDeclaration) {
+        AnnotationTypeDeclaration annotationDeclaration = (AnnotationTypeDeclaration) decl;
+        if (!deadCodeMap.containsClass(
+            elementUtil.getBinaryName(annotationDeclaration.getTypeElement()))) {
+          continue;
+        }
+      }
+
       if (decl.getKind() == Kind.FIELD_DECLARATION) {
         FieldDeclaration field = (FieldDeclaration) decl;
-        Iterator<VariableDeclarationFragment> fragmentsIter = field.getFragments().iterator();
-        while (fragmentsIter.hasNext()) {
-          VariableDeclarationFragment fragment = fragmentsIter.next();
-          // Don't delete any constants because we can't detect their use.
-          if (fragment.getVariableElement().getConstantValue() == null) {
-            fragmentsIter.remove();
-          } else {
-            removeClass = false;
-          }
-        }
-        if (field.getFragments().isEmpty()) {
+        VariableDeclarationFragment fragment = field.getFragment();
+        // Don't delete any constants because we can't detect their use.
+        if (fragment.getVariableElement().getConstantValue() == null) {
+          fragment.remove();
           iter.remove();
+        } else {
+          removeClass = false;
         }
       } else {
         if (decl instanceof MethodDeclaration) {
@@ -207,19 +227,14 @@ public class DeadCodeEliminator extends UnitTreeVisitor {
       BodyDeclaration declaration = declarationsIter.next();
       if (declaration instanceof FieldDeclaration) {
         FieldDeclaration field = (FieldDeclaration) declaration;
-        Iterator<VariableDeclarationFragment> fragmentsIter = field.getFragments().iterator();
-        while (fragmentsIter.hasNext()) {
-          VariableDeclarationFragment fragment = fragmentsIter.next();
-          // Don't delete any constants because we can't detect their use. Instead,
-          // these are translated by the TypeDeclarationGenerator as #define directives,
-          // so the enclosing type can still be deleted if otherwise empty.
-          VariableElement var = fragment.getVariableElement();
-          if (var.getConstantValue() == null
-              && deadCodeMap.containsField(clazz, ElementUtil.getName(var))) {
-            fragmentsIter.remove();
-          }
-        }
-        if (field.getFragments().isEmpty()) {
+        VariableDeclarationFragment fragment = field.getFragment();
+        // Don't delete any constants because we can't detect their use. Instead,
+        // these are translated by the TypeDeclarationGenerator as #define directives,
+        // so the enclosing type can still be deleted if otherwise empty.
+        VariableElement var = fragment.getVariableElement();
+        if (var.getConstantValue() == null
+            && deadCodeMap.containsField(clazz, ElementUtil.getName(var))) {
+          fragment.remove();
           declarationsIter.remove();
         }
       }
@@ -227,16 +242,20 @@ public class DeadCodeEliminator extends UnitTreeVisitor {
   }
 
   /**
-   * Remove empty classes marked as dead. This needs to be done after translation
-   * to avoid inner class references in the AST returned by DeadCodeEliminator.
+   * Remove empty classes marked as dead. This needs to be done after translation to avoid inner
+   * class references in the AST returned by DeadCodeEliminator.
    */
-  public static void removeDeadClasses(CompilationUnit unit, CodeReferenceMap deadCodeMap) {
+  public void removeDeadClasses() {
     ElementUtil elementUtil = unit.getEnv().elementUtil();
     Iterator<AbstractTypeDeclaration> iter = unit.getTypes().iterator();
     while (iter.hasNext()) {
       AbstractTypeDeclaration type = iter.next();
       TypeElement typeElement = type.getTypeElement();
-      if (!ElementUtil.isGeneratedAnnotation(typeElement)) {
+
+      // If it's not annotation or it's annotations that need to be removed,
+      // check if it exists in the dead code report.
+      if (!ElementUtil.isAnnotationType(typeElement)
+          || ElementUtil.isToBeRemovedAnnotations(typeElement, options)) {
         if (deadCodeMap.containsClass(typeElement, elementUtil)) {
           type.setDeadClass(true);
         } else {

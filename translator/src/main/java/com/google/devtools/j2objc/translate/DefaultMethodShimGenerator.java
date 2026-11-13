@@ -27,6 +27,7 @@ import com.google.devtools.j2objc.ast.ExpressionStatement;
 import com.google.devtools.j2objc.ast.FunctionInvocation;
 import com.google.devtools.j2objc.ast.MethodDeclaration;
 import com.google.devtools.j2objc.ast.MethodInvocation;
+import com.google.devtools.j2objc.ast.RecordDeclaration;
 import com.google.devtools.j2objc.ast.ReturnStatement;
 import com.google.devtools.j2objc.ast.SimpleName;
 import com.google.devtools.j2objc.ast.SingleVariableDeclaration;
@@ -191,18 +192,20 @@ public class DefaultMethodShimGenerator extends UnitTreeVisitor {
 
     private void addShimWithInvocation(
         String selector, ExecutablePair method, Expression invocation, List<Expression> args) {
-      GeneratedExecutableElement element = GeneratedExecutableElement.newMethodWithSelector(
-              selector, method.type().getReturnType(), typeElem)
-          .addModifiers(method.element().getModifiers())
-          .removeModifiers(Modifier.ABSTRACT, Modifier.DEFAULT);
+      GeneratedExecutableElement element =
+          GeneratedExecutableElement.newMethodWithSelector(
+                  selector, method.type().getReturnType(), typeElem)
+              .addModifiers(method.element().getModifiers())
+              .removeModifiers(Modifier.ABSTRACT, Modifier.DEFAULT)
+              .setOriginalElement(method.element());
 
       MethodDeclaration methodDecl = new MethodDeclaration(element);
       methodDecl.setHasDeclaration(false);
 
       int i = 0;
       for (TypeMirror paramType : method.type().getParameterTypes()) {
-        GeneratedVariableElement newParam = GeneratedVariableElement.newParameter(
-            "arg" + i++, paramType, element);
+        GeneratedVariableElement newParam =
+            GeneratedVariableElement.newParameter("arg" + i++, paramType, element);
         element.addParameter(newParam);
         methodDecl.addParameter(new SingleVariableDeclaration(newParam));
         args.add(new SimpleName(newParam));
@@ -216,7 +219,7 @@ public class DefaultMethodShimGenerator extends UnitTreeVisitor {
     }
 
     private void addDefaultMethodShim(String selector, ExecutablePair method) {
-      // The shim's only purpose is to call the default method implementation and returns it value
+      // The shim's only purpose is to call the default method implementation and return its value
       // if required.
       TypeElement declaringClass = ElementUtil.getDeclaringClass(method.element());
       String name = nameTable.getFullFunctionName(method.element());
@@ -253,6 +256,11 @@ public class DefaultMethodShimGenerator extends UnitTreeVisitor {
 
   @Override
   public void endVisit(EnumDeclaration node) {
+    new TypeFixer(node).visit();
+  }
+
+  @Override
+  public void endVisit(RecordDeclaration node) {
     new TypeFixer(node).visit();
   }
 

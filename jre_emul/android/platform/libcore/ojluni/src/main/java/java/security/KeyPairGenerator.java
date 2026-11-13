@@ -34,11 +34,6 @@ import java.security.Provider.Service;
 import sun.security.jca.*;
 import sun.security.jca.GetInstance.Instance;
 
-/*
-Android-removed: this debugging mechanism is not supported in Android.
-import sun.security.util.Debug;
-*/
-
 /**
  * The KeyPairGenerator class is used to generate pairs of
  * public and private keys. Key pair generators are constructed using the
@@ -75,12 +70,12 @@ import sun.security.util.Debug;
  * associated with each of the keys.
  *
  * <p>If the algorithm is the <i>DSA</i> algorithm, and the keysize (modulus
- * size) is 512, 768, or 1024, then the <i>Sun</i> provider uses a set of
+ * size) is 512, 768, 1024, or 2048, then the <i>Sun</i> provider uses a set of
  * precomputed values for the {@code p}, {@code q}, and
  * {@code g} parameters. If the modulus size is not one of the above
  * values, the <i>Sun</i> provider creates a new set of parameters. Other
  * providers might have precomputed parameter sets for more than just the
- * three modulus sizes mentioned above. Still others might not have a list of
+ * modulus sizes mentioned above. Still others might not have a list of
  * precomputed parameters at all and instead always create new parameter sets.
  *
  * <li><b>Algorithm-Specific Initialization</b>
@@ -88,7 +83,7 @@ import sun.security.util.Debug;
  * exists (e.g., so-called <i>community parameters</i> in DSA), there are two
  * {@link #initialize(java.security.spec.AlgorithmParameterSpec)
  * initialize} methods that have an {@code AlgorithmParameterSpec}
- * argument. One also has a {@code SecureRandom} argument, while the
+ * argument. One also has a {@code SecureRandom} argument, while
  * the other uses the {@code SecureRandom}
  * implementation of the highest-priority installed provider as the source
  * of randomness. (If none of the installed providers supply an implementation
@@ -138,19 +133,20 @@ import sun.security.util.Debug;
  * </table>
  *
  * These algorithms are described in the <a href=
- * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyPairGenerator">
+ * "{@docRoot}/../specs/security/standard-names.html#keypairgenerator-algorithms">
  * KeyPairGenerator section</a> of the
  * Java Cryptography Architecture Standard Algorithm Name Documentation.
  *
  * @author Benjamin Renaud
+ * @since 1.1
  *
  * @see java.security.spec.AlgorithmParameterSpec
  */
 
 public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
 
+    // Android-removed: this debugging mechanism is not used in Android.
     /*
-    Android-removed: this debugging mechanism is not supported in Android.
     private static final Debug pdebug =
                         Debug.getInstance("provider", "Provider");
     private static final boolean skipDebug =
@@ -167,8 +163,8 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
      *
      * @param algorithm the standard string name of the algorithm.
      * See the KeyPairGenerator section in the <a href=
-     * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyPairGenerator">
-     * Java Cryptography Architecture Standard Algorithm Name Documentation</a>
+     * "{@docRoot}/../specs/security/standard-names.html#keypairgenerator-algorithms">
+     * Java Security Standard Algorithm Names Specification</a>
      * for information about standard algorithm names.
      */
     protected KeyPairGenerator(String algorithm) {
@@ -178,8 +174,8 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
     /**
      * Returns the standard name of the algorithm for this key pair generator.
      * See the KeyPairGenerator section in the <a href=
-     * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyPairGenerator">
-     * Java Cryptography Architecture Standard Algorithm Name Documentation</a>
+     * "{@docRoot}/../specs/security/standard-names.html#keypairgenerator-algorithms">
+     * Java Security Standard Algorithm Names Specification</a>
      * for information about standard algorithm names.
      *
      * @return the standard string name of the algorithm.
@@ -199,8 +195,8 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
         }
         kpg.provider = instance.provider;
 
+        // Android-removed: this debugging mechanism is not used in Android.
         /*
-        Android-removed: this debugging mechanism is not supported in Android.
         if (!skipDebug && pdebug != null) {
             pdebug.println("KeyPairGenerator." + algorithm +
                 " algorithm from: " + kpg.provider.getName());
@@ -223,22 +219,33 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
      * <p> Note that the list of registered providers may be retrieved via
      * the {@link Security#getProviders() Security.getProviders()} method.
      *
+     * @implNote
+     * The JDK Reference Implementation additionally uses the
+     * {@code jdk.security.provider.preferred}
+     * {@link Security#getProperty(String) Security} property to determine
+     * the preferred provider order for the specified algorithm. This
+     * may be different than the order of providers returned by
+     * {@link Security#getProviders() Security.getProviders()}.
+     *
      * @param algorithm the standard string name of the algorithm.
      * See the KeyPairGenerator section in the <a href=
-     * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyPairGenerator">
-     * Java Cryptography Architecture Standard Algorithm Name Documentation</a>
+     * "{@docRoot}/../specs/security/standard-names.html#keypairgenerator-algorithms">
+     * Java Security Standard Algorithm Names Specification</a>
      * for information about standard algorithm names.
      *
-     * @return the new KeyPairGenerator object.
+     * @return the new {@code KeyPairGenerator} object
      *
-     * @exception NoSuchAlgorithmException if no Provider supports a
-     *          KeyPairGeneratorSpi implementation for the
-     *          specified algorithm.
+     * @throws NoSuchAlgorithmException if no {@code Provider} supports a
+     *         {@code KeyPairGeneratorSpi} implementation for the
+     *         specified algorithm
+     *
+     * @throws NullPointerException if {@code algorithm} is {@code null}
      *
      * @see Provider
      */
     public static KeyPairGenerator getInstance(String algorithm)
             throws NoSuchAlgorithmException {
+        Objects.requireNonNull(algorithm, "null algorithm name");
         List<Service> list =
                 GetInstance.getServices("KeyPairGenerator", algorithm);
         Iterator<Service> t = list.iterator();
@@ -281,29 +288,36 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
      *
      * @param algorithm the standard string name of the algorithm.
      * See the KeyPairGenerator section in the <a href=
-     * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyPairGenerator">
-     * Java Cryptography Architecture Standard Algorithm Name Documentation</a>
+     * "{@docRoot}/../specs/security/standard-names.html#keypairgenerator-algorithms">
+     * Java Security Standard Algorithm Names Specification</a>
      * for information about standard algorithm names.
      *
      * @param provider the string name of the provider.
      *
-     * @return the new KeyPairGenerator object.
+     * @return the new {@code KeyPairGenerator} object
      *
-     * @exception NoSuchAlgorithmException if a KeyPairGeneratorSpi
-     *          implementation for the specified algorithm is not
-     *          available from the specified provider.
+     * @throws IllegalArgumentException if the provider name is {@code null}
+     *         or empty
      *
-     * @exception NoSuchProviderException if the specified provider is not
-     *          registered in the security provider list.
+     * @throws NoSuchAlgorithmException if a {@code KeyPairGeneratorSpi}
+     *         implementation for the specified algorithm is not
+     *         available from the specified provider
      *
-     * @exception IllegalArgumentException if the provider name is null
-     *          or empty.
+     * @throws NoSuchProviderException if the specified provider is not
+     *         registered in the security provider list
+     *
+     * @throws NullPointerException if {@code algorithm} is {@code null}
      *
      * @see Provider
      */
     public static KeyPairGenerator getInstance(String algorithm,
             String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
+        Objects.requireNonNull(algorithm, "null algorithm name");
+        // Android-added: Check for Bouncy Castle deprecation
+        /* J2ObjC removed: BouncyCastle not supported
+        Providers.checkBouncyCastleDeprecation(provider, "KeyPairGenerator", algorithm);
+         */
         Instance instance = GetInstance.getInstance("KeyPairGenerator",
                 KeyPairGeneratorSpi.class, algorithm, provider);
         return getInstance(instance, algorithm);
@@ -320,19 +334,22 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
      *
      * @param algorithm the standard string name of the algorithm.
      * See the KeyPairGenerator section in the <a href=
-     * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyPairGenerator">
-     * Java Cryptography Architecture Standard Algorithm Name Documentation</a>
+     * "{@docRoot}/../specs/security/standard-names.html#keypairgenerator-algorithms">
+     * Java Security Standard Algorithm Names Specification</a>
      * for information about standard algorithm names.
      *
      * @param provider the provider.
      *
-     * @return the new KeyPairGenerator object.
+     * @return the new {@code KeyPairGenerator} object
      *
-     * @exception NoSuchAlgorithmException if a KeyPairGeneratorSpi
-     *          implementation for the specified algorithm is not available
-     *          from the specified Provider object.
+     * @throws IllegalArgumentException if the specified provider is
+     *         {@code null}
      *
-     * @exception IllegalArgumentException if the specified provider is null.
+     * @throws NoSuchAlgorithmException if a {@code KeyPairGeneratorSpi}
+     *         implementation for the specified algorithm is not available
+     *         from the specified {@code Provider} object
+     *
+     * @throws NullPointerException if {@code algorithm} is {@code null}
      *
      * @see Provider
      *
@@ -340,6 +357,11 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
      */
     public static KeyPairGenerator getInstance(String algorithm,
             Provider provider) throws NoSuchAlgorithmException {
+        Objects.requireNonNull(algorithm, "null algorithm name");
+        // Android-added: Check for Bouncy Castle deprecation
+        /* J2ObjC removed: BouncyCastle not supported
+        Providers.checkBouncyCastleDeprecation(provider, "KeyPairGenerator", algorithm);
+         */
         Instance instance = GetInstance.getInstance("KeyPairGenerator",
                 KeyPairGeneratorSpi.class, algorithm, provider);
         return getInstance(instance, algorithm);
@@ -413,7 +435,7 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
      * of randomness.
      * (If none of the installed providers supply an implementation of
      * {@code SecureRandom}, a system-provided source of randomness is
-     * used.).
+     * used.)
      *
      * <p>This concrete method has been added to this previously-defined
      * abstract class.
@@ -575,9 +597,9 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
 
         private Iterator<Service> serviceIterator;
 
-        private final static int I_NONE   = 1;
-        private final static int I_SIZE   = 2;
-        private final static int I_PARAMS = 3;
+        private static final int I_NONE   = 1;
+        private static final int I_SIZE   = 2;
+        private static final int I_PARAMS = 3;
 
         private int initType;
         private int initKeySize;
@@ -598,8 +620,8 @@ public abstract class KeyPairGenerator extends KeyPairGeneratorSpi {
             this.serviceIterator = serviceIterator;
             initType = I_NONE;
 
+            // Android-removed: this debugging mechanism is not used in Android.
             /*
-            Android-removed: this debugging mechanism is not supported in Android.
             if (!skipDebug && pdebug != null) {
                 pdebug.println("KeyPairGenerator." + algorithm +
                     " algorithm from: " + provider.getName());

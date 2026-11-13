@@ -16,18 +16,30 @@
 
 package com.google.devtools.j2objc.util;
 
+
+import com.google.common.base.Ascii;
 import com.google.common.base.CharMatcher;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
 import com.google.devtools.j2objc.J2ObjC;
 import com.google.devtools.j2objc.Options;
+import com.google.devtools.j2objc.ast.EnumConstantDeclaration;
+import com.google.devtools.j2objc.ast.FunctionDeclaration;
+import com.google.devtools.j2objc.ast.MethodDeclaration;
+import com.google.devtools.j2objc.ast.SingleVariableDeclaration;
 import com.google.devtools.j2objc.types.NativeType;
 import com.google.devtools.j2objc.types.PointerType;
+import com.google.j2objc.annotations.ObjectiveCAdapterMethod;
 import com.google.j2objc.annotations.ObjectiveCName;
+import com.google.j2objc.annotations.ObjectiveCNativeEnumName;
+import com.google.j2objc.annotations.SwiftName;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -36,15 +48,22 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.TypeParameterElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.TypeVariable;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Singleton service for type/method/variable name support.
@@ -56,6 +75,7 @@ public class NameTable {
   private final TypeUtil typeUtil;
   private final ElementUtil elementUtil;
   private final CaptureInfo captureInfo;
+  private final Options options;
   private final Map<VariableElement, String> variableNames = new HashMap<>();
   private final Map<ExecutableElement, String> methodSelectorCache = new HashMap<>();
   private final Map<TypeElement, String> fullNameCache = new HashMap<>();
@@ -75,6 +95,7 @@ public class NameTable {
   // actually want the first parameter to be self. This is an internal name,
   // converted to self during generation.
   public static final String SELF_NAME = "$$self$$";
+  public static final String OUTER_NAME = "outer$";
   public static final String ID_TYPE = "id";
 
   private static final Logger logger = Logger.getLogger(NameTable.class.getName());
@@ -87,7 +108,8 @@ public class NameTable {
    * The list of predefined types, common primitive typedefs, constants and
    * variables. Loaded from a resource file.
    */
-  private static final ImmutableSet<String> reservedNames = loadReservedNames();
+  private static ImmutableSet<String> reservedNames = loadReservedNames(
+      () -> J2ObjC.class.getResourceAsStream(RESERVED_NAMES_FILE));
 
   // Regex pattern for fully-qualified Java class or package names.
   private static final String JAVA_CLASS_NAME_REGEX
@@ -96,8 +118,8 @@ public class NameTable {
   private static final Pattern JAVA_CLASS_NAME_PATTERN = Pattern.compile(JAVA_CLASS_NAME_REGEX);
 
 
-  private static ImmutableSet<String> loadReservedNames() {
-    try (InputStream stream = J2ObjC.class.getResourceAsStream(RESERVED_NAMES_FILE);
+  private static ImmutableSet<String> loadReservedNames(Supplier<InputStream> inputStream) {
+    try (InputStream stream = inputStream.get();
         BufferedReader lines = new BufferedReader(new InputStreamReader(stream, "UTF-8"))) {
       ImmutableSet.Builder<String> builder = ImmutableSet.builder();
       String line;
@@ -111,6 +133,21 @@ public class NameTable {
     } catch (IOException e) {
       throw new AssertionError(e);
     }
+  }
+
+  public static void addReservedNames(String file) {
+    ImmutableSet.Builder<String> updatedReservedNames = ImmutableSet.builder();
+    updatedReservedNames.addAll(reservedNames);
+    updatedReservedNames.addAll(
+        loadReservedNames(
+            () -> {
+              try {
+                return new FileInputStream(file);
+              } catch (FileNotFoundException e) {
+                throw new AssertionError(e);
+              }
+            }));
+    reservedNames = updatedReservedNames.build();
   }
 
   private static final ImmutableSet<String> badParameterNames = ImmutableSet.of(
@@ -148,6 +185,7 @@ public class NameTable {
     this.typeUtil = typeUtil;
     this.elementUtil = typeUtil.elementUtil();
     this.captureInfo = captureInfo;
+    this.options = options;
     prefixMap = options.getPackagePrefixes();
     classMappings = options.getMappings().getClassMappings();
     methodMappings = options.getMappings().getMethodMappings();
@@ -183,6 +221,10 @@ public class NameTable {
       return name;
     }
     name = ElementUtil.getName(var);
+    if (name.equals("initialize")) {
+      // Avoid conflict with class initialize function name.
+      return "initialize_";
+    }
     if (allowReservedName) {
       return name;
     }
@@ -195,6 +237,8 @@ public class NameTable {
       name += '_';
     } else if (ElementUtil.isParameter(var) && badParameterNames.contains(name)) {
       name += "Arg";
+    } else if (ElementUtil.isUnnamed(var)) {
+      name = "_";
     }
     return name;
   }
@@ -250,6 +294,11 @@ public class NameTable {
     return s.length() > 0 ? Character.toUpperCase(s.charAt(0)) + s.substring(1) : s;
   }
 
+  /** Lowercase the first letter of a string. */
+  public static String lowercaseFirst(String s) {
+    return s.length() > 0 ? Character.toLowerCase(s.charAt(0)) + s.substring(1) : s;
+  }
+
   /**
    * Given a period-separated name, return as a camel-cased type name.  For
    * example, java.util.logging.Level is returned as JavaUtilLoggingLevel.
@@ -269,6 +318,27 @@ public class NameTable {
     StringBuilder sb = new StringBuilder();
     for (String part : fqn.split(Pattern.quote(File.separator))) {
       sb.append(capitalize(part));
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Given a name, return as a camel-cased name using underscores as spaces. Used, for example, in
+   * swift name for enums. If leadingCapital is true the string will begin with a capital (i.e.
+   * CamelCase), otherwise it will be lowercase (i.e. camelCase).
+   */
+  public static String camelCaseName(String fqn, boolean leadingCapital) {
+    StringBuilder sb = new StringBuilder();
+    for (String part : Splitter.on('_').split(fqn)) {
+      String caseName = Ascii.toLowerCase(part);
+      if (!leadingCapital && sb.length() == 0) {
+        sb.append(caseName);
+      } else {
+        sb.append(capitalize(caseName));
+      }
+    }
+    if (isReservedName(sb.toString())) {
+      sb.append("_");
     }
     return sb.toString();
   }
@@ -316,7 +386,7 @@ public class NameTable {
 
   private static final Pattern SELECTOR_VALIDATOR = Pattern.compile("\\w+|(\\w+:)+");
 
-  private static void validateMethodSelector(String selector) {
+  public static void validateMethodSelector(String selector) {
     if (!SELECTOR_VALIDATOR.matcher(selector).matches()) {
       ErrorUtil.error("Invalid method selector: " + selector);
     }
@@ -324,7 +394,14 @@ public class NameTable {
 
   private static String getMethodName(ExecutableElement method) {
     if (ElementUtil.isConstructor(method)) {
-      return "init";
+      TypeElement clazz = ElementUtil.getDeclaringClass(method);
+      boolean needsPackagePrivateSuffix = ElementUtil.isTopLevel(clazz)
+          && ElementUtil.getVisibilityModifiers(clazz).isEmpty()
+          && !ElementUtil.isEnum(clazz)
+          // Do not apply this change to classes in the default package
+          // because it affects/breaks several translator tests.
+          && !ElementUtil.getPackage(clazz).isUnnamed();
+      return needsPackagePrivateSuffix ? "initPackagePrivate" : "init";
     }
     String name = ElementUtil.getName(method);
     if (isReservedName(name)) {
@@ -334,8 +411,8 @@ public class NameTable {
   }
 
   private boolean appendParamKeyword(
-      StringBuilder sb, TypeMirror paramType, char delim, boolean first) {
-    String keyword = parameterKeyword(paramType);
+      StringBuilder sb, VariableElement variable, char delim, boolean first) {
+    String keyword = parameterKeyword(variable.asType());
     if (first) {
       keyword = capitalize(keyword);
     }
@@ -349,18 +426,43 @@ public class NameTable {
     TypeElement declaringClass = ElementUtil.getDeclaringClass(method);
     if (ElementUtil.isConstructor(method)) {
       for (VariableElement param : captureInfo.getImplicitPrefixParams(declaringClass)) {
-        first = appendParamKeyword(sb, param.asType(), delim, first);
+        first = appendParamKeyword(sb, param, delim, first);
       }
     }
     for (VariableElement param : method.getParameters()) {
-      first = appendParamKeyword(sb, param.asType(), delim, first);
+      first = appendParamKeyword(sb, param, delim, first);
     }
     if (ElementUtil.isConstructor(method)) {
       for (VariableElement param : captureInfo.getImplicitPostfixParams(declaringClass)) {
-        first = appendParamKeyword(sb, param.asType(), delim, first);
+        first = appendParamKeyword(sb, param, delim, first);
       }
     }
     return sb.toString();
+  }
+
+  private String addSwiftParamNames(
+      List<SingleVariableDeclaration> parameters, String name, char delim) {
+    int paramCount = parameters.size();
+    if (paramCount > 0
+        && parameters.get(paramCount - 1).getVariableElement().asType()
+            instanceof NativeType nativeType
+        && nativeType.getName().equals("NSError **")) {
+      parameters = parameters.subList(0, paramCount - 1);
+    }
+    if (parameters.isEmpty()) {
+      return name + "()";
+    }
+    StringBuilder sb = new StringBuilder(name).append("(");
+    for (SingleVariableDeclaration param : parameters) {
+      String paramName = getVarBaseName(param.getVariableElement(), true);
+      // Sometimes they don't have real arguments names so we'll use underscore
+      if (paramName.isEmpty() || paramName.equals(SELF_NAME) || paramName.equals(OUTER_NAME)) {
+        sb.append("_").append(delim);
+      } else {
+        sb.append(paramName).append(delim);
+      }
+    }
+    return sb.append(")").toString();
   }
 
   public String getMethodSelector(ExecutableElement method) {
@@ -379,7 +481,7 @@ public class NameTable {
       return selector;
     }
     if (ElementUtil.isInstanceMethod(method)) {
-      method = getOriginalMethod(method);
+      method = elementUtil.getOriginalMethod(method);
     }
     selector = getRenamedMethodName(method);
     return selectorForMethodName(method, selector != null ? selector : getMethodName(method));
@@ -402,7 +504,14 @@ public class NameTable {
     if (name.contains(":")) {
       return name;
     }
-    return addParamNames(method, name, ':');
+    String selector = addParamNames(method, name, ':');
+    AnnotationMirror annotation = ElementUtil.getAnnotation(method, ObjectiveCAdapterMethod.class);
+    if (annotation != null) {
+      // Methods with adapter methods should be renamed to make it clear they are no longer
+      // the expected interface (and will be hidden in KMP).
+      selector = String.format("_%s", selector);
+    }
+    return selector;
   }
 
   /**
@@ -448,7 +557,7 @@ public class NameTable {
     }
   }
 
-  public static String getMethodNameFromAnnotation(ExecutableElement method) {
+  public String getMethodNameFromAnnotation(ExecutableElement method) {
     AnnotationMirror annotation = ElementUtil.getAnnotation(method, ObjectiveCName.class);
     if (annotation != null) {
       String value = (String) ElementUtil.getAnnotationValue(annotation, "value");
@@ -458,70 +567,309 @@ public class NameTable {
     return null;
   }
 
-  private ExecutableElement getOriginalMethod(ExecutableElement method) {
-    TypeElement declaringClass = ElementUtil.getDeclaringClass(method);
-    return getOriginalMethod(method, declaringClass, declaringClass);
-  }
+  public @Nullable String getSwiftMethodNameFromAnnotation(MethodDeclaration method) {
+    ExecutableElement element = method.getExecutableElement();
+    // Check if the method has the annotation
+    String annotationName = swiftNameFromAnnotation(element);
+    if (annotationName != null) {
+      return annotationName;
+    }
 
-  /**
-   * Finds the original method element to use for generating a selector. The method returned is the
-   * first method found in the hierarchy while traversing in order of declared inheritance that
-   * doesn't override a method from a supertype. (ie. it is the first leaf node found in the tree of
-   * overriding methods)
-   */
-  private ExecutableElement getOriginalMethod(
-      ExecutableElement topMethod, TypeElement declaringClass, TypeElement currentType) {
-    if (currentType == null) {
+    TypeElement clazz = ElementUtil.getDeclaringClass(element);
+    // Check if the class or package has the annotation
+    if (!packageHasSwiftNameAnnotation(clazz) && !elementHasSwiftNameAnnotation(clazz)) {
       return null;
     }
-    // TODO(tball): simplify to ElementUtil.getSuperclass() when javac update is complete.
-    TypeElement superclass = currentType.getKind().isInterface()
-        ? typeUtil.getJavaObject() : ElementUtil.getSuperclass(currentType);
-    ExecutableElement original = getOriginalMethod(topMethod, declaringClass, superclass);
-    if (original != null) {
-      return original;
-    }
-    for (TypeMirror supertype : currentType.getInterfaces()) {
-      original = getOriginalMethod(topMethod, declaringClass, TypeUtil.asTypeElement(supertype));
-      if (original != null) {
-        return original;
+
+    String selector = getMethodSelector(element);
+    if (ElementUtil.isConstructor(element)) {
+      if (hasSuperConstructorWithSameSelector(selector, clazz)) {
+        return null;
+      }
+    } else {
+      if (hasSuperMethodWithSameSelector(selector, clazz)) {
+        return null;
       }
     }
-    if (declaringClass == currentType) {
-      return topMethod;
+
+    // If the annotation is still null after checking the names then it doesn't exist
+    String methodName = element.getSimpleName().toString();
+
+    // Constructors are `<init>`
+    methodName = methodName.replace("<", "").replace(">", "");
+
+    if (methodName.contains(":")) {
+      methodName = methodName.replace(":", "");
     }
-    for (ExecutableElement candidate : ElementUtil.getMethods(currentType)) {
-      if (ElementUtil.isInstanceMethod(candidate)
-          && elementUtil.overrides(topMethod, candidate, declaringClass)) {
-        return candidate;
+
+    return addSwiftParamNames(method.getParameters(), methodName, ':');
+  }
+
+  private boolean hasSuperConstructorWithSameSelector(String selector, TypeElement clazz) {
+    TypeElement superClass = ElementUtil.getSuperclass(clazz);
+    if (superClass == null) {
+      return false;
+    }
+    if (Iterables.any(
+        ElementUtil.getConstructors(superClass), c -> getMethodSelector(c).equals(selector))) {
+      return true;
+    }
+    return hasSuperConstructorWithSameSelector(selector, superClass);
+  }
+
+  private boolean hasSuperMethodWithSameSelector(String selector, TypeElement clazz) {
+    TypeElement superClass = ElementUtil.getSuperclass(clazz);
+    if (superClass != null) {
+      if (hasMethodWithSelector(superClass, selector)
+          || hasSuperMethodWithSameSelector(selector, superClass)) {
+        return true;
       }
+    }
+    for (TypeMirror interfaceMirror : clazz.getInterfaces()) {
+      TypeElement interfaceElement = TypeUtil.asTypeElement(interfaceMirror);
+      if (interfaceElement != null) {
+        if (hasMethodWithSelector(interfaceElement, selector)
+            || hasSuperMethodWithSameSelector(selector, interfaceElement)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private boolean hasMethodWithSelector(TypeElement clazz, String selector) {
+    return Iterables.any(ElementUtil.getMethods(clazz), m -> getMethodSelector(m).equals(selector));
+  }
+
+  public @Nullable String getSwiftClassNameFromAnnotation(TypeElement clazz) {
+    String annotationName = swiftNameFromAnnotation(clazz);
+    if (annotationName != null) {
+      return annotationName;
+    }
+
+    NestingKind nesting = clazz.getNestingKind();
+    if (nesting == NestingKind.MEMBER) {
+      Element parent = clazz.getEnclosingElement();
+      if (parent instanceof TypeElement parentElement) {
+        // Protocols are named by concatenating the interface name and names of the parent type
+        // hierarchy. Any types declared within an interface are also named by concatenating the
+        // inner type name to the parent interface name. E.g. FooBar rather than Foo.Bar.
+        if (clazz.getKind().isInterface() || parentElement.getKind().isInterface()) {
+          return getFlatSwiftClassName(clazz);
+        }
+        String parentName = getSwiftClassNameFromAnnotation(parentElement);
+        if (parentName != null) {
+          // TODO(b/555734134) - Remove nested class workaround once Xcode 26.4 is the minimum
+          // version.
+          String className = clazz.getSimpleName().toString().replace("$", "");
+          if (parentName.contains(".")) {
+            // NS_SWIFT_NAME may exhibit errors with nested parent classes prior to Xcode 26.4, but
+            // it does support referencing the parent type by its ObjC name.
+            String objcType = getObjCType(parentElement.asType());
+            return getNameOfObjCType(objcType) + "." + className;
+          } else {
+            return parentName + "." + className;
+          }
+        }
+      }
+    }
+
+    if (!packageHasSwiftNameAnnotation(clazz) && !elementHasSwiftNameAnnotation(clazz)) {
+      return null;
+    }
+
+    String className = clazz.getSimpleName().toString();
+    return className.replace("$", "");
+  }
+
+  private @Nullable String getFlatSwiftClassName(TypeElement clazz) {
+    List<String> hierarchy = new ArrayList<>();
+    Element current = clazz;
+    boolean hasSwiftName = packageHasSwiftNameAnnotation(clazz);
+    while (current instanceof TypeElement typeElement) {
+      String annotationName = swiftNameFromAnnotation(typeElement);
+      if (annotationName != null && !annotationName.isEmpty()) {
+        hierarchy.add(annotationName);
+        hasSwiftName = true;
+        break;
+      }
+      hierarchy.add(typeElement.getSimpleName().toString().replace("$", ""));
+      if (elementHasSwiftNameAnnotation(typeElement)) {
+        hasSwiftName = true;
+      }
+      current = typeElement.getEnclosingElement();
+    }
+
+    if (!hasSwiftName) {
+      return null;
+    }
+
+    return String.join("", hierarchy.reversed());
+  }
+
+  public @Nullable String getSwiftFunctionNameFromAnnotation(FunctionDeclaration function) {
+    if (options.emitWrapperMethods()) {
+      // When wrapper methods is enable we don't need to do this because they are already `init`
+      // methods.
+      return null;
+    }
+
+    String functionName = function.getName();
+
+    ExecutableElement method = function.getExecutableElement();
+    if (method == null) {
+      return null;
+    }
+
+    TypeElement owner = ElementUtil.getDeclaringClass(method);
+    if (owner == null) {
+      return null;
+    }
+
+    if (!packageHasSwiftNameAnnotation(owner)
+        && !elementHasSwiftNameAnnotation(owner)
+        && !elementHasSwiftNameAnnotation(method)) {
+      return null;
+    }
+
+    String className = getSwiftClassNameFromAnnotation(owner);
+    if (className == null || className.contains(".")) {
+      // TODO(b/555734134) - Remove nested class workaround once Xcode 26.4 is the minimum version.
+      // NS_SWIFT_NAME may exhibit errors with nested parent classes prior to Xcode 26.4, but it
+      // does support referencing the parent type by its ObjC name.
+      className = getNameOfObjCType(getObjCType(owner.asType()));
+    }
+
+    StringBuilder sb = new StringBuilder();
+
+    String annotationName = function.getExecutableElement().getSimpleName().toString();
+
+    // Constructors are `<init>`
+    annotationName = annotationName.replace("<", "").replace(">", "");
+
+    if (annotationName.contains(":")) {
+      annotationName = annotationName.replace(":", "");
+    }
+
+    annotationName = addSwiftParamNames(function.getParameters(), annotationName, ':');
+    if (!functionName.contains("_init") && annotationName != null) {
+      sb.append(" NS_SWIFT_NAME(");
+      sb.append(className).append(".").append(annotationName);
+      sb.append(")");
+    } else if (functionName.contains("new_")) {
+      sb.append(" NS_SWIFT_NAME(");
+
+      if (annotationName != null) {
+        sb.append(className).append(".").append(annotationName);
+      } else {
+        sb.append(addSwiftParamNames(function.getParameters(), className + ".init", ':'));
+      }
+      sb.append(")");
+    }
+
+    return sb.toString();
+  }
+
+  public static @Nullable String swiftNameFromAnnotation(Element elelement) {
+    AnnotationMirror annotation = ElementUtil.getAnnotation(elelement, SwiftName.class);
+    if (annotation != null) {
+      return (String) ElementUtil.getAnnotationValue(annotation, "value");
     }
     return null;
+  }
+
+  public Boolean packageHasSwiftNameAnnotation(TypeElement classType) {
+    if (options.swiftNaming()) {
+      return true;
+    }
+    PackageElement packageElement = ElementUtil.getPackage(classType);
+    return ElementUtil.getAnnotation(packageElement, SwiftName.class) != null;
+  }
+
+  public Boolean elementHasSwiftNameAnnotation(Element element) {
+    if (options.swiftNaming()) {
+      return true;
+    }
+    return ElementUtil.getAnnotation(element, SwiftName.class) != null;
   }
 
   /**
    * Converts a Java type to an equivalent Objective-C type, returning "id" for an object type.
    */
+  @SuppressWarnings("StatementSwitchToExpressionSwitch")
   public static String getPrimitiveObjCType(TypeMirror type) {
-    return TypeUtil.isVoid(type) ? "void"
-        : type.getKind().isPrimitive() ? "j" + TypeUtil.getName(type) : "id";
+    if (TypeUtil.isVoid(type)) {
+      return "void";
+    }
+    if (!type.getKind().isPrimitive()) {
+      return "id";
+    }
+    if (type.getKind().isPrimitive()) {
+      switch (type.getKind()) {
+        case BOOLEAN:
+          return "bool";
+        case BYTE:
+          return "int8_t";
+        case SHORT:
+          return "int16_t";
+        case INT:
+          return "int32_t";
+        case LONG:
+          return "int64_t";
+        case CHAR:
+          return "unichar"; // AKA uint16_t.
+        case FLOAT:
+          return "float";
+        case DOUBLE:
+          return "double";
+        default:
+          return "j" + TypeUtil.getName(type);
+      }
+    }
+    return "id";
   }
 
   /**
-   * Convert a Java type to an equivalent Objective-C type with type variables
-   * resolved to their bounds.
+   * Converts a primitive Java type to an equivalent Objective-C type as the most inner component in
+   * an array.
    */
-  public String getObjCType(TypeMirror type) {
-    return getObjcTypeInner(type, null);
+  @SuppressWarnings("StatementSwitchToExpressionSwitch")
+  public static String getPrimitiveObjCTypeArrayComponent(TypeMirror type) {
+    String typeString = "JavaLang";
+    switch (type.getKind()) {
+      case BOOLEAN:
+        typeString += "Boolean";
+        break;
+      case BYTE:
+        typeString += "Byte";
+        break;
+      case SHORT:
+        typeString += "Short";
+        break;
+      case INT:
+        typeString += "Integer";
+        break;
+      case LONG:
+        typeString += "Long";
+        break;
+      case CHAR:
+        typeString += "Character";
+        break;
+      case FLOAT:
+        typeString += "Float";
+        break;
+      case DOUBLE:
+        typeString += "Double";
+        break;
+      default:
+        return getPrimitiveObjCType(type);
+    }
+
+    typeString += " *";
+    return typeString;
   }
 
-  public String getObjCType(VariableElement var) {
-    return getObjcTypeInner(var.asType(), ElementUtil.getTypeQualifiers(var));
-  }
-
-  /**
-   * Convert a Java type into the equivalent JNI type.
-   */
+  /** Convert a Java type into the equivalent JNI type. */
   public String getJniType(TypeMirror type) {
     if (TypeUtil.isPrimitiveOrVoid(type)) {
       return getPrimitiveObjCType(type);
@@ -535,11 +883,96 @@ public class NameTable {
     return "jobject";
   }
 
-  private String getObjcTypeInner(TypeMirror type, String qualifiers) {
+  /**
+   * Convert a Java type to an equivalent Objective-C type with type variables resolved to their
+   * bounds.
+   */
+  public String getObjCType(TypeMirror type) {
+    return getObjcTypeInner(type, null, false, false, null);
+  }
+
+  public String getObjCType(VariableElement var) {
+    return getObjcTypeInner(
+        var.asType(), ElementUtil.getTypeQualifiers(var), false, false, null);
+  }
+
+  public String getObjCTypeDeclaration(TypeMirror type) {
+    return getObjcTypeInner(type, null, false, false, null);
+  }
+
+  public String getObjCTypeDeclaration(
+      TypeMirror type,
+      boolean enableGenerics,
+      TypeElement genericUsageTypeElement) {
+    return getObjcTypeInner(
+        type, null, false, enableGenerics, genericUsageTypeElement);
+  }
+
+  /** Returns the name of the Objective-C type with the pointer and protocol syntax removed. */
+  private static String getNameOfObjCType(String objcType) {
+    return objcType.replace(" *", "").replace("id<", "").replace(">", "");
+  }
+
+  /**
+   * Given a Java class type, returns the generics that would apply to the class declaration as a
+   * list of string names.
+   */
+  public List<String> getClassObjCGenericTypeNames(TypeMirror type) {
+    TypeElement typeElement = TypeUtil.asTypeElement(type);
+    if (typeElement == null || !TypeUtil.isClass(type)) {
+      return new ArrayList<>();
+    }
+    // Java protos have the <MessageType, BuilderType> generics, but these are not useful
+    // in ObjC interfacing with the Java, so filter them off.
+    if (typeUtil.isProtoClass(type)) {
+      return new ArrayList<>();
+    }
+    ArrayList<String> typeNames = new ArrayList<>();
+    for (TypeParameterElement paramElement : typeElement.getTypeParameters()) {
+      typeNames.add(paramElement.getSimpleName().toString());
+    }
+    return typeNames;
+  }
+
+  private boolean isTranslatableTypeVariable(
+      TypeVariable t, TypeElement parameterUsageContextTypeElement) {
+    TypeParameterElement typeParamElement = TypeUtil.asTypeParameterElement(t);
+    if (typeParamElement == null) {
+      return false;
+    }
+
+    Element enclosingElement = typeParamElement.getEnclosingElement();
+    // Skip method type parameters.
+    if (enclosingElement.getKind() != ElementKind.CLASS) {
+      return false;
+    }
+
+    // If there is a usage context class is the parameter type also there?
+    // This avoids cases we don't yet handle, notably inner classes using the parameters
+    // of their parent class.
+    if (parameterUsageContextTypeElement != null) {
+      if (!TypeUtil.isClass(parameterUsageContextTypeElement.asType())) {
+        return false;
+      }
+      if (!parameterUsageContextTypeElement.getTypeParameters().contains(typeParamElement)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // isArrayComponent: this flag is used to generate the primitive types if they are the most inner
+  /// component in arrays.
+  private String getObjcTypeInner(
+      TypeMirror type,
+      String qualifiers,
+      boolean isArrayComponent,
+      boolean enableGenerics,
+      TypeElement genericUsageTypeElement) {
     String objcType;
-    if (type instanceof NativeType) {
-      objcType = ((NativeType) type).getName();
-    } else if (type instanceof PointerType) {
+    type = TypeUtil.unannotatedType(type);
+    if (type instanceof PointerType) {
       String pointeeQualifiers = null;
       if (qualifiers != null) {
         int idx = qualifiers.indexOf('*');
@@ -548,10 +981,89 @@ public class NameTable {
           qualifiers = qualifiers.substring(idx + 1);
         }
       }
-      objcType = getObjcTypeInner(((PointerType) type).getPointeeType(), pointeeQualifiers);
+      objcType =
+          getObjcTypeInner(
+              ((PointerType) type).getPointeeType(),
+              pointeeQualifiers,
+              false,
+              enableGenerics,
+              genericUsageTypeElement);
       objcType = objcType.endsWith("*") ? objcType + "*" : objcType + " *";
     } else if (TypeUtil.isPrimitiveOrVoid(type)) {
-      objcType = getPrimitiveObjCType(type);
+      objcType =
+          isArrayComponent ? getPrimitiveObjCTypeArrayComponent(type) : getPrimitiveObjCType(type);
+    } else if (type instanceof ArrayType && enableGenerics) {
+      TypeMirror componentType = TypeUtil.unannotatedType(((ArrayType) type).getComponentType());
+      // For arrays of primitive types we prefer the IOSPrimitiveArray.h IOSArray subclasses
+      // directly instead of IOSArray with generics. The IOSArray type-specific subclasses offer
+      // more useful methods for accessing the primitive types the array contains with appropriate
+      // Obj-C method signatures and type encodings. For example, -[IOSBooleanArray booleanAtIndex:]
+      // can't be implemented as  -[IOSArray getElementAtIndex:] due to ObjC selector signature
+      // requirements.
+      if (TypeUtil.isPrimitiveOrVoid(componentType)) {
+        TypeElement arrayTypeElement = typeUtil.getIosArray(componentType);
+        objcType = getFullName(arrayTypeElement);
+        objcType += isArrayComponent ? "" : " *";
+      } else {
+        String innerType =
+            getObjcTypeInner(
+                componentType,
+                qualifiers,
+                true,
+                enableGenerics,
+                genericUsageTypeElement);
+        objcType = "IOSObjectArray<" + innerType;
+        objcType += componentType instanceof ArrayType ? " *>" : ">";
+        objcType += isArrayComponent ? "" : " *";
+      }
+    } else if (enableGenerics
+        && ((genericUsageTypeElement != null) && !genericUsageTypeElement.getKind().isInterface())
+        && TypeUtil.isTypeVariable(type)
+        && isTranslatableTypeVariable((TypeVariable) type, genericUsageTypeElement)) {
+      objcType = ((TypeVariable) type).asElement().getSimpleName().toString();
+    } else if (enableGenerics
+        && (TypeUtil.isDeclaredType(type) || TypeUtil.isNativeType(type))
+        && !TypeUtil.getTypeArguments(type).isEmpty()
+        && !TypeUtil.isInterface(type)
+        && !typeUtil.isProtoClass(type)
+        && !typeUtil.isClassType(TypeUtil.asTypeElement(type))) {
+      final String finalQualifiers = qualifiers;
+      // Avoid creating generics that merely state <id,id,...>. Obj-C generics only support 'id'
+      // type anyway, but in practice a type with just "id" parameters cannot be assigned to a more
+      // specific type where Java would sometimes allow such conversions.
+      List<String> argTypes = new ArrayList<>();
+      boolean hasSpecficType = false;
+      for (TypeMirror argTypeMirror : TypeUtil.getTypeArguments(type)) {
+        String argType =
+            getObjcTypeInner(
+                argTypeMirror,
+                finalQualifiers,
+                false,
+                enableGenerics,
+                genericUsageTypeElement);
+        argTypes.add(argType);
+        if (!argType.equals(ID_TYPE)) {
+          hasSpecficType = true;
+        }
+      }
+      if (TypeUtil.isNativeType(type)) {
+        if (hasSpecficType) {
+          objcType = ((NativeType) type).getNameWithTypeArgumentNames(argTypes);
+        } else {
+          objcType = ((NativeType) type).getName();
+        }
+      } else {
+        if (hasSpecficType) {
+          objcType =
+              String.format(
+                  "%s<%s> *",
+                  getFullName(typeUtil.getObjcClass(type)), String.join(", ", argTypes));
+        } else {
+          objcType = String.format("%s *", getFullName(typeUtil.getObjcClass(type)));
+        }
+      }
+    } else if (TypeUtil.isNativeType(type)) {
+      objcType = ((NativeType) type).getName();
     } else {
       objcType = constructObjcTypeFromBounds(type);
     }
@@ -579,8 +1091,46 @@ public class NameTable {
     return classType == null ? ID_TYPE + protocols : classType + protocols + " *";
   }
 
-  public static String getNativeEnumName(String typeName) {
-    return typeName + "_Enum";
+  public String getNativeEnumName(TypeElement typeElement) {
+    AnnotationMirror annotation =
+        ElementUtil.getAnnotation(typeElement, ObjectiveCNativeEnumName.class);
+    if (annotation != null) {
+      String nativeName = (String) ElementUtil.getAnnotationValue(annotation, "value");
+      if (nativeName.isEmpty()) {
+        ErrorUtil.error("ObjectiveCNativeEnumName must specify a name.");
+      } else {
+        return nativeName;
+      }
+    }
+    return getFullName(typeElement) + "_Enum";
+  }
+
+  public String getNativeEnumConstantName(
+      TypeElement enumTypeElement, EnumConstantDeclaration constantDeclaration) {
+    return getNativeEnumConstantName(enumTypeElement, constantDeclaration.getVariableElement());
+  }
+
+  public String getNativeEnumConstantName(
+      TypeElement enumTypeElement, VariableElement constantVariableElement) {
+    String enumBaseName = getFullName(enumTypeElement) + "_Enum";
+    String constantSuffix = getVariableBaseName(constantVariableElement);
+    AnnotationMirror annotation =
+        ElementUtil.getAnnotation(enumTypeElement, ObjectiveCNativeEnumName.class);
+    if (annotation != null) {
+      enumBaseName = (String) ElementUtil.getAnnotationValue(annotation, "value");
+      constantSuffix = camelCaseName(constantSuffix, true);
+      return enumBaseName + constantSuffix;
+    } else {
+      return enumBaseName + "_" + constantSuffix;
+    }
+  }
+
+  public String getNativeEnumSwiftConstantName(EnumConstantDeclaration constantDeclaration) {
+    return camelCaseName(getVariableBaseName(constantDeclaration.getVariableElement()), false);
+  }
+
+  public static String getNativeOrdinalPreprocessorName(String typeName) {
+    return typeName + "_ORDINAL";
   }
 
   /**
@@ -598,6 +1148,10 @@ public class NameTable {
       fullNameCache.put(element, fullName);
     }
     return fullName;
+  }
+
+  public static boolean isReservedName(String name) {
+    return reservedNames.contains(name) || nsObjectMessages.contains(name);
   }
 
   private String getFullNameImpl(TypeElement element) {
@@ -644,9 +1198,6 @@ public class NameTable {
     return ElementUtil.getName(element).replace('$', '_');
   }
 
-  private static boolean isReservedName(String name) {
-    return reservedNames.contains(name) || nsObjectMessages.contains(name);
-  }
 
   private String getPrefix(PackageElement packageElement) {
     return prefixMap.getPrefix(packageElement);

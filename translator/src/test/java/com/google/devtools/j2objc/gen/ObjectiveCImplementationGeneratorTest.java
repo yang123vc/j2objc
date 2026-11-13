@@ -17,6 +17,7 @@
 package com.google.devtools.j2objc.gen;
 
 import com.google.devtools.j2objc.GenerationTest;
+import com.google.devtools.j2objc.Options;
 import com.google.devtools.j2objc.Options.MemoryManagementOption;
 import java.io.IOException;
 import javax.tools.ToolProvider;
@@ -32,19 +33,45 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "public class Example { int foo; class Inner { int test() { return foo; }}}",
         "Example", "Example.m");
-    assertTranslation(translation, "return this$0_->foo_;");
+    assertInTranslation(translation, "return this$0_->foo_;");
+  }
+
+  public void testOuterObjectVariableAccess() throws IOException {
+    String translation =
+        translateSourceFile(
+            "public class Example { "
+                + "java.util.Date foo; "
+                + "class Inner { java.util.Date test() { return foo; }}}",
+            "Example",
+            "Example.m");
+    assertInTranslation(translation, "return this$0_->foo_;");
+  }
+
+  public void testOuterObjectVariableAccessStrictFieldLoad() throws IOException {
+    options.setStrictFieldLoad(true);
+    String translation =
+        translateSourceFile(
+            "public class Example { "
+                + "java.util.Date foo; "
+                + "class Inner { java.util.Date test() { return foo; }}}",
+            "Example",
+            "Example.m");
+    assertInTranslation(
+        translation,
+        "return JreStrictFieldStrongLoad(&((Example *)"
+            + " JreStrictFieldStrongLoad(&this$0_))->foo_);");
   }
 
   public void testTypeNameTranslation() throws IOException {
     String translation = translateSourceFile(
         "public class Example {}", "Example", "Example.m");
-    assertTranslation(translation, "#include \"Example.h\"");
+    assertInTranslation(translation, "#include \"Example.h\"");
   }
 
   public void testPackageTypeNameTranslation() throws IOException {
     String translation = translateSourceFile(
         "package unit.test; public class Example {}", "Example", "unit/test/Example.m");
-    assertTranslation(translation, "#include \"unit/test/Example.h\"");
+    assertInTranslation(translation, "#include \"unit/test/Example.h\"");
   }
 
   public void testHeaderFileMapping() throws IOException {
@@ -56,14 +83,14 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "import unit.mapping.custom.Test; "
             + "public class MyTest { MyTest(Test u) {}}",
         "MyTest", "MyTest.m");
-    assertTranslation(translation, "#include \"my/mapping/custom/Test.h\"");
+    assertInTranslation(translation, "#include \"my/mapping/custom/Test.h\"");
   }
 
   public void testPackageTypeNameTranslationWithInnerClass() throws IOException {
     String translation = translateSourceFile(
         "package unit.test; public class Example { class Inner {}}",
         "Example", "unit/test/Example.m");
-    assertTranslation(translation, "#include \"unit/test/Example.h\"");
+    assertInTranslation(translation, "#include \"unit/test/Example.h\"");
     assertFalse(translation.contains("#include \"unit/test/Example_Inner.h\""));
   }
 
@@ -71,28 +98,28 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "package unit.test; public class Example { void foo() {} void test() { foo(); }}",
         "Example", "unit/test/Example.m");
-    assertTranslation(translation, "[self foo];");
+    assertInTranslation(translation, "[self foo];");
   }
 
   public void testSameClassStaticMethodInvocation() throws IOException {
     String translation = translateSourceFile(
         "public class Example { static void foo() {} void test() { foo(); }}",
         "Example", "Example.m");
-    assertTranslation(translation, "Example_foo();");
+    assertInTranslation(translation, "Example_foo();");
   }
 
   public void testSameClassStaticMethodPackageInvocation() throws IOException {
     String translation = translateSourceFile(
         "package unit.test; public class Example { static void foo() {} void test() { foo(); }}",
         "Example", "unit/test/Example.m");
-    assertTranslation(translation, "UnitTestExample_foo();");
+    assertInTranslation(translation, "UnitTestExample_foo();");
   }
 
   public void testConstStaticIntTranslation() throws IOException {
     String translation = translateSourceFile(
         "public class Example { public static final int FOO=1; int test() { return FOO; }}",
         "Example", "Example.h");
-    assertTranslation(translation, "#define Example_FOO 1");
+    assertInTranslation(translation, "#define Example_FOO 1");
     translation = getTranslatedFile("Example.m");
     assertFalse(translation.contains("initialize"));
   }
@@ -101,25 +128,40 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile("public class Example { "
         + "int test() { return Bool.FOO; } } class Bool { public static final int FOO=1; }",
         "Example", "Example.m");
-    assertTranslation(translation, "return Bool_FOO;");
+    assertInTranslation(translation, "return Bool_FOO;");
   }
 
   public void testStaticVariableInitialization() throws IOException {
     String translation = translateSourceFile(
         "public class Example { public static java.util.Date today; }",
         "Example", "Example.m");
-    assertTranslation(translation, "JavaUtilDate *Example_today;");
+    assertInTranslation(translation, "JavaUtilDate *Example_today;");
     assertFalse(translation.contains("initialize"));
   }
 
   public void testStaticVariableWithInitInitialization() throws IOException {
-    String translation = translateSourceFile(
-        "public class Example { public static java.util.Date today = new java.util.Date();}",
-        "Example", "Example.m");
-    assertTranslation(translation, "JavaUtilDate *Example_today;");
-    assertTranslation(translation, "+ (void)initialize {");
-    assertTranslation(translation,
-        "JreStrongAssignAndConsume(&Example_today, new_JavaUtilDate_init());");
+    String translation =
+        translateSourceFile(
+            "public class Example { public static java.util.Date today = new java.util.Date();}",
+            "Example",
+            "Example.m");
+    assertInTranslation(translation, "JavaUtilDate *Example_today;");
+    assertInTranslation(translation, "+ (void)initialize {");
+    assertInTranslation(
+        translation, "JreStrongAssignAndConsume(&Example_today, new_JavaUtilDate_init());");
+  }
+
+  public void testStaticVariableWithInitInitializationStrictFieldAssign() throws IOException {
+    options.setStrictFieldAssign(true);
+    String translation =
+        translateSourceFile(
+            "public class Example { public static java.util.Date today = new java.util.Date();}",
+            "Example",
+            "Example.m");
+    assertInTranslation(translation, "JavaUtilDate *Example_today;");
+    assertInTranslation(translation, "+ (void)initialize {");
+    assertInTranslation(
+        translation, "JreStrictFieldStrongAssign(&Example_today, create_JavaUtilDate_init());");
   }
 
   public void testStaticVariableWithNonInitInitialization() throws IOException {
@@ -128,9 +170,10 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "  public static java.util.logging.Logger logger ="
         + "      java.util.logging.Logger.getLogger(\"Test\");}",
         "Example", "Example.m");
-    assertTranslation(translation,
+    assertInTranslation(
+        translation,
         "JreStrongAssign(&Example_logger, "
-        + "JavaUtilLoggingLogger_getLoggerWithNSString_(@\"Test\"));");
+            + "JavaUtilLoggingLogger_getLoggerWithNSString_(@\"Test\"));");
   }
 
   public void testStaticVariableInGenericInnerClass() throws IOException {
@@ -140,8 +183,8 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "    static int foo = 1; "
         + "    final int myFoo = foo++; }}",
         "Example", "Example.m");
-    assertTranslation(translation, "int Example_Inner_foo = 1");
-    assertTranslation(translation, "myFoo_ = Example_Inner_foo++");
+    assertInTranslation(translation, "int32_t Example_Inner_foo = 1");
+    assertInTranslation(translation, "myFoo_ = JrePostIncInt(&Example_Inner_foo)");
   }
 
   public void testStaticVariableWithGenericTypeCast() throws IOException {
@@ -151,30 +194,30 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "  public static final Example<?> FOO = new Example(); }",
         "Example", "Example.m");
     // The erasure of FOO matches the erasure of the return type of foo() so no cast necessary.
-    assertTranslation(translation, "return Example_FOO");
+    assertInTranslation(translation, "return Example_FOO");
   }
 
   public void testStaticVariableInOtherVariable() throws IOException {
     String translation = translateSourceFile("public class Example { "
         + "void test() { Bar.FOO=2; } } class Bar { public static int FOO=1; }",
        "Example", "Example.m");
-    assertTranslation(translation, "jint Bar_FOO = 1;");
-    assertTranslation(translation, "*JreLoadStaticRef(Bar, FOO) = 2;");
+    assertInTranslation(translation, "int32_t Bar_FOO = 1;");
+    assertInTranslation(translation, "*(JreLoadStaticRef(Bar, FOO)) = 2;");
   }
 
   public void testNSObjectMessageRename() throws IOException {
     String translation = translateSourceFile(
         "public class Example { int load() { return 1; } int test() { return load(); }}",
         "Example", "Example.m");
-    assertTranslation(translation, "- (jint)load__ {");
-    assertTranslation(translation, "return [self load__];");
+    assertInTranslation(translation, "- (int32_t)load__ {");
+    assertInTranslation(translation, "return [self load__];");
   }
 
   public void testNSObjectMessageQualifiedNameRename() throws IOException {
     String translation = translateSourceFile(
         "public class Example { int load() { return 1; } int test() { return this.load(); }}",
         "Example", "Example.m");
-    assertTranslation(translation, "return [self load__];");
+    assertInTranslation(translation, "return [self load__];");
   }
 
   public void testNSObjectMessageSuperRename() throws IOException {
@@ -182,7 +225,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "class Example extends SuperClass { int load() { return super.load(); }}",
         "Example", "Example.m");
-    assertTranslation(translation, "return [super load__];");
+    assertInTranslation(translation, "return [super load__];");
   }
 
   public void testNSObjectMessageStaticRename() throws IOException {
@@ -190,14 +233,14 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "public class Example { static int load() { return 1; }} "
         + "class Other { int test() { return Example.load(); }}",
         "Example", "Example.m");
-    assertTranslation(translation, "return Example_load__();");
+    assertInTranslation(translation, "return Example_load__();");
   }
 
   public void testToStringRenaming() throws IOException {
     String translation = translateSourceFile(
       "public class Example { public String toString() { return super.toString(); } }",
       "Example", "Example.m");
-    assertTranslation(translation, "- (NSString *)description {");
+    assertInTranslation(translation, "- (NSString *)description {");
   }
 
   public void testInnerClassAccessToOuterMethods() throws IOException {
@@ -207,24 +250,25 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "class Inner {} "
         + "class Innermost { void test() { Example.this.add(size()); }}}",
         "Example", "Example.m");
-    assertTranslation(translation, "[this$0_ addWithInt:[this$0_ size]];");
+    assertInTranslation(translation, "[this$0_ addWithInt:[this$0_ size]];");
   }
 
   public void testEnum() throws IOException {
     String translation = translateSourceFile(
       "public enum Color { RED, WHITE, BLUE }",
       "Color", "Color.m");
-    assertTranslation(translation, "Color *Color_values_[3];");
-    assertTranslation(translation, "@implementation Color");
-    assertTranslation(translation, "for (int i = 0; i < 3; i++) {");
-    assertTranslation(translation, "Color *e = Color_values_[i];");
-    assertTranslation(translation,
+    assertInTranslation(translation, "Color *Color_values_[3];");
+    assertInTranslation(translation, "@implementation Color");
+    assertInTranslation(translation, "for (int32_t i = 0; i < 3; JrePostIncInt(&i)) {");
+    assertInTranslation(translation, "Color *e = Color_values_[i];");
+    assertInTranslation(
+        translation,
         "Color_initWithNSString_withInt_(e, JreEnumConstantName(Color_class_(), i), i);");
 
     // Check that correct enum names are in metadata.
-    assertTranslation(translation, "{ \"RED\", \"LColor;\"");
-    assertTranslation(translation, "{ \"WHITE\", \"LColor;\"");
-    assertTranslation(translation, "{ \"BLUE\", \"LColor;\"");
+    assertInTranslation(translation, "{ \"RED\", \"LColor;\"");
+    assertInTranslation(translation, "{ \"WHITE\", \"LColor;\"");
+    assertInTranslation(translation, "{ \"BLUE\", \"LColor;\"");
   }
 
   public void testEnumWithParameters() throws IOException {
@@ -234,37 +278,62 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "private Color(int rgb) { this.rgb = rgb; } "
         + "public int getRgb() { return rgb; }}";
     String translation = translateSourceFile(sourceContent, "Color", "Color.m");
-    assertTranslation(translation, "@implementation Color");
-    assertTranslation(translation,
-        "Color_initWithInt_withNSString_withInt_(e, (jint) 0xff0000, @\"RED\", 0);");
-    assertTranslation(translation,
-        "Color_initWithInt_withNSString_withInt_(e, (jint) 0xffffff, @\"WHITE\", 1);");
-    assertTranslation(translation,
-        "Color_initWithInt_withNSString_withInt_(e, (jint) 0x0000ff, @\"BLUE\", 2);");
-    assertTranslation(translation, "- (jint)getRgb {");
-    assertTranslation(translation, "return rgb_;");
-    assertTranslation(translation, "jint newValue_;");
+    assertInTranslation(translation, "@implementation Color");
+    assertInTranslation(
+        translation,
+        "Color_initWithInt_withNSString_withInt_(e, ((int32_t) 0xff0000), @\"RED\", 0);");
+    assertInTranslation(
+        translation,
+        "Color_initWithInt_withNSString_withInt_(e, ((int32_t) 0xffffff), @\"WHITE\", 1);");
+    assertInTranslation(
+        translation,
+        "Color_initWithInt_withNSString_withInt_(e, ((int32_t) 0x0000ff), @\"BLUE\", 2);");
+    assertInTranslation(translation, "- (int32_t)getRgb {");
+    assertInTranslation(translation, "return rgb_;");
+    assertInTranslation(translation, "int32_t newValue_;");
   }
 
   public void testClassField() throws IOException {
     String sourceContent =
         "import com.google.j2objc.annotations.Weak;"
-        + "public class FooBar {"
-        + "private static int fieldPhi;"
-        + "private Object fieldFoo;"
-        + "@Weak private Object fieldJar;"
-        + "private int newFieldBar;"
-        + "}";
+            + "public class FooBar {"
+            + "private static int fieldPhi;"
+            + "private Object fieldFoo;"
+            + "@Weak private Object fieldJar;"
+            + "private int newFieldBar;"
+            + "}";
     String translation = translateSourceFile(sourceContent, "FooBar", "FooBar.m");
-    assertTranslation(translation, "int FooBar_fieldPhi;");
-    assertTranslation(translation, "RELEASE_(fieldFoo_);");
-    assertTranslation(translation, "id fieldFoo_;");
-    assertTranslation(translation, "id fieldJar_;");
-    assertTranslation(translation, "int newFieldBar_;");
-    assertTranslation(translation, "id fieldFoo_;");
-    assertTranslation(translation, "__unsafe_unretained id fieldJar_;");
-    assertTranslation(translation, "int newFieldBar_;");
-    assertTranslation(translation, "J2OBJC_STATIC_FIELD_PRIMITIVE(FooBar, fieldPhi, jint)");
+    assertInTranslation(translation, "int32_t FooBar_fieldPhi;");
+    assertInTranslation(translation, "RELEASE_(fieldFoo_);");
+    assertInTranslation(translation, "id fieldFoo_;");
+    assertInTranslation(translation, "id fieldJar_;");
+    assertInTranslation(translation, "int32_t newFieldBar_;");
+    assertInTranslation(translation, "id fieldFoo_;");
+    assertInTranslation(translation, "WEAK_ id fieldJar_;");
+    assertInTranslation(translation, "int32_t newFieldBar_;");
+    assertInTranslation(translation, "J2OBJC_STATIC_FIELD_PRIMITIVE(FooBar, fieldPhi, int32_t)");
+  }
+
+  public void testClassFieldStrictFieldAssign() throws IOException {
+    options.setStrictFieldAssign(true);
+    String sourceContent =
+        "import com.google.j2objc.annotations.Weak;"
+            + "public class FooBar {"
+            + "private static int fieldPhi;"
+            + "private Object fieldFoo;"
+            + "@Weak private Object fieldJar;"
+            + "private int newFieldBar;"
+            + "}";
+    String translation = translateSourceFile(sourceContent, "FooBar", "FooBar.m");
+    assertInTranslation(translation, "int32_t FooBar_fieldPhi;");
+    assertInTranslation(translation, "JreStrictFieldStrongRelease(&fieldFoo_);");
+    assertInTranslation(translation, "id fieldFoo_;");
+    assertInTranslation(translation, "id fieldJar_;");
+    assertInTranslation(translation, "int32_t newFieldBar_;");
+    assertInTranslation(translation, "id fieldFoo_;");
+    assertInTranslation(translation, "WEAK_ id fieldJar_;");
+    assertInTranslation(translation, "int32_t newFieldBar_;");
+    assertInTranslation(translation, "J2OBJC_STATIC_FIELD_PRIMITIVE(FooBar, fieldPhi, int32_t)");
   }
 
   public void testEmptyInterfaceGenerationNoMetadata() throws IOException {
@@ -279,9 +348,9 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "package foo; public interface Compatible {}",
         "Compatible", "foo/Compatible.m");
-    assertTranslation(translation, "@interface FooCompatible : NSObject");
-    assertTranslation(translation, "@implementation FooCompatible");
-    assertTranslation(translation, "+ (const J2ObjcClassInfo *)__metadata");
+    assertInTranslation(translation, "@interface FooCompatibleCompanion : NSObject");
+    assertInTranslation(translation, "@implementation FooCompatibleCompanion");
+    assertInTranslation(translation, "+ (const J2ObjcClassInfo *)__metadata");
   }
 
   public void testInterfaceConstantGeneration() throws IOException {
@@ -289,9 +358,9 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "package foo; public interface Compatible { "
         + "public static final Object FOO = new Object(); }",
         "Compatible", "foo/Compatible.m");
-    assertTranslation(translation, "id FooCompatible_FOO;");
-    assertTranslation(translation,
-        "JreStrongAssignAndConsume(&FooCompatible_FOO, new_NSObject_init());");
+    assertInTranslation(translation, "id FooCompatible_FOO;");
+    assertInTranslation(
+        translation, "JreStrongAssignAndConsume(&FooCompatible_FOO, new_NSObject_init());");
   }
 
   public void testAnnotationGeneration() throws IOException {
@@ -299,17 +368,15 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "package foo; import java.lang.annotation.*; @Retention(RetentionPolicy.RUNTIME) "
         + "public @interface Compatible { boolean fooable() default false; }",
         "Compatible", "foo/Compatible.m");
-    assertTranslation(translation, "@implementation FooCompatible");
-    assertTranslation(translation, "@synthesize fooable = fooable_;");
+    assertInTranslation(translation, "@implementation FooCompatible");
+    assertInTranslation(translation, "@synthesize fooable = fooable_;");
 
     // Verify constructor generated.
-    assertTranslation(translation, "id<FooCompatible> create_FooCompatible(jboolean fooable) {");
-    assertTranslation(translation, "fooable_ = fooable;");
+    assertInTranslation(translation, "id<FooCompatible> create_FooCompatible(bool fooable) {");
+    assertInTranslation(translation, "fooable_ = fooable;");
 
     // Verify default value accessor.
-    assertTranslatedLines(translation,
-        "+ (jboolean)fooableDefault {",
-        "return false;");
+    assertTranslatedLines(translation, "+ (bool)fooableDefault {", "return false;");
 
     assertTranslatedLines(translation,
         "- (IOSClass *)annotationType {",
@@ -321,7 +388,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "public class Example implements Foo<String> { public void doFoo(String foo) {}} "
         + "interface Foo<T> { void doFoo(T foo); }",
         "Example", "Example.m");
-    assertTranslation(translation, "- (void)doFooWithId:(NSString *)foo {");
+    assertInTranslation(translation, "- (void)doFooWithId:(NSString *)foo {");
   }
 
   public void testTopLevelClassesNotImported() throws IOException {
@@ -344,14 +411,14 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         initializeOffset + initializeSignature.length());
     assertTrue(initializeOffset == -1);
 
-    assertTranslation(translation, "int Example_foo = 42;");
+    assertInTranslation(translation, "int32_t Example_foo = 42;");
   }
 
   public void testNativeCodeBlock() throws IOException {
     String translation = translateSourceFile(
         "public class Example { native void test() /*-[ good native code block ]-*/; }",
         "Example", "Example.m");
-    assertTranslation(translation, "good native code block");
+    assertInTranslation(translation, "good native code block");
   }
 
   public void testImportDerivedTypeInMethodParams() throws IOException {
@@ -362,7 +429,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "  void baz(java.util.List list) { }"
         + "  void foobar() { baz(new Bar().foo()); } }",
         "Test", "Test.m");
-    assertTranslation(translation, "#include \"Foo.h\"");
+    assertInTranslation(translation, "#include \"Foo.h\"");
   }
 
   public void testImportDerivedTypeInConstructorParams() throws IOException {
@@ -373,7 +440,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "class Test { "
         + "  void foobar() { new Baz(new Bar().foo()); } }",
         "Test", "Test.m");
-    assertTranslation(translation, "#include \"Foo.h\"");
+    assertInTranslation(translation, "#include \"Foo.h\"");
   }
 
   public void testEnumWithEnumField() throws IOException {
@@ -389,9 +456,10 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String impl = getTranslatedFile("Test.m");
     assertFalse(header.contains("isPackableWithTest_TypeEnum"));
     assertFalse(impl.contains("\n  return NO;\n  [super initWithTest_TypeEnum:arg$0]}"));
-    assertTranslation(impl,
+    assertInTranslation(
+        impl,
         "Test_Field_1_initWithTest_Type_withNSString_withInt_("
-        + "e, JreLoadEnum(Test_Type, STRING), @\"STRING\", 2);");
+            + "e, JreLoadEnum(Test_Type, STRING), @\"STRING\", 2);");
   }
 
   public void testAutoreleasePoolMethod() throws IOException {
@@ -402,10 +470,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "  public void foo() { }"
         + "}",
         "Test", "Test.m");
-    assertTranslation(translation, "- (void)foo {\n"
-        + "  @autoreleasepool {\n"
-        + "  }\n"
-        + "}");
+    assertInTranslation(translation, "- (void)foo {\n" + "  @autoreleasepool {\n" + "  }\n" + "}");
   }
 
   public void testARCAutoreleasePoolMethod() throws IOException {
@@ -417,10 +482,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "  public void foo() { }"
         + "}",
         "Test", "Test.m");
-    assertTranslation(translation, "- (void)foo {\n"
-        + "  @autoreleasepool {\n"
-        + "  }\n"
-        + "}");
+    assertInTranslation(translation, "- (void)foo {\n" + "  @autoreleasepool {\n" + "  }\n" + "}");
   }
 
   public void testAutoreleasePoolAnonymousClassMethod() throws IOException {
@@ -438,9 +500,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "  }"
         + "}",
         "Test", "Test.m");
-    assertTranslation(translation, "- (void)apply {\n"
-        + "  @autoreleasepool {\n  }\n"
-        + "}");
+    assertInTranslation(translation, "- (void)apply {\n" + "  @autoreleasepool {\n  }\n" + "}");
   }
 
   public void testInnerConstructorGenerated() throws IOException {
@@ -455,7 +515,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "  return self;",
         "}");
     assertTranslatedLines(translation,
-        "- (instancetype)initWithInt:(jint)i {",
+        "- (instancetype)initWithInt:(int32_t)i {",
         "  Test_initWithInt_(self, i);",
         "  return self;",
         "}");
@@ -464,7 +524,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "  Test_initWithInt_(self, 42);",
         "}");
     assertTranslatedLines(translation,
-        "void Test_initWithInt_(Test *self, jint i) {",
+        "void Test_initWithInt_(Test *self, int32_t i) {",
         "  NSObject_init(self);",
         "}");
 
@@ -484,7 +544,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "}");
     assertTranslatedLines(translation,
         "- (instancetype)initWithTest:(Test *)outer$",
-        "                     withInt:(jint)i {",
+        "                     withInt:(int32_t)i {",
         "  Test_Inner_initWithTest_withInt_(self, outer$, i);",
         "  return self;",
         "}");
@@ -493,7 +553,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "  Test_Inner_initWithTest_withInt_(self, outer$, 42);",
         "}");
     assertTranslatedLines(translation,
-        "void Test_Inner_initWithTest_withInt_(Test_Inner *self, Test *outer$, jint i) {",
+        "void Test_Inner_initWithTest_withInt_(Test_Inner *self, Test *outer$, int32_t i) {",
         "  NSObject_init(self);",
         "}");
   }
@@ -503,8 +563,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "public class Test {"
         + "  public synchronized void foo() {} }",
         "Test", "Test.m");
-    assertTranslation(translation, "- (void)foo {\n"
-        + "  @synchronized(self) {");
+    assertInTranslation(translation, "- (void)foo {\n" + "  @synchronized(self) {");
   }
 
   public void testStaticSynchronizedMethod() throws IOException {
@@ -512,9 +571,9 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "public class Test {"
         + "  public static synchronized void foo() {} }",
         "Test", "Test.m");
-    assertTranslation(translation, "void Test_foo() {\n"
-        + "  Test_initialize();\n"
-        + "  @synchronized(Test_class_()) {");
+    assertInTranslation(
+        translation,
+        "void Test_foo() {\n" + "  Test_initialize();\n" + "  @synchronized(Test_class_()) {");
   }
 
   // Verify that an interface that has a generated implementation file and an Object method
@@ -533,9 +592,10 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
             "class Test { public static String foo; }", "Test", "Test.m");
 
-    assertTranslation(translation, "#pragma clang diagnostic push");
-    assertTranslation(translation, "#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"");
-    assertTranslation(translation, "#pragma clang diagnostic pop");
+    assertInTranslation(translation, "#pragma clang diagnostic push");
+    assertInTranslation(
+        translation, "#pragma GCC diagnostic ignored \"-Wdeprecated-declarations\"");
+    assertInTranslation(translation, "#pragma clang diagnostic pop");
   }
 
   public void testDoNotAddIgnoreDeprecationWarningsPragmaIfDeprecatedDeclarationsIsDisabled()
@@ -600,18 +660,18 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "class Test { public synchronized native void exit() /*-[ exit(0); ]-*/; }",
         "Test", "Test.m");
-    assertTranslation(translation, "@synchronized(self)");
+    assertInTranslation(translation, "@synchronized(self)");
   }
 
   public void testAnnotationWithField() throws IOException {
     String translation = translateSourceFile(
         "@interface Test { String FOO = \"foo\"; int I = 5; }", "Test", "Test.h");
-    assertTranslation(translation, "#define Test_I 5");
-    assertTranslation(translation, "FOUNDATION_EXPORT NSString *Test_FOO;");
-    assertTranslation(translation, "J2OBJC_STATIC_FIELD_OBJ_FINAL(Test, FOO, NSString *)");
-    assertTranslation(translation, "@interface Test : NSObject");
+    assertInTranslation(translation, "#define Test_I 5");
+    assertInTranslation(translation, "FOUNDATION_EXPORT NSString *Test_FOO;");
+    assertInTranslation(translation, "J2OBJC_STATIC_FIELD_OBJ_FINAL(Test, FOO, NSString *)");
+    assertInTranslation(translation, "@interface Test : NSObject");
     translation = getTranslatedFile("Test.m");
-    assertTranslation(translation, "NSString *Test_FOO = @\"foo\";");
+    assertInTranslation(translation, "NSString *Test_FOO = @\"foo\";");
   }
 
   public void testCombinedGeneration() throws IOException {
@@ -621,11 +681,11 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateCombinedFiles(
         "unit/Foo", ".m", "unit/Test.java", "unit/AnotherTest.java");
 
-    assertTranslation(translation, "source: unit/Foo.testfile");
-    assertTranslation(translation, "#include \"unit/Foo.h\"");
-    assertTranslation(translation, "#include \"J2ObjC_source.h\"");
-    assertTranslation(translation, "@implementation UnitTest");
-    assertTranslation(translation, "@implementation UnitAnotherTest");
+    assertInTranslation(translation, "source: unit/Foo.testfile");
+    assertInTranslation(translation, "#include \"unit/Foo.h\"");
+    assertInTranslation(translation, "#include \"J2ObjC_source.h\"");
+    assertInTranslation(translation, "@implementation UnitTest");
+    assertInTranslation(translation, "@implementation UnitAnotherTest");
   }
 
   public void testPackageInfoAnnotationAndDoc() throws IOException {
@@ -645,9 +705,9 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "package-info", "foo/bar/mumble/package-info.h");
     assertTranslatedLines(translation, "/*!", "@brief A package doc-comment.", "*/");
     translation = getTranslatedFile("foo/bar/mumble/package-info.m");
-    assertTranslation(translation, "@implementation FooBarMumblepackage_info");
-    assertTranslation(translation, "IOSObjectArray *FooBarMumblepackage_info__Annotations$0() {");
-    assertTranslation(translation, "create_FooAnnotationsTest()");
+    assertInTranslation(translation, "@implementation FooBarMumblepackage_info");
+    assertInTranslation(translation, "IOSObjectArray *FooBarMumblepackage_info__Annotations$0() {");
+    assertInTranslation(translation, "create_FooAnnotationsTest()");
   }
 
   public void testPackageInfoAnnotationNoDoc() throws IOException {
@@ -665,9 +725,9 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         "package-info", "foo/bar/mumble/package-info.h");
     assertNotInTranslation(translation, "/**");
     translation = getTranslatedFile("foo/bar/mumble/package-info.m");
-    assertTranslation(translation, "@implementation FooBarMumblepackage_info");
-    assertTranslation(translation, "IOSObjectArray *FooBarMumblepackage_info__Annotations$0() {");
-    assertTranslation(translation, "create_FooAnnotationsTest()");
+    assertInTranslation(translation, "@implementation FooBarMumblepackage_info");
+    assertInTranslation(translation, "IOSObjectArray *FooBarMumblepackage_info__Annotations$0() {");
+    assertInTranslation(translation, "create_FooAnnotationsTest()");
   }
 
   public void testPackageInfoDocNoAnnotation() throws IOException {
@@ -693,12 +753,11 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile("package foo.bar.mumble;\n"
             + "public class Test {}",
         "foo.bar.mumble.Test", "foo/bar/mumble/Test.h");
-    assertTranslation(translation, "@interface FBMTest");
-    assertTranslation(translation, "@compatibility_alias FooBarMumbleTest FBMTest;");
+    assertInTranslation(translation, "@interface FBMTest");
+    assertInTranslation(translation, "@compatibility_alias FooBarMumbleTest FBMTest;");
     translation = getTranslatedFile("foo/bar/mumble/Test.m");
-    assertTranslation(translation, "@implementation FBMTest");
-    assertTranslation(translation,
-        "J2OBJC_NAME_MAPPING(FBMTest, \"foo.bar.mumble\", \"FBM\")");
+    assertInTranslation(translation, "@implementation FBMTest");
+    assertInTranslation(translation, "J2OBJC_NAME_MAPPING(FBMTest, \"foo.bar.mumble\", \"FBM\")");
     assertNotInTranslation(translation, "FooBarMumbleTest");
   }
 
@@ -712,12 +771,11 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile("package foo.bar.mumble;\n"
         + "public class Test {}",
         "foo.bar.mumble.Test", "foo/bar/mumble/Test.h");
-    assertTranslation(translation, "@interface FBMTest");
-    assertTranslation(translation, "@compatibility_alias FooBarMumbleTest FBMTest;");
+    assertInTranslation(translation, "@interface FBMTest");
+    assertInTranslation(translation, "@compatibility_alias FooBarMumbleTest FBMTest;");
     translation = getTranslatedFile("foo/bar/mumble/Test.m");
-    assertTranslation(translation, "@implementation FBMTest");
-    assertTranslation(translation,
-        "J2OBJC_NAME_MAPPING(FBMTest, \"foo.bar.mumble\", \"FBM\")");
+    assertInTranslation(translation, "@implementation FBMTest");
+    assertInTranslation(translation, "J2OBJC_NAME_MAPPING(FBMTest, \"foo.bar.mumble\", \"FBM\")");
     assertNotInTranslation(translation, "FooBarMumbleTest");
   }
 
@@ -735,12 +793,11 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile("package foo.bar.mumble;\n"
         + "public class Test {}",
         "foo.bar.mumble.Test", "foo/bar/mumble/Test.h");
-    assertTranslation(translation, "@interface FBMTest");
-    assertTranslation(translation, "@compatibility_alias FooBarMumbleTest FBMTest;");
+    assertInTranslation(translation, "@interface FBMTest");
+    assertInTranslation(translation, "@compatibility_alias FooBarMumbleTest FBMTest;");
     translation = getTranslatedFile("foo/bar/mumble/Test.m");
-    assertTranslation(translation, "@implementation FBMTest");
-    assertTranslation(translation,
-        "J2OBJC_NAME_MAPPING(FBMTest, \"foo.bar.mumble\", \"FBM\")");
+    assertInTranslation(translation, "@implementation FBMTest");
+    assertInTranslation(translation, "J2OBJC_NAME_MAPPING(FBMTest, \"foo.bar.mumble\", \"FBM\")");
     assertNotInTranslation(translation, "FooBarMumbleTest");
   }
 
@@ -768,19 +825,28 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + " @interface Foo { Class<?> value(); }", "Foo.java");
     String translation = translateSourceFile(
         "@Foo(CharSequence.class) class Test {}", "Test", "Test.m");
-    assertTranslation(translation, "JavaLangCharSequence_class_()");
+    assertInTranslation(translation, "JavaLangCharSequence_class_()");
   }
 
   public void testReservedWordAsAnnotationPropertyName() throws IOException {
     String translation = translateSourceFile(
-        "package foo; import java.lang.annotation.*; @Retention(RetentionPolicy.RUNTIME) "
-        + "public @interface Bar { String namespace() default \"\"; } "
-        + "class Test { Bar ann; String namespace() { return ann.namespace(); }}",
+        "package foo; "
+            + "import java.lang.annotation.*; "
+            + "@Retention(RetentionPolicy.RUNTIME) "
+            + "public @interface Bar { "
+            + "  String in() default \"XYZ\"; "
+            + "  String namespace() default \"\"; "
+            + "} "
+            + "class Test { Bar ann; String namespace() { return ann.namespace(); }}",
         "Bar", "foo/Bar.m");
-    assertTranslation(translation, "@synthesize namespace__ = namespace___;");
-    assertTranslation(translation, "id<FooBar> create_FooBar(NSString *namespace__) {");
-    assertTranslation(translation, "self->namespace___ = RETAIN_(namespace__);");
-    assertTranslation(translation, "+ (NSString *)namespace__Default {");
+    assertInTranslation(translation, "@synthesize in = in_;");
+    assertInTranslation(translation, "@synthesize namespace__ = namespace___;");
+    assertInTranslation(
+        translation, "id<FooBar> create_FooBar(NSString *inArg, NSString *namespace__) {");
+    assertInTranslation(translation, "self->in_ = RETAIN_(inArg);");
+    assertInTranslation(translation, "self->namespace___ = RETAIN_(namespace__);");
+    assertInTranslation(translation, "+ (NSString *)inDefault {");
+    assertInTranslation(translation, "+ (NSString *)namespace__Default {");
   }
 
   public void testAnnotationWithDefaultAnnotation() throws IOException {
@@ -817,7 +883,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
         + "@Retention(RetentionPolicy.RUNTIME) @interface Inner { String name(); }"
         + "@Outer(innerAnnotation=@Inner(name=\"Bar\")) class Foo {}}",
         "A", "A.m");
-    assertTranslation(translation, "create_A_Outer(create_A_Inner(@\"Bar\"))");
+    assertInTranslation(translation, "create_A_Outer(create_A_Inner(@\"Bar\"))");
   }
 
   public void testForwardDeclarationForPrivateAbstractDeclaration() throws IOException {
@@ -826,7 +892,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "class Test { static class A <T> { T get() { return null; } }"
         + "private static class B extends A<Integer> { } }", "Test", "Test.m");
-    assertTranslation(translation, "@class JavaLangInteger;");
+    assertInTranslation(translation, "@class JavaLangInteger;");
   }
 
   public void testNameMappingStripped() throws IOException {
@@ -843,7 +909,7 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "@com.google.j2objc.annotations.ObjectiveCName(\"NSTest\") public class Test {}",
         "Test", "Test.m");
-    assertTranslation(translation, "J2OBJC_NAME_MAPPING(NSTest, \"Test\", \"NSTest\")");
+    assertInTranslation(translation, "J2OBJC_NAME_MAPPING(NSTest, \"Test\", \"NSTest\")");
   }
 
   public void testNameMappingNestedClass() throws IOException {
@@ -858,13 +924,12 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
             "foo/Outer.h");
     String mFile = getTranslatedFile("foo/Outer.m");
     // Validate Outer class.
-    assertTranslation(hFile, "@interface FooOuter");
-    assertTranslation(mFile, "@implementation FooOuter");
+    assertInTranslation(hFile, "@interface FooOuter");
+    assertInTranslation(mFile, "@implementation FooOuter");
     // Validate Inner class.
-    assertTranslation(hFile, "@interface Renamed");
-    assertTranslation(mFile, "@implementation Renamed");
-    assertTranslation(
-        mFile, "J2OBJC_NAME_MAPPING(Renamed, \"foo.Outer$Inner\", \"Renamed\")");
+    assertInTranslation(hFile, "@interface Renamed");
+    assertInTranslation(mFile, "@implementation Renamed");
+    assertInTranslation(mFile, "J2OBJC_NAME_MAPPING(Renamed, \"foo.Outer$Inner\", \"Renamed\")");
     assertNotInTranslation(mFile, "FooOuter_Inner");
     // Make sure that the only class mapping is the one for the inner class.
     assertOccurrences(mFile, "J2OBJC_NAME_MAPPING", 1);
@@ -896,14 +961,128 @@ public class ObjectiveCImplementationGeneratorTest extends GenerationTest {
                 + "}",
             "foo.bar.mumble.Test",
             "foo/bar/mumble/Test.m");
-    assertTranslation(
-        mFile, "J2OBJC_NAME_MAPPING(FBMTest, \"foo.bar.mumble\", \"FBM\")");
+    assertInTranslation(mFile, "J2OBJC_NAME_MAPPING(FBMTest, \"foo.bar.mumble\", \"FBM\")");
     assertOccurrences(mFile, "J2OBJC_NAME_MAPPING", 1);
     // The ObjectiveCName annotation affects classes in the package but not the package itself.
     String translation =
         translateSourceFile("foo.bar.mumble.package-info", "foo/bar/mumble/package-info.m");
-    assertTranslation(translation, "FooBarMumblepackage_info");
+    assertInTranslation(translation, "FooBarMumblepackage_info");
     assertNotInTranslation(translation, "FBMpackage_info");
     assertNotInTranslation(translation, "J2OBJC_NAME_MAPPING");
+  }
+
+  //  Verifies that the error test and message lines are generated for ARC when
+  //  using ARC as Memory Management Option
+  public void testErrorTestAndMessageLinesGeneratedWithARC() throws IOException {
+    options.setMemoryManagementOption(Options.MemoryManagementOption.ARC);
+    String translation =
+        translateSourceFile(
+            "package foo.bar; public class A { public A(int i) {} A() {} }",
+            "foo.bar.A",
+            "foo/bar/A.m");
+
+    assertInTranslation(
+        translation,
+        "#if !__has_feature(objc_arc)\n"
+            + "#error \"foo/bar/A must be compiled with ARC (-fobjc-arc)\"\n"
+            + "#endif");
+  }
+
+  //  Verifies that the error test and message lines are generated for Reference Counting
+  //  when using Reference Counting as Memory Management Option
+  public void testErrorTestAndMessageLinesGeneratedWithReferenceCounting() throws IOException {
+    options.setMemoryManagementOption(Options.MemoryManagementOption.REFERENCE_COUNTING);
+    String translation =
+        translateSourceFile(
+            "package foo.bar; public class A { public A(int i) {} A() {} }",
+            "foo.bar.A",
+            "foo/bar/A.m");
+
+    assertInTranslation(
+        translation,
+        "#if __has_feature(objc_arc)\n"
+            + "#error \"foo/bar/A must not be compiled with ARC (-fobjc-arc)\"\n"
+            + "#endif");
+  }
+
+  //  Verifies that the error test and message lines are generated for Reference Counting
+  //  when no Memory Management Option is set
+  public void testErrorTestAndMessageLinesGeneratedDefaultMemoryManagement() throws IOException {
+    String translation =
+        translateSourceFile(
+            "package foo.bar; public class A { public A(int i) {} A() {} }",
+            "foo.bar.A",
+            "foo/bar/A.m");
+
+    assertInTranslation(
+        translation,
+        "#if __has_feature(objc_arc)\n"
+            + "#error \"foo/bar/A must not be compiled with ARC (-fobjc-arc)\"\n"
+            + "#endif");
+  }
+
+  public void testWeakReferenceCheckIsPrinted() throws IOException {
+    String translation =
+        translateSourceFile(String.join("\n",
+            "package foo.bar;",
+    "import com.google.j2objc.annotations.Weak;",
+    "public class A { @Weak A a; A() {} }"),
+            "foo.bar.A",
+            "foo/bar/A.m");
+    assertInTranslation(
+        translation,
+        "#if !__has_feature(objc_arc_weak)\n"
+            + "#error \"foo/bar/A must be compiled with weak references support (-fobjc-weak)\"\n"
+            + "#endif");
+  }
+
+  public void testStrictFieldBuildFlagsGeneration() throws IOException {
+    String translation = translateSourceFile("public class Example {}", "Example", "Example.m");
+
+    assertNotInTranslation(translation, "J2OBJC_STRICT_FIELD_ASSIGN");
+    assertNotInTranslation(translation, "J2OBJC_STRICT_FIELD_LOAD");
+
+    options.setStrictFieldAssign(true);
+    translation = translateSourceFile("public class Example {}", "Example", "Example.m");
+
+    assertInTranslation(translation, "J2OBJC_STRICT_FIELD_ASSIGN 1");
+    assertNotInTranslation(translation, "J2OBJC_STRICT_FIELD_LOAD");
+
+    options.setStrictFieldLoad(true);
+    translation = translateSourceFile("public class Example {}", "Example", "Example.m");
+
+    assertInTranslation(translation, "J2OBJC_STRICT_FIELD_ASSIGN 1");
+    assertInTranslation(translation, "J2OBJC_STRICT_FIELD_LOAD 1");
+
+    options.setStrictFieldAssign(false);
+    translation = translateSourceFile("public class Example {}", "Example", "Example.m");
+
+    assertNotInTranslation(translation, "J2OBJC_STRICT_FIELD_ASSIGN");
+    assertNotInTranslation(translation, "J2OBJC_STRICT_FIELD_LOAD");
+  }
+
+  public void testRetainedAutoreleasedReturnBuildFlagsGeneration() throws IOException {
+    String translation = translateSourceFile("public class Example {}", "Example", "Example.m");
+
+    assertNotInTranslation(translation, "J2OBJC_RETAIN_AUTORELEASE_RETURNS");
+    assertNotInTranslation(translation, "J2OBJC_ARC_AUTORELEASE_RETURNS");
+
+    options.setRetainAutoreleaseReturns(true);
+    translation = translateSourceFile("public class Example {}", "Example", "Example.m");
+
+    assertInTranslation(translation, "J2OBJC_RETAIN_AUTORELEASE_RETURNS 1");
+    assertNotInTranslation(translation, "J2OBJC_STRICT_FIELD_LOAD");
+
+    options.setARCAutoreleaseReturns(true);
+    translation = translateSourceFile("public class Example {}", "Example", "Example.m");
+
+    assertInTranslation(translation, "J2OBJC_RETAIN_AUTORELEASE_RETURNS 1");
+    assertInTranslation(translation, "J2OBJC_ARC_AUTORELEASE_RETURNS 1");
+
+    options.setRetainAutoreleaseReturns(false);
+    translation = translateSourceFile("public class Example {}", "Example", "Example.m");
+
+    assertNotInTranslation(translation, "J2OBJC_RETAIN_AUTORELEASE_RETURNS");
+    assertNotInTranslation(translation, "J2OBJC_ARC_AUTORELEASE_RETURNS");
   }
 }

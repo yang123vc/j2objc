@@ -16,19 +16,18 @@
 #
 # The format for this is simpler than it looks:  it's just a
 # java.util.Properties file where a Java method signature is the key, and
-# a modified iOS method signature is the value.
+# an iOS selector is the value.
 #
 # Java method signatures are defined in the Java Virtual Machine
 # Specification, and are what's shown when viewing a JVM class using
-# "javap -v". iOS method signatures are defined as the class name, followed by
-# the signature as declared in the class' header file, minus the return value.
+# "javap -v". iOS selectors are what you would pass to @selector().
 #
 # Method matching has the following restrictions:
 #
 # 1. The Java and iOS methods must either both be instance or both be
 #    class (static) methods.  In Objective-C terms, the receiver of these
 #    messages doesn't change.
-# 2. The parameters must be the same type and in the same order.
+# 2. They must have the same number of parameters.
 #
 # Since the JRE and Foundation APIs aren't identical, these rules block many
 # essential mappings.  However, the list below contains several NSString
@@ -145,7 +144,6 @@ java.lang.String.indexOf(II)I = java_indexOf:fromIndex:
 java.lang.String.indexOf(Ljava/lang/String;)I = java_indexOfString:
 java.lang.String.indexOf(Ljava/lang/String;I)I = java_indexOfString:fromIndex:
 java.lang.String.intern()Ljava/lang/String; = java_intern
-java.lang.String.isEmpty()Z = java_isEmpty
 java.lang.String.join(Ljava/lang/CharSequence;[Ljava/lang/CharSequence;)Ljava/lang/String; = \
     java_joinWithJavaLangCharSequence:withJavaLangCharSequenceArray:
 java.lang.String.join(Ljava/lang/CharSequence;Ljava/lang/Iterable;)Ljava/lang/String; = \
@@ -195,6 +193,19 @@ java.lang.String.valueOf([C)Ljava/lang/String; = java_valueOfChars:
 java.lang.String.valueOf([CII)Ljava/lang/String; = java_valueOfChars:offset:count:
 java.lang.String.copyValueOf([C)Ljava/lang/String; = java_valueOfChars:
 java.lang.String.copyValueOf([CII)Ljava/lang/String; = java_valueOfChars:offset:count:
+java.lang.String.repeat(I)Ljava/lang/String; = java_repeat:
+java.lang.String.strip()Ljava/lang/String; = java_strip
+java.lang.String.stripLeading()Ljava/lang/String; = java_stripLeading
+java.lang.String.stripTrailing()Ljava/lang/String; = java_stripTrailing
+java.lang.String.isBlank()Z = java_isBlank
+java.lang.String.lines()Ljava/util/stream/Stream; = java_lines
+java.lang.String.indent(I)Ljava/lang/String; = java_indent:
+java.lang.String.stripIndent()Ljava/lang/String; = java_stripIndent
+java.lang.String.translateEscapes()Ljava/lang/String; = java_translateEscapes
+java.lang.String.chars()Ljava/util/stream/IntStream; = java_chars
+java.lang.String.codePoints()Ljava/util/stream/IntStream; = java_codePoints
+java.lang.String.formatted([Ljava/lang/Object;)Ljava/lang/String; = \
+    java_formattedWithNSObjectArray:
 
 java.lang.CharSequence.length()I = java_length
 java.lang.CharSequence.subSequence(II)Ljava/lang/CharSequence; = subSequenceFrom:to:

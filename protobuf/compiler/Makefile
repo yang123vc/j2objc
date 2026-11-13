@@ -10,8 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-SUFFIXES:
-
 J2OBJC_ROOT = ../..
 
 include $(J2OBJC_ROOT)/make/common.mk
@@ -24,6 +22,7 @@ SRCS = \
   google/protobuf/compiler/j2objc/j2objc_generator.cc \
   google/protobuf/compiler/j2objc/j2objc_helpers.cc \
   google/protobuf/compiler/j2objc/j2objc_message.cc \
+  google/protobuf/compiler/j2objc/j2objc_message_lite.cc \
   google/protobuf/compiler/j2objc/j2objc_oneof.cc
 
 OBJS = $(SRCS:%.cc=$(BUILD_DIR)/%.o)
@@ -39,20 +38,35 @@ PROTOC_EXE_DIST = $(DIST_DIR)/j2objc_protoc
 PROTOC_PLUGIN = $(BUILD_DIR)/j2objc_protoc_plugin
 PROTOC_PLUGIN_DIST = $(DIST_DIR)/j2objc_protoc_plugin
 
+DESCRIPTOR_PROTO = google/protobuf/j2objc-descriptor.proto
+DESCRIPTOR_PATH_DIST = $(DIST_DIR)/include/proto
+DESCRIPTOR_PROTO_DIST = $(DESCRIPTOR_PATH_DIST)/$(DESCRIPTOR_PROTO)
+
 $(call check_protobuf_dir)
 
-PROTOBUF_LIB = $(PROTOBUF_LIB_PATH)/libprotobuf.a
-PROTOC_LIB = $(PROTOBUF_LIB_PATH)/libprotoc.a
+PROTOBUF_LIB = -l protobuf
+PROTOC_LIB = -l protoc
+ABSL_LIBS = \
+  -l absl_hash \
+	-l absl_log_internal_check_op \
+	-l absl_log_internal_message \
+	-l absl_log_internal_nullguard \
+	-l absl_raw_hash_set \
+	-l absl_raw_logging_internal \
+	-l absl_spinlock_wait \
+	-l absl_strings
 
-CXXFLAGS = -x c++ -stdlib=libc++ -Isrc -I../google/src -I$(PROTOBUF_INCLUDE_PATH) \
+CXXFLAGS = -x c++ -std=c++17 -stdlib=libc++ -Isrc -I$(PROTOBUF_INCLUDE_PATH) \
   -Wno-deprecated-declarations
-LDFLAGS = $(PROTOBUF_LIB) $(PROTOC_LIB) /usr/lib/libc++.dylib
+LDFLAGS = -L $(PROTOBUF_LIB_PATH) $(PROTOBUF_LIB) $(PROTOC_LIB) \
+  $(ABSL_LIBS) -Wl,-rpath,$(PROTOBUF_LIB_PATH)
 
-dist: $(PROTOC_EXE_DIST) $(PROTOC_PLUGIN_DIST)
+dist: $(PROTOC_EXE_DIST) $(PROTOC_PLUGIN_DIST) $(DESCRIPTOR_PROTO_DIST)
 	@:
 
 clean:
-	@rm -rf $(BUILD_DIR) $(PROTOC_EXE_DIST) $(PROTOC_PLUGIN_DIST)
+	@rm -rf $(BUILD_DIR) $(PROTOC_EXE_DIST) $(PROTOC_PLUGIN_DIST) \
+	  $(DESCRIPTOR_PATH_DIST)
 
 $(PROTOC_EXE_DIST): $(PROTOC_EXE)
 	@mkdir -p $(DIST_DIR)
@@ -71,3 +85,7 @@ $(PROTOC_EXE): $(OBJS) $(MAIN_OBJ)
 
 $(PROTOC_PLUGIN): $(OBJS) $(PLUGIN_OBJ)
 	$(CXX) $(LDFLAGS) -o $@ $^
+
+$(DESCRIPTOR_PROTO_DIST): src/$(DESCRIPTOR_PROTO)
+	@mkdir -p $$(dirname $@)
+	install $< $@

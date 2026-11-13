@@ -12,8 +12,6 @@
 
 # Builds a J2ObjC translated Guava library.
 
-SUFFIXES:
-
 default: dist
 
 clean: clean_jre clean_android
@@ -25,7 +23,9 @@ clean_jre:
 clean_android:
 	@$(MAKE) -C android -f android.mk clean
 
-dist: dist_jre dist_android
+dist: framework
+
+lib: dist_jre dist_android
 	@:
 
 dist_jre:

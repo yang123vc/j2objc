@@ -62,6 +62,11 @@ typedef ComGoogleProtobufExtensionRegistry_ExtensionInfo CGPExtensionInfo;
         (ComGoogleProtobufDescriptors_Descriptor *)descriptor
     withInt:(jint)fieldId;
 
+- (ComGoogleProtobufExtensionRegistry_ExtensionInfo *)
+    findImmutableExtensionByNumberWithComGoogleProtobufDescriptors_Descriptor:
+        (ComGoogleProtobufDescriptors_Descriptor *)descriptor
+    withInt:(jint)fieldId;
+
 - (ComGoogleProtobufExtensionRegistry *)getUnmodifiable;
 
 @end
@@ -69,6 +74,7 @@ typedef ComGoogleProtobufExtensionRegistry_ExtensionInfo CGPExtensionInfo;
 J2OBJC_STATIC_INIT(ComGoogleProtobufExtensionRegistry)
 
 J2OBJC_TYPE_LITERAL_HEADER(ComGoogleProtobufExtensionRegistry)
+
 
 @interface ComGoogleProtobufExtensionRegistry_ExtensionInfo : NSObject {
  @public
@@ -86,9 +92,16 @@ J2OBJC_TYPE_LITERAL_HEADER(ComGoogleProtobufExtensionRegistry_ExtensionInfo)
 
 CF_EXTERN_C_BEGIN
 
+void ComGoogleProtobufExtensionRegistry_initWithBoolean_(ComGoogleProtobufExtensionRegistry *self,
+                                                         bool empty);
+
 ComGoogleProtobufExtensionRegistry *ComGoogleProtobufExtensionRegistry_newInstance();
 
 ComGoogleProtobufExtensionRegistry *ComGoogleProtobufExtensionRegistry_getEmptyRegistry();
+
+ComGoogleProtobufExtensionRegistry_ExtensionInfo *
+ComGoogleProtobufExtensionRegistry_newExtensionInfoWithComGoogleProtobufExtension_(
+    ComGoogleProtobufExtension *extension);
 
 CF_EXTERN_C_END
 

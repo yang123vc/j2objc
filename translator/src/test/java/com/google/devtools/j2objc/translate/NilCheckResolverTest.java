@@ -15,7 +15,6 @@
 package com.google.devtools.j2objc.translate;
 
 import com.google.devtools.j2objc.GenerationTest;
-
 import java.io.IOException;
 
 /**
@@ -29,14 +28,14 @@ public class NilCheckResolverTest extends GenerationTest {
     String translation = translateSourceFile(
       "public class A { int length(char[] s) { return s.length; } void test() { length(null);} }",
       "A", "A.m");
-    assertTranslation(translation, "return ((IOSCharArray *) nil_chk(s))->size_;");
+    assertInTranslation(translation, "return ((IOSCharArray *) nil_chk(s))->size_;");
   }
 
   public void testNilCheckOnCastExpression() throws IOException {
     String translation = translateSourceFile(
         "class Test { int i; void test(Object o) { int i = ((Test) o).i; } }", "Test", "Test.m");
-    assertTranslation(translation,
-        "((Test *) nil_chk(((Test *) cast_chk(o, [Test class]))))->i_");
+    assertInTranslation(
+        translation, "((Test *) nil_chk(((Test *) cast_chk(o, [Test class]))))->i_");
   }
 
   public void testNoNilCheckOnSecondDereference() throws IOException {
@@ -95,12 +94,44 @@ public class NilCheckResolverTest extends GenerationTest {
         "[nil_chk(o2) description];",
         "}");
     assertTranslatedLines(translation,
-        "if (o3 != nil || b) {",
+        "if ((o3 != nil) || b) {",
         "[nil_chk(o3) description];",
         "}",
         "else {",
         "[nil_chk(o3) description];",
         "}");
+  }
+
+  public void testParenthesizedNullChecks() throws IOException {
+    String translation =
+        translateSourceFile(
+            """
+            class Test {
+              String test(Object o1, Object o2, Object o3, boolean b) {
+                if ((o1 != null) && b) {
+                  o1.toString();
+                }
+                if ((o2 instanceof String) && b) {
+                  o2.toString();
+                }
+                return (o3 != null) ? o3.toString() : "";
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    // Parentheses are not represented in the AST, so they don't hide the checks.
+    assertTranslatedLines(
+        translation,
+        """
+        if ((o1 != nil) && b) {
+          [o1 description];
+        }
+        if ([o2 isKindOfClass:[NSString class]] && b) {
+          [o2 description];
+        }
+        return (o3 != nil) ? [o3 description] : @"";
+        """);
   }
 
   public void testNilCheckAfterWhileLoop() throws IOException {
@@ -120,10 +151,11 @@ public class NilCheckResolverTest extends GenerationTest {
         "abstract class Test { abstract boolean foo(); void test(Test t1, Test t2, boolean b) { "
         + "boolean b1 = b && t1.foo(); t1.foo(); boolean b2 = b || t2.foo(); t2.foo(); } }",
         "Test", "Test.m");
-    assertTranslatedLines(translation,
-        "jboolean b1 = b && [((Test *) nil_chk(t1)) foo];",
+    assertTranslatedLines(
+        translation,
+        "bool b1 = b && [((Test *) nil_chk(t1)) foo];",
         "[((Test *) nil_chk(t1)) foo];",
-        "jboolean b2 = b || [((Test *) nil_chk(t2)) foo];",
+        "bool b2 = b || [((Test *) nil_chk(t2)) foo];",
         "[((Test *) nil_chk(t2)) foo];");
   }
 
@@ -137,7 +169,7 @@ public class NilCheckResolverTest extends GenerationTest {
         + "    return false;"
         + "  }}",
         "Test", "Test.m");
-    assertTranslation(translation, "nil_chk(strings)");
+    assertInTranslation(translation, "nil_chk(strings)");
   }
 
   // Method invocations can have side-effects
@@ -260,7 +292,7 @@ public class NilCheckResolverTest extends GenerationTest {
         + " if (o != null ? false : true) { o.toString(); }"
         + " if (foo(o != null)) { o.toString(); } } }", "Test", "Test.m");
     assertTranslatedLines(translation,
-        "if (o != nil ? false : true) {",
+        "if ((o != nil) ? false : true) {",
         "  [nil_chk(o) description];",
         "}",
         "if ([self fooWithBoolean:o != nil]) {",
@@ -339,7 +371,7 @@ public class NilCheckResolverTest extends GenerationTest {
         "class Test { class Inner {} public Inner test(Test t) { return t.new Inner(); } }",
         "Test", "Test.m");
     // "t" needs a nil_chk.
-    assertTranslation(translation, "return create_Test_Inner_initWithTest_(nil_chk(t));");
+    assertInTranslation(translation, "return create_Test_Inner_initWithTest_(nil_chk(t));");
   }
 
   // Verify "throw null" throws a null pointer exception. JLS 14.18:
@@ -351,8 +383,8 @@ public class NilCheckResolverTest extends GenerationTest {
         + "void test1() { throw null; }"
         + "void test2(RuntimeException e) { throw e; }"
         + "void test3() { throw new RuntimeException(); }}", "Test", "Test.m");
-    assertTranslation(translation, "@throw nil_chk(nil);");
-    assertTranslation(translation, "@throw nil_chk(e);");
-    assertTranslation(translation, "@throw create_JavaLangRuntimeException_init();");
+    assertInTranslation(translation, "@throw nil_chk(nil);");
+    assertInTranslation(translation, "@throw nil_chk(e);");
+    assertInTranslation(translation, "@throw create_JavaLangRuntimeException_init();");
   }
 }

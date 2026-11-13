@@ -10,12 +10,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax = "proto2";
+edition = "2026";
 
 package protos;
 
 option java_package = "com.google.j2objc.test";
-option java_multiple_files = true;
 
-message PrefixDummy {
-}
+message PrefixDummy {}

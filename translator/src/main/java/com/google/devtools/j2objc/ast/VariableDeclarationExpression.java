@@ -14,7 +14,12 @@
 
 package com.google.devtools.j2objc.ast;
 
+import com.google.devtools.j2objc.ast.VariableDeclaration.ObjectiveCModifier;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -23,6 +28,7 @@ import javax.lang.model.type.TypeMirror;
  */
 public class VariableDeclarationExpression extends Expression {
 
+  private Set<ObjectiveCModifier> modifiers = new LinkedHashSet<>();
   private ChildLink<Type> type = ChildLink.create(Type.class, this);
   private ChildList<VariableDeclarationFragment> fragments =
       ChildList.create(VariableDeclarationFragment.class, this);
@@ -33,6 +39,12 @@ public class VariableDeclarationExpression extends Expression {
     super(other);
     type.copyFrom(other.getType());
     fragments.copyFrom(other.getFragments());
+    modifiers.addAll(other.getModifiers());
+  }
+
+  public VariableDeclarationExpression(VariableElement variableElement, Expression initializer) {
+    setType(Type.newType(variableElement.asType()));
+    addFragment(new VariableDeclarationFragment(variableElement, initializer));
   }
 
   @Override
@@ -50,8 +62,19 @@ public class VariableDeclarationExpression extends Expression {
     return type.get();
   }
 
+  @CanIgnoreReturnValue
   public VariableDeclarationExpression setType(Type newType) {
     type.set(newType);
+    return this;
+  }
+
+  public Set<ObjectiveCModifier> getModifiers() {
+    return modifiers;
+  }
+
+  @CanIgnoreReturnValue
+  public VariableDeclarationExpression addModifier(ObjectiveCModifier modifier) {
+    modifiers.add(modifier);
     return this;
   }
 
@@ -63,6 +86,7 @@ public class VariableDeclarationExpression extends Expression {
     return fragments;
   }
 
+  @CanIgnoreReturnValue
   public VariableDeclarationExpression addFragment(VariableDeclarationFragment fragment) {
     fragments.add(fragment);
     return this;

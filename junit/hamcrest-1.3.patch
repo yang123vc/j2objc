@@ -1,0 +1,24 @@
+diff -ru --strip-trailing-cr a/build_result/java/org/hamcrest/core/AllOf.java b/build_result/java/org/hamcrest/core/AllOf.java
+--- a/build_result/java/org/hamcrest/core/AllOf.java	2024-05-18 10:32:55
++++ b/build_result/java/org/hamcrest/core/AllOf.java	2024-05-18 10:34:29
+@@ -57,7 +57,7 @@
+      */
+     @Factory
+     public static <T> Matcher<T> allOf(Matcher<? super T>... matchers) {
+-        return allOf(Arrays.asList(matchers));
++        return AllOf.<T>allOf(Arrays.asList(matchers));
+     }
+ 
+     /**
+diff -ru --strip-trailing-cr a/build_result/java/org/hamcrest/core/AnyOf.java b/build_result/java/org/hamcrest/core/AnyOf.java
+--- a/build_result/java/org/hamcrest/core/AnyOf.java	2024-05-18 10:32:55
++++ b/build_result/java/org/hamcrest/core/AnyOf.java	2024-05-18 10:35:04
+@@ -47,7 +47,7 @@
+      */
+     @Factory
+     public static <T> AnyOf<T> anyOf(Matcher<? super T>... matchers) {
+-        return anyOf(Arrays.asList(matchers));
++        return AnyOf.<T>anyOf(Arrays.asList(matchers));
+     }
+ 
+     /**

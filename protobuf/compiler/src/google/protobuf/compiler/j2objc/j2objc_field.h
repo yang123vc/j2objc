@@ -48,11 +48,10 @@ namespace compiler {
 namespace j2objc {
 
 // Expose for use by ExtensionGenerator.
-void CollectSourceImportsForField(
-    std::set<string>* imports, const FieldDescriptor *descriptor);
-void GenerateObjcClass(
-    io::Printer *printer, const FieldDescriptor *descriptor,
-    const string& arr_name, uint32_t idx);
+void CollectSourceImportsForField(std::set<std::string>* imports,
+                                  const FieldDescriptor* descriptor);
+void GenerateObjcClassRef(
+    io::Printer *printer, const FieldDescriptor *descriptor);
 
 class FieldGenerator {
  public:
@@ -60,27 +59,27 @@ class FieldGenerator {
   virtual ~FieldGenerator();
 
   virtual void GenerateFieldHeader(io::Printer* printer) const;
+  virtual void GenerateFieldSource(io::Printer* printer) const;
   virtual void GenerateFieldBuilderHeader(io::Printer* printer) const = 0;
+  virtual void GenerateFieldBuilderSource(io::Printer* printer) const;
 
   virtual void GenerateMessageOrBuilderProtocol(io::Printer* printer) const = 0;
 
   virtual void GenerateDeclaration(io::Printer *printer) const = 0;
   virtual void GenerateMapEntryFieldData(io::Printer *printer) const;
   virtual void GenerateFieldData(io::Printer *printer) const;
-  virtual void GenerateMapEntryNonStaticFieldData(
-      io::Printer *printer, const string& arr_name) const;
-  virtual void GenerateNonStaticFieldData(
-      io::Printer *printer, const string& arr_name, uint32_t idx) const;
 
-  virtual void CollectForwardDeclarations(std::set<string>* declarations) const;
+  virtual void CollectForwardDeclarations(
+      std::set<std::string>* declarations) const;
   virtual void CollectMessageOrBuilderForwardDeclarations(
-      std::set<string>* declarations) const;
-  virtual void CollectSourceImports(std::set<string>* imports) const;
-  virtual void CollectMessageOrBuilderImports(std::set<string>* imports) const;
+      std::set<std::string>* declarations) const;
+  virtual void CollectSourceImports(std::set<std::string>* imports) const;
+  virtual void CollectMessageOrBuilderImports(
+      std::set<std::string>* imports) const;
 
  protected:
   const FieldDescriptor* descriptor_;
-  std::map<string, string> variables_;
+  std::map<std::string, std::string> variables_;
 
   virtual void GenerateFieldDataOffset(io::Printer *printer) const;
   virtual void GenerateClassNameOrMapData(io::Printer *printer) const;
@@ -95,7 +94,11 @@ class SingleFieldGenerator : public FieldGenerator {
 
   virtual ~SingleFieldGenerator() { }
 
+  virtual void GenerateFieldSource(io::Printer* printer) const;
+
   virtual void GenerateFieldBuilderHeader(io::Printer* printer) const;
+
+  virtual void GenerateFieldBuilderSource(io::Printer* printer) const;
 
   virtual void GenerateMessageOrBuilderProtocol(io::Printer* printer) const;
 
@@ -113,16 +116,20 @@ class RepeatedFieldGenerator : public FieldGenerator {
 
   virtual ~RepeatedFieldGenerator() { }
 
+  virtual void GenerateFieldSource(io::Printer* printer) const;
   virtual void GenerateFieldBuilderHeader(io::Printer* printer) const;
+  virtual void GenerateFieldBuilderSource(io::Printer* printer) const;
 
   virtual void GenerateMessageOrBuilderProtocol(io::Printer* printer) const;
 
   virtual void GenerateDeclaration(io::Printer* printer) const;
 
-  virtual void CollectForwardDeclarations(std::set<string>* declarations) const;
+  virtual void CollectForwardDeclarations(
+      std::set<std::string>* declarations) const;
   virtual void CollectMessageOrBuilderForwardDeclarations(
-      std::set<string>* declarations) const;
-  virtual void CollectMessageOrBuilderImports(std::set<string>* imports) const;
+      std::set<std::string>* declarations) const;
+  virtual void CollectMessageOrBuilderImports(
+      std::set<std::string>* imports) const;
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(RepeatedFieldGenerator);
@@ -135,19 +142,18 @@ class MapFieldGenerator : public FieldGenerator {
 
   virtual ~MapFieldGenerator() { }
 
+  virtual void GenerateFieldSource(io::Printer* printer) const;
   virtual void GenerateFieldBuilderHeader(io::Printer* printer) const;
+  virtual void GenerateFieldBuilderSource(io::Printer* printer) const;
   virtual void GenerateMessageOrBuilderProtocol(io::Printer* printer) const;
   virtual void GenerateDeclaration(io::Printer* printer) const;
   virtual void GenerateMapEntryFieldData(io::Printer *printer) const;
-  virtual void GenerateMapEntryNonStaticFieldData(
-      io::Printer *printer, const string& arr_name) const;
-  virtual void GenerateNonStaticFieldData(
-      io::Printer *printer, const string& arr_name, uint32_t idx) const;
 
-  virtual void CollectForwardDeclarations(std::set<string>* declarations) const;
+  virtual void CollectForwardDeclarations(
+      std::set<std::string>* declarations) const;
   virtual void CollectMessageOrBuilderForwardDeclarations(
-      std::set<string>* declarations) const;
-  virtual void CollectSourceImports(std::set<string>* imports) const;
+      std::set<std::string>* declarations) const;
+  virtual void CollectSourceImports(std::set<std::string>* imports) const;
 
  protected:
   virtual void GenerateClassNameOrMapData(io::Printer *printer) const;

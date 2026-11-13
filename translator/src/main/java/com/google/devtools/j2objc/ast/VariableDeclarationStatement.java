@@ -14,8 +14,11 @@
 
 package com.google.devtools.j2objc.ast;
 
-import com.google.devtools.j2objc.util.ElementUtil;
+import com.google.devtools.j2objc.ast.VariableDeclaration.ObjectiveCModifier;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
 
@@ -24,8 +27,9 @@ import javax.lang.model.type.TypeMirror;
  */
 public class VariableDeclarationStatement extends Statement {
 
-  private int modifiers = 0;
   protected ChildList<Annotation> annotations = ChildList.create(Annotation.class, this);
+
+  private final Set<ObjectiveCModifier> modifiers = new LinkedHashSet<>();
   private ChildList<VariableDeclarationFragment> fragments =
       ChildList.create(VariableDeclarationFragment.class, this);
 
@@ -35,11 +39,10 @@ public class VariableDeclarationStatement extends Statement {
     super(other);
     annotations.copyFrom(other.getAnnotations());
     fragments.copyFrom(other.getFragments());
+    modifiers.addAll(other.getModifiers());
   }
 
   public VariableDeclarationStatement(VariableDeclarationFragment fragment) {
-    VariableElement variableElement = fragment.getVariableElement();
-    modifiers = ElementUtil.fromModifierSet(variableElement.getModifiers());
     fragments.add(fragment);
   }
 
@@ -52,21 +55,23 @@ public class VariableDeclarationStatement extends Statement {
     return Kind.VARIABLE_DECLARATION_STATEMENT;
   }
 
-  public int getModifiers() {
-    return modifiers;
-  }
-
-  public VariableDeclarationStatement setModifiers(int newMods) {
-    modifiers = newMods;
-    return this;
-  }
-
   public List<Annotation> getAnnotations() {
     return annotations;
   }
 
+  @CanIgnoreReturnValue
   public VariableDeclarationStatement addAnnotation(Annotation ann) {
     annotations.add(ann);
+    return this;
+  }
+
+  public Set<ObjectiveCModifier> getModifiers() {
+    return modifiers;
+  }
+
+  @CanIgnoreReturnValue
+  public VariableDeclarationStatement addModifier(ObjectiveCModifier modifier) {
+    modifiers.add(modifier);
     return this;
   }
 
@@ -78,6 +83,7 @@ public class VariableDeclarationStatement extends Statement {
     return fragments;
   }
 
+  @CanIgnoreReturnValue
   public VariableDeclarationStatement addFragment(VariableDeclarationFragment fragment) {
     fragments.add(fragment);
     return this;

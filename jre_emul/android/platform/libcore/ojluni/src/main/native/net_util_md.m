@@ -286,7 +286,7 @@ int cmpScopeID (unsigned int scope, struct sockaddr *him) {
 void
 NET_ThrowByNameWithLastError(JNIEnv *env, const char *name,
                    const char *defaultDetail) {
-/* TODO(user): Enable after JNU_ThrowByNameWithLastError() is implemented.
+/* TODO(zgao): Enable after JNU_ThrowByNameWithLastError() is implemented.
     char errmsg[255];
     snprintf(errmsg, sizeof(errmsg), "errno: %d, error: %s\n", errno,
              defaultDetail);
@@ -309,7 +309,7 @@ NET_ThrowNew(JNIEnv *env, int errorNumber, char *msg) {
     NSString *errMsg = msg ? [NSString stringWithUTF8String:msg] : nil;
     switch(errorNumber) {
     case EBADF:
-        // TODO(user): implement jio_snprintf.
+        // TODO(zgao): implement jio_snprintf.
         // jio_snprintf(fullMsg, sizeof(fullMsg), "socket closed: %s", msg);
         // JNU_ThrowByName(env, "JavaNetSocketException", fullMsg);
         J2ObjCThrowByName(JavaNetSocketException, errMsg);
@@ -777,11 +777,11 @@ void parseExclusiveBindProperty(JNIEnv *env) {
  * IPv4 mapped address where IPv6 is available and v4MappedAddress is TRUE.
  * Otherwise it will return a sockaddr_in structure for an IPv4 InetAddress.
 */
-JNIEXPORT int JNICALL
-NET_InetAddressToSockaddr(JNIEnv *env, jobject iaObj, int port, struct sockaddr *him,
-                          int *len, jboolean v4MappedAddress) {
-    jint family;
-    family = getInetAddress_family(env, iaObj);
+JNIEXPORT int JNICALL NET_InetAddressToSockaddr(JNIEnv *env, jobject iaObj, int port,
+                                                struct sockaddr *him, int *len,
+                                                bool v4MappedAddress) {
+  jint family;
+  family = getInetAddress_family(env, iaObj);
 #ifdef AF_INET6
     /* needs work. 1. family 2. clean up him6 etc deallocate memory */
     if (ipv6_available() && !(family == IPv4 && v4MappedAddress == JNI_FALSE)) {
@@ -807,7 +807,7 @@ NET_InetAddressToSockaddr(JNIEnv *env, jobject iaObj, int port, struct sockaddr 
                 caddr[15] = (address & 0xff);
             }
         } else {
-            ipaddress = ((JavaNetInet6Address *)iaObj)->ipaddress_;
+            ipaddress = ((JavaNetInet6Address *)iaObj)->holder6_->ipaddress_;
             (*env)->GetByteArrayRegion(env, ipaddress, 0, 16, caddr);
         }
         memset((char *)him6, 0, sizeof(struct sockaddr_in6));
@@ -825,7 +825,7 @@ NET_InetAddressToSockaddr(JNIEnv *env, jobject iaObj, int port, struct sockaddr 
         // addresses. Use them only if they're set in java (say, if the Inet6Address
         // was constructed with a specific scope_id or NetworkInterface).
         if (family != IPv4) {
-            int scope_id = ((JavaNetInet6Address *)iaObj)->scope_id_;
+            int scope_id = ((JavaNetInet6Address *)iaObj)->holder6_->scope_id_;
             if (scope_id > 0) {
                 him6->sin6_scope_id = scope_id;
             }
@@ -905,9 +905,7 @@ NET_IsEqual(jbyte* caddr1, jbyte* caddr2) {
     return 1;
 }
 
-jboolean NET_addrtransAvailable() {
-    return JNI_TRUE;
-}
+bool NET_addrtransAvailable() { return JNI_TRUE; }
 
 int NET_IsZeroAddr(jbyte* caddr) {
     int i;

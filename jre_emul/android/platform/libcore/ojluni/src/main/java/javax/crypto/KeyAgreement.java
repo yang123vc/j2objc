@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2014 The Android Open Source Project
- * Copyright (c) 1997, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2014, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,9 +32,6 @@ import java.security.*;
 import java.security.Provider.Service;
 import java.security.spec.*;
 
-/* Android-removed: this debugging mechanism is not used in Android.
-import sun.security.util.Debug;
-*/
 import sun.security.jca.*;
 import sun.security.jca.GetInstance.Instance;
 
@@ -43,18 +40,18 @@ import sun.security.jca.GetInstance.Instance;
  * exchange) protocol.
  * <p>
  * The keys involved in establishing a shared secret are created by one of the
- * key generators (<code>KeyPairGenerator</code> or
- * <code>KeyGenerator</code>), a <code>KeyFactory</code>, or as a result from
+ * key generators ({@code KeyPairGenerator} or
+ * {@code KeyGenerator}), a {@code KeyFactory}, or as a result from
  * an intermediate phase of the key agreement protocol.
  *
- * <p> For each of the correspondents in the key exchange, <code>doPhase</code>
+ * <p> For each of the correspondents in the key exchange, {@code doPhase}
  * needs to be called. For example, if this key exchange is with one other
- * party, <code>doPhase</code> needs to be called once, with the
- * <code>lastPhase</code> flag set to <code>true</code>.
+ * party, {@code doPhase} needs to be called once, with the
+ * {@code lastPhase} flag set to {@code true}.
  * If this key exchange is
- * with two other parties, <code>doPhase</code> needs to be called twice,
- * the first time setting the <code>lastPhase</code> flag to
- * <code>false</code>, and the second time setting it to <code>true</code>.
+ * with two other parties, {@code doPhase} needs to be called twice,
+ * the first time setting the {@code lastPhase} flag to
+ * {@code false}, and the second time setting it to {@code true}.
  * There may be any number of parties involved in a key exchange.
  *
  * <p> Android provides the following <code>KeyAgreement</code> algorithms:
@@ -78,7 +75,7 @@ import sun.security.jca.GetInstance.Instance;
  * </table>
  *
  * This algorithm is described in the <a href=
- * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyAgreement">
+ * "{@docRoot}/../specs/security/standard-names.html#keyagreement-algorithms">
  * KeyAgreement section</a> of the
  * Java Cryptography Architecture Standard Algorithm Name Documentation.
  *
@@ -91,7 +88,11 @@ import sun.security.jca.GetInstance.Instance;
 
 public class KeyAgreement {
 
-    /* Android-removed: this debugging mechanism is not used in Android.
+    // Android-removed: this debugging mechanism is not used in Android.
+    /*
+    private static final Debug debug =
+                        Debug.getInstance("jca", "KeyAgreement");
+
     private static final Debug pdebug =
                         Debug.getInstance("provider", "Provider");
     private static final boolean skipDebug =
@@ -106,6 +107,23 @@ public class KeyAgreement {
 
     // The name of the key agreement algorithm.
     private final String algorithm;
+
+    // BEGIN Android-removed: Redo the provider selection logic to allow reselecting provider.
+    // When only the algorithm is specified, we want to allow the KeyAgreement provider for that
+    // algorithm to change if multiple providers exist and they support different subsets of
+    // keys.  To that end, we don't hold an iterator and exhaust it when we need to choose
+    // a provider like the upstream implementation, we reestablish the list of providers
+    // each time.
+    /*
+    // next service to try in provider selection
+    // null once provider is selected
+    private Service firstService;
+
+    // remaining services to try in provider selection
+    // null once provider is selected
+    private Iterator<Service> serviceIterator;
+    */
+    // END Android-removed: Redo the provider selection logic to allow reselecting provider.
 
     private final Object lock;
 
@@ -124,26 +142,27 @@ public class KeyAgreement {
         lock = null;
     }
 
+    // Android-changed: Remove Service and Iterator from constructor args.
     private KeyAgreement(String algorithm) {
         this.algorithm = algorithm;
         lock = new Object();
     }
 
     /**
-     * Returns the algorithm name of this <code>KeyAgreement</code> object.
+     * Returns the algorithm name of this {@code KeyAgreement} object.
      *
      * <p>This is the same name that was specified in one of the
-     * <code>getInstance</code> calls that created this
-     * <code>KeyAgreement</code> object.
+     * {@code getInstance} calls that created this
+     * {@code KeyAgreement} object.
      *
-     * @return the algorithm name of this <code>KeyAgreement</code> object.
+     * @return the algorithm name of this {@code KeyAgreement} object.
      */
     public final String getAlgorithm() {
         return this.algorithm;
     }
 
     /**
-     * Returns a <code>KeyAgreement</code> object that implements the
+     * Returns a {@code KeyAgreement} object that implements the
      * specified key agreement algorithm.
      *
      * <p> This method traverses the list of registered security Providers,
@@ -158,11 +177,11 @@ public class KeyAgreement {
      * @param algorithm the standard name of the requested key agreement
      * algorithm.
      * See the KeyAgreement section in the <a href=
-     * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyAgreement">
-     * Java Cryptography Architecture Standard Algorithm Name Documentation</a>
+     * "{@docRoot}/../specs/security/standard-names.html#keyagreement-algorithms">
+     * Java Security Standard Algorithm Names Specification</a>
      * for information about standard algorithm names.
      *
-     * @return the new <code>KeyAgreement</code> object.
+     * @return the new {@code KeyAgreement} object
      *
      * @exception NullPointerException if the specified algorithm
      *          is null.
@@ -184,6 +203,8 @@ public class KeyAgreement {
             if (JceSecurity.canUseProvider(s.getProvider()) == false) {
                 continue;
             }
+            // Android-changed: Remove Service and Iterator from constructor args.
+            // return new KeyAgreement(s, t, algorithm);
             return new KeyAgreement(algorithm);
         }
         throw new NoSuchAlgorithmException
@@ -191,7 +212,7 @@ public class KeyAgreement {
     }
 
     /**
-     * Returns a <code>KeyAgreement</code> object that implements the
+     * Returns a {@code KeyAgreement} object that implements the
      * specified key agreement algorithm.
      *
      * <p> A new KeyAgreement object encapsulating the
@@ -205,13 +226,13 @@ public class KeyAgreement {
      * @param algorithm the standard name of the requested key agreement
      * algorithm.
      * See the KeyAgreement section in the <a href=
-     * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyAgreement">
-     * Java Cryptography Architecture Standard Algorithm Name Documentation</a>
+     * "{@docRoot}/../specs/security/standard-names.html#keyagreement-algorithms">
+     * Java Security Standard Algorithm Names Specification</a>
      * for information about standard algorithm names.
      *
      * @param provider the name of the provider.
      *
-     * @return the new <code>KeyAgreement</code> object.
+     * @return the new {@code KeyAgreement} object
      *
      * @exception NullPointerException if the specified algorithm
      *          is null.
@@ -231,6 +252,10 @@ public class KeyAgreement {
     public static final KeyAgreement getInstance(String algorithm,
             String provider) throws NoSuchAlgorithmException,
             NoSuchProviderException {
+        // Android-added: Check for Bouncy Castle deprecation
+        /* J2ObjC removed: BouncyCastle not supported
+        Providers.checkBouncyCastleDeprecation(provider, "KeyAgreement", algorithm);
+         */
         Instance instance = JceSecurity.getInstance
                 ("KeyAgreement", KeyAgreementSpi.class, algorithm, provider);
         return new KeyAgreement((KeyAgreementSpi)instance.impl,
@@ -238,7 +263,7 @@ public class KeyAgreement {
     }
 
     /**
-     * Returns a <code>KeyAgreement</code> object that implements the
+     * Returns a {@code KeyAgreement} object that implements the
      * specified key agreement algorithm.
      *
      * <p> A new KeyAgreement object encapsulating the
@@ -249,13 +274,13 @@ public class KeyAgreement {
      * @param algorithm the standard name of the requested key agreement
      * algorithm.
      * See the KeyAgreement section in the <a href=
-     * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#KeyAgreement">
-     * Java Cryptography Architecture Standard Algorithm Name Documentation</a>
+     * "{@docRoot}/../specs/security/standard-names.html#keyagreement-algorithms">
+     * Java Security Standard Algorithm Names Specification</a>
      * for information about standard algorithm names.
      *
      * @param provider the provider.
      *
-     * @return the new <code>KeyAgreement</code> object.
+     * @return the new {@code KeyAgreement} object
      *
      * @exception NullPointerException if the specified algorithm
      *          is null.
@@ -271,6 +296,10 @@ public class KeyAgreement {
      */
     public static final KeyAgreement getInstance(String algorithm,
             Provider provider) throws NoSuchAlgorithmException {
+        // Android-added: Check for Bouncy Castle deprecation
+        /* J2ObjC removed: BouncyCastle not supported
+        Providers.checkBouncyCastleDeprecation(provider, "KeyAgreement", algorithm);
+         */
         Instance instance = JceSecurity.getInstance
                 ("KeyAgreement", KeyAgreementSpi.class, algorithm, provider);
         return new KeyAgreement((KeyAgreementSpi)instance.impl,
@@ -293,7 +322,8 @@ public class KeyAgreement {
             if (spi != null) {
                 return;
             }
-            /* Android-removed: this debugging mechanism is not used in Android.
+            // Android-removed: this debugging mechanism is not used in Android.
+            /*
             if (debug != null) {
                 int w = --warnCount;
                 if (w >= 0) {
@@ -308,6 +338,7 @@ public class KeyAgreement {
             }
             */
             Exception lastException = null;
+            // Android-changed: Provider selection; loop over a new list each time.
             for (Service s : GetInstance.getServices("KeyAgreement", algorithm)) {
                 if (JceSecurity.canUseProvider(s.getProvider()) == false) {
                     continue;
@@ -319,7 +350,12 @@ public class KeyAgreement {
                     }
                     spi = (KeyAgreementSpi)obj;
                     provider = s.getProvider();
+                    // Android-removed: Provider selection; loop over a new list each time.
+                    /*
                     // not needed any more
+                    firstService = null;
+                    serviceIterator = null;
+                    */
                     return;
                 } catch (Exception e) {
                     lastException = e;
@@ -334,8 +370,8 @@ public class KeyAgreement {
         }
     }
 
-    private final static int I_NO_PARAMS = 1;
-    private final static int I_PARAMS    = 2;
+    private static final int I_NO_PARAMS = 1;
+    private static final int I_PARAMS    = 2;
 
     private void implInit(KeyAgreementSpi spi, int type, Key key,
             AlgorithmParameterSpec params, SecureRandom random)
@@ -351,11 +387,14 @@ public class KeyAgreement {
             AlgorithmParameterSpec params, SecureRandom random)
             throws InvalidKeyException, InvalidAlgorithmParameterException {
         synchronized (lock) {
+            // Android-changed: Use the currently-selected provider only if no key was provided.
+            // if (spi != null) {
             if (spi != null && key == null) {
                 implInit(spi, initType, key, params, random);
                 return;
             }
             Exception lastException = null;
+            // Android-changed: Provider selection; loop over a new list each time.
             for (Service s : GetInstance.getServices("KeyAgreement", algorithm)) {
                 // if provider says it does not support this key, ignore it
                 if (s.supportsParameter(key) == false) {
@@ -369,6 +408,11 @@ public class KeyAgreement {
                     implInit(spi, initType, key, params, random);
                     provider = s.getProvider();
                     this.spi = spi;
+                    // Android-removed: Provider selection; loop over a new list each time.
+                    /*
+                    firstService = null;
+                    serviceIterator = null;
+                    */
                     return;
                 } catch (Exception e) {
                     // NoSuchAlgorithmException from newInstance()
@@ -397,9 +441,9 @@ public class KeyAgreement {
     }
 
     /**
-     * Returns the provider of this <code>KeyAgreement</code> object.
+     * Returns the provider of this {@code KeyAgreement} object.
      *
-     * @return the provider of this <code>KeyAgreement</code> object
+     * @return the provider of this {@code KeyAgreement} object
      */
     public final Provider getProvider() {
         chooseFirstProvider();
@@ -436,10 +480,10 @@ public class KeyAgreement {
      * parameters required for this key agreement.
      *
      * <p> If the key agreement algorithm requires random bytes, it gets them
-     * from the given source of randomness, <code>random</code>.
+     * from the given source of randomness, {@code random}.
      * However, if the underlying
      * algorithm implementation does not require any random bytes,
-     * <code>random</code> is ignored.
+     * {@code random} is ignored.
      *
      * @param key the party's private information. For example, in the case
      * of the Diffie-Hellman key agreement, this would be the party's own
@@ -452,6 +496,8 @@ public class KeyAgreement {
      */
     public final void init(Key key, SecureRandom random)
             throws InvalidKeyException {
+        // Android-changed: Use the currently-selected provider only if no key was provided.
+        // if (spi != null) {
         if (spi != null && (key == null || lock == null)) {
             spi.engineInit(key, random);
         } else {
@@ -463,10 +509,11 @@ public class KeyAgreement {
             }
         }
 
-        /* Android-removed: this debugging mechanism is not used in Android.
+        // Android-removed: this debugging mechanism is not used in Android.
+        /*
         if (!skipDebug && pdebug != null) {
             pdebug.println("KeyAgreement." + algorithm + " algorithm from: " +
-                this.provider.getName());
+                getProviderName());
         }
         */
     }
@@ -500,6 +547,10 @@ public class KeyAgreement {
         init(key, params, JceSecurity.RANDOM);
     }
 
+    private String getProviderName() {
+        return (provider == null) ? "(no provider)" : provider.getName();
+    }
+
     /**
      * Initializes this key agreement with the given key, set of
      * algorithm parameters, and source of randomness.
@@ -526,10 +577,11 @@ public class KeyAgreement {
             chooseProvider(I_PARAMS, key, params, random);
         }
 
-        /* Android-removed: this debugging mechanism is not used in Android.
+        // Android-removed: this debugging mechanism is not used in Android.
+        /*
         if (!skipDebug && pdebug != null) {
             pdebug.println("KeyAgreement." + algorithm + " algorithm from: " +
-                this.provider.getName());
+                getProviderName());
         }
         */
     }
@@ -563,9 +615,9 @@ public class KeyAgreement {
     /**
      * Generates the shared secret and returns it in a new buffer.
      *
-     * <p>This method resets this <code>KeyAgreement</code> object, so that it
+     * <p>This method resets this {@code KeyAgreement} object, so that it
      * can be reused for further key agreements. Unless this key agreement is
-     * reinitialized with one of the <code>init</code> methods, the same
+     * reinitialized with one of the {@code init} methods, the same
      * private information and algorithm parameters will be used for
      * subsequent key agreements.
      *
@@ -581,23 +633,23 @@ public class KeyAgreement {
 
     /**
      * Generates the shared secret, and places it into the buffer
-     * <code>sharedSecret</code>, beginning at <code>offset</code> inclusive.
+     * {@code sharedSecret}, beginning at {@code offset} inclusive.
      *
-     * <p>If the <code>sharedSecret</code> buffer is too small to hold the
-     * result, a <code>ShortBufferException</code> is thrown.
+     * <p>If the {@code sharedSecret} buffer is too small to hold the
+     * result, a {@code ShortBufferException} is thrown.
      * In this case, this call should be repeated with a larger output buffer.
      *
-     * <p>This method resets this <code>KeyAgreement</code> object, so that it
+     * <p>This method resets this {@code KeyAgreement} object, so that it
      * can be reused for further key agreements. Unless this key agreement is
-     * reinitialized with one of the <code>init</code> methods, the same
+     * reinitialized with one of the {@code init} methods, the same
      * private information and algorithm parameters will be used for
      * subsequent key agreements.
      *
      * @param sharedSecret the buffer for the shared secret
-     * @param offset the offset in <code>sharedSecret</code> where the
+     * @param offset the offset in {@code sharedSecret} where the
      * shared secret will be stored
      *
-     * @return the number of bytes placed into <code>sharedSecret</code>
+     * @return the number of bytes placed into {@code sharedSecret}
      *
      * @exception IllegalStateException if this key agreement has not been
      * completed yet
@@ -612,12 +664,12 @@ public class KeyAgreement {
     }
 
     /**
-     * Creates the shared secret and returns it as a <code>SecretKey</code>
+     * Creates the shared secret and returns it as a {@code SecretKey}
      * object of the specified algorithm.
      *
-     * <p>This method resets this <code>KeyAgreement</code> object, so that it
+     * <p>This method resets this {@code KeyAgreement} object, so that it
      * can be reused for further key agreements. Unless this key agreement is
-     * reinitialized with one of the <code>init</code> methods, the same
+     * reinitialized with one of the {@code init} methods, the same
      * private information and algorithm parameters will be used for
      * subsequent key agreements.
      *

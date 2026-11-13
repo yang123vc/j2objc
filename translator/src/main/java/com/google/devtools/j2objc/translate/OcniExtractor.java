@@ -26,6 +26,7 @@ import com.google.devtools.j2objc.ast.EnumDeclaration;
 import com.google.devtools.j2objc.ast.MethodDeclaration;
 import com.google.devtools.j2objc.ast.NativeDeclaration;
 import com.google.devtools.j2objc.ast.NativeStatement;
+import com.google.devtools.j2objc.ast.RecordDeclaration;
 import com.google.devtools.j2objc.ast.SynchronizedStatement;
 import com.google.devtools.j2objc.ast.ThisExpression;
 import com.google.devtools.j2objc.ast.TreeNode;
@@ -47,7 +48,7 @@ import javax.lang.model.element.TypeElement;
  * Extracts OCNI code blocks into NativeDeclaration and NativeStatement nodes.
  * Adds native fast enumeration support for Iterable types, when not already
  * defined.
- * Adds synchronized blocks to methods with with the synchonized modifier.
+ * Adds synchronized blocks to methods with the synchronized modifier.
  *
  * @author Keith Stanger
  */
@@ -139,6 +140,11 @@ public class OcniExtractor extends UnitTreeVisitor {
     }
   }
 
+  @Override
+  public void endVisit(RecordDeclaration node) {
+    // Do nothing, as records cannot have native methods.
+  }
+
   private void visitType(AbstractTypeDeclaration node) {
     TypeElement type = node.getTypeElement();
     Set<String> methodsPrinted = Sets.newHashSet();
@@ -174,10 +180,18 @@ public class OcniExtractor extends UnitTreeVisitor {
     if (typeUtil.findSupertype(type.asType(), "java.lang.Iterable") != null
         && !methodsPrinted.contains("countByEnumeratingWithState:objects:count:")
         && (deadCodeMap == null || !deadCodeMap.containsClass(type, elementUtil))) {
-      bodyDeclarations.add(NativeDeclaration.newInnerDeclaration(null,
-          "- (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state "
-          + "objects:(__unsafe_unretained id *)stackbuf count:(NSUInteger)len {\n"
-          + "  return JreDefaultFastEnumeration(self, state, stackbuf);\n}\n"));
+      String declaration =
+          options.addTextSegmentAttribute()
+              ? "- (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state "
+                  + "objects:(__unsafe_unretained id *)stackbuf count:(NSUInteger)len "
+                  + "J2OBJC_TEXT_SEGMENT;"
+              : null;
+      bodyDeclarations.add(
+          NativeDeclaration.newInnerDeclaration(
+              declaration,
+              "- (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state "
+                  + "objects:(__unsafe_unretained id *)stackbuf count:(NSUInteger)len {\n"
+                  + "  return JreDefaultFastEnumeration(self, state, stackbuf);\n}\n"));
     }
   }
 

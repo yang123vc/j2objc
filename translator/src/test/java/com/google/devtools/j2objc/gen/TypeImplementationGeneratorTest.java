@@ -28,15 +28,15 @@ public class TypeImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "import java.lang.annotation.*; @Retention(RetentionPolicy.RUNTIME) "
         + "@interface A { @Deprecated int I = 5; }", "A", "A.m");
-    assertTranslation(translation, "IOSObjectArray *A__Annotations$0()");
-    assertTranslation(translation, "create_JavaLangDeprecated");
+    assertInTranslation(translation, "IOSObjectArray *A__Annotations$0()");
+    assertInTranslation(translation, "create_JavaLangDeprecated");
   }
 
   public void testFieldAnnotationMethodForInterfaceType() throws IOException {
     String translation = translateSourceFile(
         "interface I { @Deprecated int I = 5; }", "I", "I.m");
-    assertTranslation(translation, "IOSObjectArray *I__Annotations$0()");
-    assertTranslation(translation, "create_JavaLangDeprecated");
+    assertInTranslation(translation, "IOSObjectArray *I__Annotations$0()");
+    assertInTranslation(translation, "create_JavaLangDeprecated");
   }
 
   public void testFunctionLineNumbers() throws IOException {
@@ -47,7 +47,7 @@ public class TypeImplementationGeneratorTest extends GenerationTest {
         + "  }}", "A", "A.m");
     assertTranslatedLines(translation,
         "#line 3", "void A_test() {", "A_initialize();", "", "#line 4",
-        "[((JavaIoPrintStream *) nil_chk(JreLoadStatic(JavaLangSystem, out))) "
+        "[((JavaIoPrintStream *) nil_chk((JreLoadStatic(JavaLangSystem, out)))) "
           + "printlnWithId:A_class_()];");
   }
 
@@ -57,9 +57,9 @@ public class TypeImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(
         "class Test { final int I = 1; void test(int i) { switch(i) { case I: return; } } }",
         "Test", "Test.h");
-    assertTranslation(translation, "#define Test_I 1");
+    assertInTranslation(translation, "#define Test_I 1");
     translation = getTranslatedFile("Test.m");
-    assertTranslation(translation, "case Test_I:");
+    assertInTranslation(translation, "case Test_I:");
   }
 
   public void testDesignatedInitializer() throws IOException {
@@ -69,7 +69,7 @@ public class TypeImplementationGeneratorTest extends GenerationTest {
         + " public long longValue() { return 0; }}", "Test", "Test.m");
     assertTranslatedLines(translation,
         "J2OBJC_IGNORE_DESIGNATED_BEGIN",
-        "- (instancetype)initWithInt:(jint)i {",
+        "- (instancetype)initWithInt:(int32_t)i {",
         "  Test_initWithInt_(self, i);",
         "  return self;",
         "}",
@@ -87,21 +87,71 @@ public class TypeImplementationGeneratorTest extends GenerationTest {
     assertTranslatedLines(translation, "+ (NSString *)ID {", "return Test_ID;");
     assertTranslatedLines(translation,
         "+ (void)setID:(NSString *)value {", "JreStrongAssign(&Test_ID, value);");
-    assertTranslatedLines(translation, "+ (jint)VERSION {", "return Test_VERSION;");
+    assertTranslatedLines(translation, "+ (int32_t)VERSION {", "return Test_VERSION;");
     assertTranslatedLines(translation, "+ (Test *)DEFAULT {", "return Test_DEFAULT;");
     assertNotInTranslation(translation, "+ (void)setDEFAULT:(Test *)value"); // Read-only
-    assertNotInTranslation(translation, "+ (jint)i");                        // Private
-    assertNotInTranslation(translation, "+ (void)setI:(jint)value");         // Private
+    assertNotInTranslation(translation, "+ (int32_t)i");                        // Private
+    assertNotInTranslation(translation, "+ (void)setI:(int32_t)value");         // Private
+  }
+
+  private void staticFieldAccessorMethodValidationStrictFieldAssign() throws IOException {
+    String source =
+        "class Test { "
+            + "static String ID; "
+            + "private static int i; "
+            + "public static final int VERSION = 1; "
+            + "static final Test DEFAULT = new Test(); }";
+    String translation = translateSourceFile(source, "Test", "Test.m");
+    assertTranslatedLines(translation, "+ (NSString *)ID {", "return Test_ID;");
+    assertTranslatedLines(
+        translation,
+        "+ (void)setID:(NSString *)value {",
+        "JreStrictFieldStrongAssign(&Test_ID, value);");
+    assertTranslatedLines(translation, "+ (int32_t)VERSION {", "return Test_VERSION;");
+    assertTranslatedLines(translation, "+ (Test *)DEFAULT {", "return Test_DEFAULT;");
+    assertNotInTranslation(translation, "+ (void)setDEFAULT:(Test *)value"); // Read-only
+    assertNotInTranslation(translation, "+ (int32_t)i"); // Private
+    assertNotInTranslation(translation, "+ (void)setI:(int32_t)value"); // Private
+  }
+
+  private void staticFieldAccessorMethodValidationStrictFieldLoad() throws IOException {
+    String source =
+        "class Test { "
+            + "static String ID; "
+            + "private static int i; "
+            + "public static final int VERSION = 1; "
+            + "static final Test DEFAULT = new Test(); }";
+    String translation = translateSourceFile(source, "Test", "Test.m");
+    assertTranslatedLines(
+        translation, "+ (NSString *)ID {", "return JreStrictFieldStrongLoad(&Test_ID);");
+    assertTranslatedLines(
+        translation,
+        "+ (void)setID:(NSString *)value {",
+        "JreStrictFieldStrongAssign(&Test_ID, value);");
+    assertTranslatedLines(translation, "+ (int32_t)VERSION {", "return Test_VERSION;");
+    assertTranslatedLines(
+        translation, "+ (Test *)DEFAULT {", "return JreStrictFieldStrongLoad(&Test_DEFAULT);");
+    assertNotInTranslation(translation, "+ (void)setDEFAULT:(Test *)value"); // Read-only
+    assertNotInTranslation(translation, "+ (int32_t)i"); // Private
+    assertNotInTranslation(translation, "+ (void)setI:(int32_t)value"); // Private
   }
 
   public void testStaticFieldsWithStaticAccessorMethodsFlag() throws IOException {
     options.setStaticAccessorMethods(true);
     staticFieldAccessorMethodValidation();
+    options.setStrictFieldAssign(true);
+    staticFieldAccessorMethodValidationStrictFieldAssign();
+    options.setStrictFieldLoad(true);
+    staticFieldAccessorMethodValidationStrictFieldLoad();
   }
 
   public void testStaticFieldsWithClassPropertiesFlag() throws IOException {
     options.setClassProperties(true);
     staticFieldAccessorMethodValidation();
+    options.setStrictFieldAssign(true);
+    staticFieldAccessorMethodValidationStrictFieldAssign();
+    options.setStrictFieldLoad(true);
+    staticFieldAccessorMethodValidationStrictFieldLoad();
   }
 
   // Verify that accessor methods for static vars and constants aren't generated by default.
@@ -114,8 +164,8 @@ public class TypeImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(source, "Test", "Test.m");
     assertNotInTranslation(translation, "+ (NSString *)ID");
     assertNotInTranslation(translation, "+ (void)setID:(NSString *)value");
-    assertNotInTranslation(translation, "+ (void)setI:(jint)value");
-    assertNotInTranslation(translation, "+ (jint)VERSION");
+    assertNotInTranslation(translation, "+ (void)setI:(int32_t)value");
+    assertNotInTranslation(translation, "+ (int32_t)VERSION");
     assertNotInTranslation(translation, "+ (Test *)DEFAULT");
   }
 
@@ -132,8 +182,8 @@ public class TypeImplementationGeneratorTest extends GenerationTest {
     String translation = translateSourceFile(source, "Test", "Test.m");
     assertNotInTranslation(translation, "+ (NSString *)ID {");
     assertNotInTranslation(translation, "+ (void)setID:(NSString *)value {");
-    assertTranslation(translation, "+ (NSString *)getID {");
-    assertTranslation(translation, "+ (void)setIDWithNSString:(NSString *)ID {");
+    assertInTranslation(translation, "+ (NSString *)getID {");
+    assertInTranslation(translation, "+ (void)setIDWithNSString:(NSString *)ID {");
   }
 
   // Verify that accessor methods for enum constants are generated on request.
@@ -163,13 +213,125 @@ public class TypeImplementationGeneratorTest extends GenerationTest {
     assertNotInTranslation(translation, "+ (TestEnum *)TWO");
   }
 
-  // Verify that specified properties are synthesized.
+  // Verify that specified properties are synthesized only when accessors need to be generated.
   public void testSynthesizeProperties() throws IOException {
-    String source = "import com.google.j2objc.annotations.Property; class Test { "
-        + "@Property(\"getter=getFoo\") private final Integer foo = 42;"
-        + "private final Integer bar = 84; }";
+    String source =
+        """
+        import com.google.j2objc.annotations.Property;
+        class Test {
+          @Property("getter=getFoo") private final Integer foo = 42;
+          private final Integer bar = 84;
+          @Property private final Integer finalWithGetter = 1;
+          public Integer getFinalWithGetter() { return finalWithGetter; }
+          @Property("readonly") private Integer readonlyWithGetter = 2;
+          public Integer getReadonlyWithGetter() { return readonlyWithGetter; }
+          @Property private Integer readwriteWithOnlyGetter = 3;
+          public Integer getReadwriteWithOnlyGetter() { return readwriteWithOnlyGetter; }
+          @Property private Integer readwriteWithBoth = 4;
+          public Integer getReadwriteWithBoth() { return readwriteWithBoth; }
+          public void setReadwriteWithBoth(Integer v) { readwriteWithBoth = v; }
+        }
+        """;
     String translation = translateSourceFile(source, "Test", "Test.m");
-    assertTranslation(translation, "@synthesize foo = foo_;");
+    assertInTranslation(translation, "@synthesize foo = foo_;");
     assertNotInTranslation(translation, "@synthesize bar");
+    assertNotInTranslation(translation, "@synthesize finalWithGetter");
+    assertNotInTranslation(translation, "@synthesize readonlyWithGetter");
+    assertInTranslation(translation, "@synthesize readwriteWithOnlyGetter = readwriteWithOnlyGetter_;");
+    assertNotInTranslation(translation, "@synthesize readwriteWithBoth");
+  }
+
+  public void testSynthesizeProperties_explicitGetterMatchesStaticMethod() throws IOException {
+    String source =
+        """
+        import com.google.j2objc.annotations.Property;
+        class Test {
+          @Property("getter=customFoo") private final Integer foo = 1;
+          public static Integer customFoo() { return 0; }
+        }
+        """;
+    String translation = translateSourceFile(source, "Test", "Test.m");
+    assertNotInTranslation(translation, "- (JavaLangInteger *)customFoo");
+    assertInTranslation(translation, "@synthesize foo = foo_;");
+  }
+
+  public void testPrivateClassesPackageSwiftName() throws IOException {
+    addSourceFile(
+        "@SwiftName " + "package bar;" + "" + "import com.google.j2objc.annotations.SwiftName;",
+        "bar/package-info.java");
+    String source =
+        "package bar;"
+            + "public class Test { "
+            + "  private class Inner { "
+            + "       public void foo() { }"
+            + "   }"
+            + "  private Inner bar; "
+            + "}";
+
+    String translation = translateSourceFile(source, "Test", "bar/Test.m");
+    assertNotInTranslation(translation, "NS_SWIFT_NAME");
+  }
+
+  public void testPrivateClassesWithSwiftName() throws IOException {
+    String source =
+        "import com.google.j2objc.annotations.SwiftName;"
+            + "@SwiftName public class Test { "
+            + "  @SwiftName private class Inner { "
+            + "       public void foo() { }"
+            + "   }"
+            + "  private Inner bar; "
+            + "}";
+
+    translateSourceFile(source, "Test", "Test.m");
+    assertError("Test.java:1: Swift name annotation on private type");
+  }
+
+  public void testPrivateClassesWithSwiftNamingOption() throws IOException {
+    options.setSwiftNaming(true);
+    String source =
+        "public class Test { "
+            + "  private class Inner { "
+            + "       public void foo() { }"
+            + "   }"
+            + "  private Inner bar; "
+            + "}";
+
+    // Should compile without error
+    translateSourceFile(source, "Test", "Test.m");
+  }
+
+  public void testPackageInfoWithSwiftNamingOption() throws IOException {
+    options.setSwiftNaming(true);
+    // Use deprecated annotation to force package-info class generation
+    addSourceFile("@Deprecated package foo;", "foo/package-info.java");
+    // Should compile without error
+    String unused = translateSourceFile("foo.package-info", "foo/package-info.m");
+  }
+
+  public void testLinkProtocolsFunctions() throws IOException {
+    options.setLinkProtocols(true);
+    String source =
+        "import java.io.Serializable;\n"
+            + "class Test implements Runnable, Serializable { public void run() {} }";
+    String translation = translateSourceFile(source, "Test", "Test.m");
+    assertInTranslation(translation, "+ (void)__linkProtocols {");
+    assertInTranslation(translation, "JavaIoSerializable_class_();");
+    assertInTranslation(translation, "JavaLangRunnable_class_();");
+  }
+
+  public void testEnumExterns() throws IOException {
+    String source = "enum Test { ONE, TWO }";
+    String translation = translateSourceFile(source, "Test", "Test.m");
+    assertInTranslation(translation, "extern Test *Test_get_ONE(void);");
+    assertInTranslation(translation, "extern Test *Test_get_TWO(void);");
+  }
+
+  public void testStaticFieldExterns() throws IOException {
+    String source = "class Test { static String foo; final static int bar = 2; }";
+    String translation = translateSourceFile(source, "Test", "Test.m");
+    assertInTranslation(translation, "extern NSString *Test_get_foo(void);");
+    assertInTranslation(translation, "extern NSString *Test_set_foo(NSString *value);");
+    assertInTranslation(translation, "extern int32_t Test_get_bar(void);");
+    assertNotInTranslation(translation, "extern void Test_set_bar(int32_t value);");
   }
 }

@@ -32,7 +32,13 @@
 @implementation IOSProtocolClass
 
 static Class GetBackingClass(Protocol *protocol) {
-  return objc_lookUpClass(protocol_getName(protocol));
+  const char *name = protocol_getName(protocol);
+  Class cls = objc_lookUpClass(name);
+  if (!cls) {
+    NSString *companionName = [NSString stringWithFormat:@"%sCompanion", name];
+    cls = objc_lookUpClass([companionName UTF8String]);
+  }
+  return cls;
 }
 
 @synthesize objcProtocol = protocol_;
@@ -44,7 +50,7 @@ static Class GetBackingClass(Protocol *protocol) {
   return self;
 }
 
-static jboolean ConformsToProtocol(IOSClass *cls, IOSProtocolClass *protocol) {
+static bool ConformsToProtocol(IOSClass *cls, IOSProtocolClass *protocol) {
   if (!cls) {
     return false;
   }
@@ -61,7 +67,7 @@ static jboolean ConformsToProtocol(IOSClass *cls, IOSProtocolClass *protocol) {
   return ConformsToProtocol([cls getSuperclass], protocol);
 }
 
-- (jboolean)isInstance:(id)object {
+- (bool)isInstance:(id)object {
   return ConformsToProtocol([object java_getClass], self);
 }
 
@@ -104,11 +110,11 @@ static jboolean ConformsToProtocol(IOSClass *cls, IOSProtocolClass *protocol) {
       JavaLangReflectModifier_ABSTRACT | JavaLangReflectModifier_STATIC;
 }
 
-- (jboolean)isAssignableFrom:(IOSClass *)cls {
+- (bool)isAssignableFrom:(IOSClass *)cls {
   return ConformsToProtocol(cls, self);
 }
 
-- (jboolean)isInterface {
+- (bool)isInterface {
   return true;
 }
 

@@ -15,7 +15,6 @@
 //  HelloSwift
 //
 
-
 import UIKit
 
 class ViewController: UIViewController {
@@ -25,14 +24,44 @@ class ViewController: UIViewController {
     super.viewDidLoad()
     var text = ""
     let hello = OrgJ2objcExample.HELLO_J2OBJC
-    let wednesday = OrgJ2objcExample_Day.WEDNESDAY.getShortName()
+    let wednesday = OrgJ2objcExample_Day.wednesday.getShortName()
     let sb = JavaLangStringBuilder().append(with: "StringBuilder\n").description()
-    text += "Static var: " + hello! +  "\n"
+    text += "Static var: " + hello! + "\n"
     text += "Enum: " + wednesday + "\n"
     text += "No nullability annotation: " + String(describing: type(of: hello)) + "\n"
     text += "NonNull annotation: " + String(describing: type(of: wednesday)) + "\n"
     text += sb
     textView.text = text
+  }
+
+  // It fails to build if the JRE was not build with nullability annotations.
+  func testNonNullReturnTypes() {
+    let b = JavaLangBoolean.valueOf(with: "x")
+    let _: JavaLangBoolean = b
+
+    let f = JavaLangFloat.valueOf(with: 3.14)
+    let _: JavaLangFloat = f
+
+    let h = JavaLangLong.toHexString(withLong: 100)
+    let _: String = h
+
+    let it = JavaUtilArrayList<AnyObject>().iterator()
+    let _: JavaUtilIterator = it
+
+    let t = JavaUtilCalendar.getInstance().getTime()
+    let _: JavaUtilDate = t
+
+    let c = JavaUtilCalendar_Builder().setDateWith(2019, with: 10, with: 18).build()
+    let _: JavaUtilCalendar = c
+
+    let e = JavaUtilVector<AnyObject>().elements()
+    let _: JavaUtilEnumeration = e
+
+    let r = JavaUtilRegexPattern.compile(with: ".*")
+    let _: JavaUtilRegexPattern = r
+
+    let nf = JavaTextNumberFormat.getInstance().format(with: 2.71828)
+    let _: String = nf
   }
 
   override func didReceiveMemoryWarning() {

@@ -28,8 +28,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#import "com/google/protobuf/CodedOutputStream.h"
+#import "com/google/protobuf/CodedOutputStream_PackagePrivate.h"
 
+#import "J2ObjC_source.h"
 #import "java/io/OutputStream.h"
 
 namespace {
@@ -93,7 +94,7 @@ void CGPCodedOutputStream::WriteRaw(const void* data, int size) {
   Advance(size);
 }
 
-void CGPCodedOutputStream::WriteLittleEndian32(uint32 value) {
+void CGPCodedOutputStream::WriteLittleEndian32(uint32_t value) {
   uint8 bytes[sizeof(value)];
 
   bool use_fast = buffer_size_ >= (int)sizeof(value);
@@ -108,7 +109,7 @@ void CGPCodedOutputStream::WriteLittleEndian32(uint32 value) {
   }
 }
 
-void CGPCodedOutputStream::WriteLittleEndian64(uint64 value) {
+void CGPCodedOutputStream::WriteLittleEndian64(uint64_t value) {
   uint8 bytes[sizeof(value)];
 
   bool use_fast = buffer_size_ >= (int)sizeof(value);
@@ -124,7 +125,7 @@ void CGPCodedOutputStream::WriteLittleEndian64(uint64 value) {
 }
 
 inline uint8* CGPCodedOutputStream::WriteVarint32FallbackToArrayInline(
-    uint32 value, uint8* target) {
+    uint32_t value, uint8* target) {
   target[0] = static_cast<uint8>(value | 0x80);
   if (value >= (1 << 7)) {
     target[1] = static_cast<uint8>((value >>  7) | 0x80);
@@ -153,7 +154,7 @@ inline uint8* CGPCodedOutputStream::WriteVarint32FallbackToArrayInline(
   }
 }
 
-void CGPCodedOutputStream::WriteVarint32(uint32 value) {
+void CGPCodedOutputStream::WriteVarint32(uint32_t value) {
   if (buffer_size_ >= kMaxVarint32Bytes) {
     // Fast path:  We have enough bytes left in the buffer to guarantee that
     // this write won't cross the end, so we can skip the checks.
@@ -176,12 +177,12 @@ void CGPCodedOutputStream::WriteVarint32(uint32 value) {
 }
 
 inline uint8* CGPCodedOutputStream::WriteVarint64ToArrayInline(
-    uint64 value, uint8* target) {
+    uint64_t value, uint8* target) {
   // Splitting into 32-bit pieces gives better performance on 32-bit
   // processors.
-  uint32 part0 = static_cast<uint32>(value      );
-  uint32 part1 = static_cast<uint32>(value >> 28);
-  uint32 part2 = static_cast<uint32>(value >> 56);
+  uint32_t part0 = static_cast<uint32>(value      );
+  uint32_t part1 = static_cast<uint32>(value >> 28);
+  uint32_t part2 = static_cast<uint32>(value >> 56);
 
   int size;
 
@@ -247,7 +248,7 @@ inline uint8* CGPCodedOutputStream::WriteVarint64ToArrayInline(
   return target + size;
 }
 
-void CGPCodedOutputStream::WriteVarint64(uint64 value) {
+void CGPCodedOutputStream::WriteVarint64(uint64_t value) {
   if (buffer_size_ >= kMaxVarintBytes) {
     // Fast path:  We have enough bytes left in the buffer to guarantee that
     // this write won't cross the end, so we can skip the checks.
@@ -287,7 +288,7 @@ bool CGPCodedOutputStream::FlushBuffer() {
   }
 }
 
-int CGPCodedOutputStream::VarintSize32Fallback(uint32 value) {
+int CGPCodedOutputStream::VarintSize32Fallback(uint32_t value) {
   if (value < (1 << 7)) {
     return 1;
   } else if (value < (1 << 14)) {
@@ -301,7 +302,7 @@ int CGPCodedOutputStream::VarintSize32Fallback(uint32 value) {
   }
 }
 
-int CGPCodedOutputStream::VarintSize64(uint64 value) {
+int CGPCodedOutputStream::VarintSize64(uint64_t value) {
   if (value < (1ull << 35)) {
     if (value < (1ull << 7)) {
       return 1;
@@ -328,3 +329,62 @@ int CGPCodedOutputStream::VarintSize64(uint64 value) {
     }
   }
 }
+
+// ============================
+
+@interface ComGoogleProtobufCodedOutputStream ()
+
+- (instancetype)initWithJavaIoOutputStream:(JavaIoOutputStream *)output;
+
+@end
+
+static void ComGoogleProtobufCodedOutputStream_initWithJavaIoOutputStream_(
+    ComGoogleProtobufCodedOutputStream *self, JavaIoOutputStream *output);
+static ComGoogleProtobufCodedOutputStream *new_ComGoogleProtobufCodedOutputStream_init(void)
+    NS_RETURNS_RETAINED;
+static ComGoogleProtobufCodedOutputStream *create_ComGoogleProtobufCodedOutputStream_init(void);
+
+@implementation ComGoogleProtobufCodedOutputStream
+
+- (instancetype)initWithJavaIoOutputStream:(JavaIoOutputStream *)output {
+  ComGoogleProtobufCodedOutputStream_initWithJavaIoOutputStream_(self, output);
+  return self;
+}
+
++ (ComGoogleProtobufCodedOutputStream *)newInstanceWithJavaIoOutputStream:
+    (JavaIoOutputStream *)output {
+  return ComGoogleProtobufCodedOutputStream_newInstanceWithJavaIoOutputStream_(output);
+}
+
+- (void)flush {
+  self->codedStream_->FlushBuffer();
+}
+
+- (void)dealloc {
+  if (codedStream_) {
+    delete codedStream_;
+    codedStream_ = NULL;
+  }
+  [super dealloc];
+}
+
+@end
+
+void ComGoogleProtobufCodedOutputStream_initWithJavaIoOutputStream_(
+    ComGoogleProtobufCodedOutputStream *self, JavaIoOutputStream *output) {
+  NSObject_init(self);
+  self->codedStream_ = new CGPCodedOutputStream(((JavaIoOutputStream *)nil_chk(output)));
+}
+
+ComGoogleProtobufCodedOutputStream *
+create_ComGoogleProtobufCodedOutputStream_initWithJavaIoOutputStream_(JavaIoOutputStream *output){
+    J2OBJC_CREATE_IMPL(ComGoogleProtobufCodedOutputStream, initWithJavaIoOutputStream_, output)}
+
+ComGoogleProtobufCodedOutputStream
+    *ComGoogleProtobufCodedOutputStream_newInstanceWithJavaIoOutputStream_(
+        JavaIoOutputStream *output) {
+  ComGoogleProtobufCodedOutputStream_initialize();
+  return create_ComGoogleProtobufCodedOutputStream_initWithJavaIoOutputStream_(output);
+}
+
+J2OBJC_CLASS_TYPE_LITERAL_SOURCE(ComGoogleProtobufCodedOutputStream)

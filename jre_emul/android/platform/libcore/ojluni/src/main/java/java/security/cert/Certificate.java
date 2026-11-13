@@ -41,7 +41,7 @@ import sun.security.x509.X509CertImpl;
  * An identity certificate is a binding of a principal to a public key which
  * is vouched for by another principal.  (A principal represents
  * an entity such as an individual user, a group, or a corporation.)
- *<p>
+ * <p>
  * This class is an abstraction for certificates that have different
  * formats but important common uses.  For example, different types of
  * certificates, such as X.509 and PGP, share general certificate
@@ -57,6 +57,7 @@ import sun.security.x509.X509CertImpl;
  * @see CertificateFactory
  *
  * @author Hemma Prafullchandra
+ * @since 1.2
  */
 
 public abstract class Certificate implements java.io.Serializable {
@@ -74,8 +75,8 @@ public abstract class Certificate implements java.io.Serializable {
      *
      * @param type the standard name of the certificate type.
      * See the CertificateFactory section in the <a href=
-     * "{@docRoot}openjdk-redirect.html?v=8&path=/technotes/guides/security/StandardNames.html#CertificateFactory">
-     * Java Cryptography Architecture Standard Algorithm Name Documentation</a>
+     * "{@docRoot}/../specs/security/standard-names.html#certificatefactory-types">
+     * Java Security Standard Algorithm Names Specification</a>
      * for information about standard certificate types.
      */
     protected Certificate(String type) {
@@ -113,6 +114,7 @@ public abstract class Certificate implements java.io.Serializable {
             byte[] thisCert = X509CertImpl.getEncodedInternal(this);
             byte[] otherCert = X509CertImpl.getEncodedInternal((Certificate)other);
 
+            // J2ObjC changed: arrays should be compared with Arrays.equals
             return Arrays.equals(thisCert, otherCert);
         } catch (CertificateException e) {
             return false;
@@ -248,9 +250,7 @@ public abstract class Certificate implements java.io.Serializable {
          * Construct the alternate Certificate class with the Certificate
          * type and Certificate encoding bytes.
          *
-         * <p>
-         *
-         * @param type the standard name of the Certificate type. <p>
+         * @param type the standard name of the Certificate type.
          *
          * @param data the Certificate data.
          */
@@ -261,8 +261,6 @@ public abstract class Certificate implements java.io.Serializable {
 
         /**
          * Resolve the Certificate Object.
-         *
-         * <p>
          *
          * @return the resolved Certificate Object
          *

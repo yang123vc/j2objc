@@ -32,9 +32,8 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/compiler/j2objc/j2objc_generator.h>
-
 #include <google/protobuf/compiler/j2objc/j2objc_file.h>
+#include <google/protobuf/compiler/j2objc/j2objc_generator.h>
 #include <google/protobuf/compiler/j2objc/j2objc_helpers.h>
 
 namespace google {
@@ -42,28 +41,41 @@ namespace protobuf {
 namespace compiler {
 namespace j2objc {
 
-J2ObjCGenerator::J2ObjCGenerator() {}
-J2ObjCGenerator::~J2ObjCGenerator() {}
+J2ObjCGenerator::J2ObjCGenerator() = default;
+J2ObjCGenerator::~J2ObjCGenerator() = default;
 
 bool J2ObjCGenerator::Generate(const FileDescriptor* file,
-                             const string& parameter,
-                             GeneratorContext* context,
-                             string* error) const {
+                               const std::string& parameter,
+                               GeneratorContext* context,
+                               std::string* error) const {
   // -----------------------------------------------------------------
   // parse generator options
 
-  std::vector<std::pair<string, string> > options;
+  std::vector<std::pair<std::string, std::string> > options;
   ParseGeneratorParameter(parameter, &options);
 
   bool generate_class_mappings = false;
+  bool enforce_lite = false;
 
   for (int i = 0; i < options.size(); i++) {
     if (options[i].first == "prefixes") {
       ParsePrefixFile(options[i].second);
+    } else if (options[i].first == "global_prefix") {
+      SetGlobalPrefix(options[i].second);
+    } else if (options[i].first == "global_postfix") {
+      SetGlobalPostfix(options[i].second);
+    } else if (options[i].first == "file_sub_extension") {
+      SetFileSubExtension(options[i].second);
     } else if (options[i].first == "file_dir_mapping") {
       GenerateFileDirMapping();
     } else if (options[i].first == "generate_class_mappings") {
       generate_class_mappings = true;
+    } else if (options[i].first == "lite") {
+      // Note: Java Lite does not guarantee API/ABI stability. We may choose to
+      // break existing API in order to boost performance / reduce code size.
+      enforce_lite = true;
+    } else if (options[i].first == "experimental_strip_nonfunctional_codegen") {
+      SetStripNonfunctionalCodegen();
     } else {
       *error = "Unknown generator option: " + options[i].first;
       return false;
@@ -72,18 +84,16 @@ bool J2ObjCGenerator::Generate(const FileDescriptor* file,
 
   // -----------------------------------------------------------------
 
-  FileGenerator file_generator(file);
+  FileGenerator file_generator(file, enforce_lite);
   if (!file_generator.Validate(error)) {
     return false;
   }
 
-  std::vector<string> all_files;
-
   // Generate main source and header files.
-  file_generator.Generate(context, &all_files);
+  file_generator.Generate(context);
 
   // Generate sibling files.
-  file_generator.GenerateSiblings(context, &all_files);
+  file_generator.GenerateSiblings(context);
 
   if (IsGenerateFileDirMapping()) {
     file_generator.GenerateHeaderMappings(context);
@@ -91,6 +101,11 @@ bool J2ObjCGenerator::Generate(const FileDescriptor* file,
 
   if (generate_class_mappings) {
     file_generator.GenerateClassMappings(context);
+  }
+
+  if (enforce_lite) {
+    // If true, we should build .meta files and emit @Generated annotations into
+    // generated code.
   }
 
   return true;

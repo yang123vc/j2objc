@@ -22,9 +22,9 @@
  */
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <AssertMacros.h>
 #include <libkern/OSAtomic.h>
-#include <os/lock.h>
 
 #include "JreEmulation.h"
 #include "java/lang/Thread.h"
@@ -41,24 +41,9 @@
   fprintf(stderr, "Assertion failed: %s, %s file: %s, line: %d\n", \
       assertion, (message != 0) ? message : "", file, line);
 
-// OSSpinlock causes deadlock on iOS. we avoid it if possible
-#undef J2OBJC_FAST_LOCK_TYPE
-#undef J2OBJC_FAST_LOCK_LOCK
-#undef J2OBJC_FAST_LOCK_UNLOCK
-
-#if !defined(__IPHONE_10_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_10_0
-#define J2OBJC_FAST_LOCK_TYPE OSSpinLock
-#define J2OBJC_FAST_LOCK_LOCK(LOCK) OSSpinLockLock(LOCK)
-#define J2OBJC_FAST_LOCK_UNLOCK(LOCK) OSSpinLockUnlock(LOCK)
-
-#else
-
-#define J2OBJC_FAST_LOCK_TYPE os_unfair_lock_t
-#define J2OBJC_FAST_LOCK_LOCK(LOCK) os_unfair_lock_lock(LOCK)
-#define J2OBJC_FAST_LOCK_UNLOCK(LOCK) os_unfair_lock_unlock(LOCK)
-
-#endif
-
+#define J2OBJC_FAST_LOCK_TYPE atomic_flag
+#define J2OBJC_FAST_LOCK_LOCK(LOCK) do {} while (atomic_flag_test_and_set(LOCK))
+#define J2OBJC_FAST_LOCK_UNLOCK(LOCK) atomic_flag_clear(LOCK)
 
 //
 // Allocate a lock only when needed.  Since few locks are needed at any point
@@ -104,10 +89,10 @@ typedef struct SyncCache {
     SyncCacheItem list[0];
 } SyncCache;
 
-typedef struct {
+typedef struct  __attribute__((aligned(64))){
     J2OBJC_FAST_LOCK_TYPE lock;
     SyncData *data;
-} SyncList __attribute__((aligned(64)));
+} SyncList;
 // aligned to put locks on separate cache lines
 
 // Use multiple parallel lists to decrease contention among unrelated objects.
@@ -176,6 +161,7 @@ static SyncCache *fetch_cache(BOOL create)
 }
 
 
+__attribute__((disable_sanitizer_instrumentation))
 static SyncCacheItem* id2SyncCacheItem(id object, enum usage why)
 {
     J2OBJC_FAST_LOCK_TYPE *lockp = &LOCK_FOR_OBJ(object);

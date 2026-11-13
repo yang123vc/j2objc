@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -51,10 +51,14 @@ def Main():
   module_info = open(args.output, "w")
   module_info.write("module {} {{\n".format(args.name))
   for subdir, _, files in os.walk(root):
-    if any(f.endswith(".class") for f in files):
+    if any(
+        f.endswith(".class")
+        for f in files
+        if not f.endswith("package-info.class")):
       package = subdir[len(root) + 1:]  # "+ 1" to remove the "/"
       package = package.replace("/", ".")
-      module_info.write("  exports {};\n".format(package))
+      if package:
+        module_info.write("  exports {};\n".format(package))
   module_info.write("}\n")
   module_info.close()
 

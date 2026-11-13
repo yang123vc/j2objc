@@ -23,7 +23,6 @@ import com.google.devtools.j2objc.ast.SwitchStatement;
 import com.google.devtools.j2objc.ast.TreeUtil;
 import com.google.devtools.j2objc.ast.TypeDeclaration;
 import com.google.devtools.j2objc.ast.VariableDeclarationStatement;
-
 import java.io.IOException;
 import java.util.List;
 
@@ -35,35 +34,69 @@ import java.util.List;
 public class SwitchRewriterTest extends GenerationTest {
 
   public void testVariableDeclarationsInSwitchStatement() throws IOException {
-    String translation = translateSourceFile(
-      "public class A { public void doSomething(int i) { switch (i) { "
-      + "case 1: int j = i * 2; log(j); break; "
-      + "case 2: log(i); break; "
-      + "case 3: log(i); int k = i, l = 42; break; }}"
-      + "private void log(int i) {}}",
-      "A", "A.m");
-    assertTranslation(translation, "jint j;");
-    assertTranslation(translation, "jint k;");
-    assertTranslation(translation, "jint l;");
-    assertTranslation(translation, "case 1:");
-    assertTrue(translation.indexOf("jint j;") < translation.indexOf("case 1:"));
-    assertTrue(translation.indexOf("jint k;") < translation.indexOf("case 1:"));
-    assertTrue(translation.indexOf("jint l;") < translation.indexOf("case 1:"));
-    assertTrue(translation.indexOf("jint j;") < translation.indexOf("jint k;"));
-    assertTrue(translation.indexOf("jint k;") < translation.indexOf("jint l;"));
-    assertTranslation(translation, "j = i * 2;");
-    assertTranslation(translation, "k = i;");
-    assertTranslation(translation, "l = 42;");
+    String translation =
+        translateSourceFile(
+            """
+            public class A {
+              public void doSomething(int i) {
+                switch (i) {
+                  case 1:
+                    int j = i * 2;
+                    log(j);
+                    break;
+                  case 2:
+                    log(i);
+                    break;
+                  case 3:
+                    log(i);
+                    int k = i, l = 42;
+                    break;
+                }
+              }
+              private void log(int i) {}
+            }
+            """,
+            "A",
+            "A.m");
+    assertInTranslation(translation, "int32_t j;");
+    assertInTranslation(translation, "int32_t k;");
+    assertInTranslation(translation, "int32_t l;");
+    assertInTranslation(translation, "case 1:");
+    assertTrue(translation.indexOf("int32_t j;") < translation.indexOf("case 1:"));
+    assertTrue(translation.indexOf("int32_t k;") < translation.indexOf("case 1:"));
+    assertTrue(translation.indexOf("int32_t l;") < translation.indexOf("case 1:"));
+    assertTrue(translation.indexOf("int32_t j;") < translation.indexOf("int32_t k;"));
+    assertTrue(translation.indexOf("int32_t k;") < translation.indexOf("int32_t l;"));
+    assertInTranslation(translation, "j = JreIntTimes(i, 2);");
+    assertInTranslation(translation, "k = i;");
+    assertInTranslation(translation, "l = 42;");
     assertTrue(translation.indexOf("k = i") < translation.indexOf("l = 42"));
   }
 
   public void testVariableDeclarationsInSwitchStatement2() throws IOException {
-    CompilationUnit unit = translateType("A",
-        "public class A { public void doSomething(int i) { switch (i) { "
-        + "case 1: int j = i * 2; log(j); break; "
-        + "case 2: log(i); break; "
-        + "case 3: log(i); int k = i, l = 42; break; }}"
-        + "private void log(int i) {}}");
+    CompilationUnit unit =
+        translateType(
+            "A",
+            """
+            public class A {
+              public void doSomething(int i) {
+                switch (i) {
+                  case 1:
+                    int j = i * 2;
+                    log(j);
+                    break;
+                  case 2:
+                    log(i);
+                    break;
+                  case 3:
+                    log(i);
+                    int k = i, l = 42;
+                    break;
+                }
+              }
+              private void log(int i) {}
+            }
+            """);
     TypeDeclaration testType = (TypeDeclaration) unit.getTypes().get(0);
     // First MethodDeclaration is the implicit default constructor.
     MethodDeclaration method = TreeUtil.getMethodDeclarationsList(testType).get(1);
@@ -79,39 +112,125 @@ public class SwitchRewriterTest extends GenerationTest {
   }
 
   public void testMultipleSwitchVariables() throws IOException {
-    String translation = translateSourceFile(
-      "public class A { public void doSomething(int n) { switch (n) { "
-      + "case 1: int i; int j = 2; }}"
-      + "private void log(int i) {}}",
-      "A", "A.m");
-    int index = translation.indexOf("jint i;");
-    assertTrue(index >= 0 && index < translation.indexOf("switch"));
-    index = translation.indexOf("jint j;");
-    assertTrue(index >= 0 && index < translation.indexOf("switch"));
-    assertOccurrences(translation, "jint i;", 1);
-    assertFalse(translation.contains("jint j = 2;"));
+    String translation =
+        translateSourceFile(
+            """
+            public class A {
+              public void doSomething(int n) {
+                switch (n) {
+                  case 1:
+                    int i;
+                    int j = 2;
+                }
+              }
+              private void log(int i) {}
+            }
+            """,
+            "A",
+            "A.m");
+    int index = translation.indexOf("int32_t i;");
+    assertTrue(index >= 0 && index < translation.indexOf("switch (n)"));
+    index = translation.indexOf("int32_t j;");
+    assertTrue(index >= 0 && index < translation.indexOf("switch (n)"));
+    assertOccurrences(translation, "int32_t i;", 1);
+    assertFalse(translation.contains("int32_t j = 2;"));
   }
 
   public void testEnumConstantsInSwitchStatement() throws IOException {
-    String translation = translateSourceFile(
-        "public class A { static enum EnumType { ONE, TWO }"
-        + "public static void doSomething(EnumType e) {"
-        + " switch (e) { case ONE: break; case TWO: break; }}}",
-        "A", "A.m");
-    assertTranslation(translation, "switch ([e ordinal]) {");
-    assertTranslation(translation, "case A_EnumType_Enum_ONE:");
+    String translation =
+        translateSourceFile(
+            """
+            public class A {
+              static enum EnumType {
+                ONE,
+                TWO
+              }
+              public static void doSomething(EnumType e) {
+                switch (e) {
+                  case ONE:
+                    break;
+                  case TWO:
+                    break;
+                }
+              }
+            }
+            """,
+            "A",
+            "A.m");
+    assertInTranslation(translation, "A_EnumType *tmp = nil_chk(e);");
+    assertInTranslation(translation, "switch ([tmp ordinal]) {");
+    assertInTranslation(translation, "case A_EnumType_Enum_ONE:");
+  }
+
+  public void testEnumSwitchWithNull() throws IOException {
+    String translation =
+        translateSourceFile(
+            """
+            public class A {
+              enum Foo { A, B }
+              public Foo testOnlyNull(Foo someFoo) {
+                switch (someFoo) {
+                  case null -> { return null; }
+                  default -> { return someFoo; }
+                }
+              }
+              public Foo testNullAndConstant(Foo someFoo) {
+                switch (someFoo) {
+                  case null -> { return null; }
+                  case A -> { return Foo.B; }
+                  default -> { return someFoo; }
+                }
+              }
+              public Foo testMethodCallWithNull() {
+                switch (getFoo()) {
+                  case null -> { return null; }
+                  default -> { return getFoo(); }
+                }
+              }
+              public int testSwitchExpressionWithNull(Foo someFoo) {
+                return switch (someFoo) {
+                  case null -> 0;
+                  case A -> 1;
+                  default -> 2;
+                };
+              }
+              public int testSwitchExpressionMethodCallWithNull() {
+                return switch (getFoo()) {
+                  case null -> 0;
+                  default -> 1;
+                };
+              }
+              private Foo getFoo() { return Foo.A; }
+            }
+            """,
+            "A",
+            "A.m");
+    assertInTranslation(translation, "switch ((someFoo == nil) ? -1 : [someFoo ordinal]) {");
+    assertInTranslation(translation, "case -1:");
+    assertInTranslation(translation, "switch ((tmp == nil) ? -1 : [tmp ordinal]) {");
   }
 
   public void testPrimitiveConstantInSwitchCase() throws IOException {
-    String translation = translateSourceFile(
-        "public class A { public static final char PREFIX = 'p';"
-        + "public boolean doSomething(char c) { switch (c) { "
-        + "case PREFIX: return true; "
-        + "default: return false; }}}",
-        "A", "A.h");
-    assertTranslation(translation, "#define A_PREFIX 'p'");
+    String translation =
+        translateSourceFile(
+            """
+            public class A {
+              public static final char PREFIX = 'p';
+              public boolean doSomething(char c) {
+                switch (c) {
+                  case PREFIX:
+                    return true;
+                  default:
+                    return false;
+                }
+              }
+            }
+            """,
+            "A",
+            "A.h");
+    assertInTranslation(translation, "#define A_PREFIX 'p'");
     translation = getTranslatedFile("A.m");
-    assertTranslation(translation, "case A_PREFIX:");
+    assertInTranslation(translation, "case A_PREFIX:");
   }
 
   // Verify Java 7's switch statements with strings.
@@ -119,35 +238,50 @@ public class SwitchRewriterTest extends GenerationTest {
     addSourceFile("class Foo { static final String TEST = \"test1\"; }", "Foo.java");
     addSourceFile("interface Bar { String TEST = \"test2\"; }", "Bar.java");
     addSourcesToSourcepaths();
-    String translation = translateSourceFile(
-        "public class Test { "
-        + "static final String constant = \"mumble\";"
-        + "int test(String s) { "
-        + "  switch(s) {"
-        + "    case \"foo\": return 42;"
-        + "    case \"bar\": return 666;"
-        + "    case constant: return -1;"
-        + "    case Foo.TEST: return -2;"
-        + "    case Bar.TEST: return -3;"
-        + "    default: return -1;"
-        + "  }}}",
-        "Test", "Test.m");
-    assertTranslatedLines(translation,
-        "switch (JreIndexOfStr(s, (id[]){ @\"foo\", "
-            + "@\"bar\", Test_constant, Foo_TEST, Bar_TEST }, 5)) {",
-        "  case 0:",
-        "  return 42;",
-        "  case 1:",
-        "  return 666;",
-        "  case 2:",
-        "  return -1;",
-        "  case 3:",
-        "  return -2;",
-        "  case 4:",
-        "  return -3;",
-        "  default:",
-        "  return -1;",
-        "}");
+    String translation =
+        translateSourceFile(
+            """
+            public class Test {
+              static final String constant = "mumble";
+              int test(String s) {
+                switch (s) {
+                  case "foo":
+                    return 42;
+                  case "bar":
+                    return 666;
+                  case constant:
+                    return -1;
+                  case Foo.TEST:
+                    return -2;
+                  case Bar.TEST:
+                    return -3;
+                  default:
+                    return -1;
+                }
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        NSString *tmp = nil_chk(s);
+        switch (JreIndexOfStr(tmp, (id[]){ @"foo", @"bar", Test_constant, Foo_TEST, Bar_TEST }, 5)) {
+          case 0:
+          return 42;
+          case 1:
+          return 666;
+          case 2:
+          return -1;
+          case 3:
+          return -2;
+          case 4:
+          return -3;
+          default:
+          return -1;
+        }
+        """);
   }
 
   /**
@@ -156,33 +290,527 @@ public class SwitchRewriterTest extends GenerationTest {
    * here, while C does.
    */
   public void testEmptyLastCaseStatement() throws IOException {
-    String translation = translateSourceFile(
-        "public class A {"
-        + "  int test(int i) { "
-        + "    switch (i) { case 1: return 1; case 2: return 2; default: } return i; }}",
-        "A", "A.m");
+    String translation =
+        translateSourceFile(
+            """
+            public class A {
+              int test(int i) {
+                switch (i) {
+                  case 1:
+                    return 1;
+                  case 2:
+                    return 2;
+                  default:
+                }
+                return i;
+              }
+            }
+            """,
+            "A",
+            "A.m");
     assertTranslatedLines(translation, "default:", ";", "}");
   }
 
   public void testLocalFinalPrimitiveCaseValue() throws IOException {
-    String translation = translateSourceFile(
-        "public class Test { char test(int i) { final int ONE = 1, TWO = 2; "
-        + "switch (i) { case ONE: return 'a'; case TWO: return 'b'; default: return 'z'; } } }",
-        "Test", "Test.m");
-    assertTranslatedLines(translation,
-        "switch (i) {",
-        "  case 1:",
-        "  return 'a';",
-        "  case 2:",
-        "  return 'b';",
-        "  default:",
-        "  return 'z';",
-        "}");
+    String translation =
+        translateSourceFile(
+            """
+            public class Test {
+              char test(int i) {
+                final int ONE = 1, TWO = 2;
+                switch (i) {
+                  case ONE:
+                    return 'a';
+                  case TWO:
+                    return 'b';
+                  default:
+                    return 'z';
+                }
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        switch (i) {
+          case 1:
+          return 'a';
+          case 2:
+          return 'b';
+          default:
+          return 'z';
+        }
+        """);
   }
 
   public void testEmptySwitchStatement() throws IOException {
-    String translation = translateSourceFile(
-        "class Test { void test(int i) { switch (i) { } } }", "Test", "Test.m");
+    String translation =
+        translateSourceFile(
+            """
+            class Test {
+              void test(int i) {
+                switch (i) {
+                }
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
     assertTranslatedLines(translation, "switch (i) {", "}");
+  }
+
+  public void testSimpleVoidSwitchNewSyntax() throws IOException {
+    String translation =
+        translateSourceFile(
+            """
+            class Test {
+              void howMany(int k) {
+                switch (k) {
+                  case 1 -> System.out.println("one");
+                  case 2 -> System.out.println("two");
+                  default -> System.out.println("many");
+                }
+                ;
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        switch (k) {
+          case 1:
+          {
+            [(JreLoadStatic(JavaLangSystem, out)) printlnWithNSString:@"one"];
+            break;
+          }
+          case 2:
+          {
+            [(JreLoadStatic(JavaLangSystem, out)) printlnWithNSString:@"two"];
+            break;
+          }
+          default:
+          {
+            [(JreLoadStatic(JavaLangSystem, out)) printlnWithNSString:@"many"];
+            break;
+          }
+        }
+        """);
+  }
+
+  public void testSimpleSwitchExpression() throws IOException {
+    // Snippet from Guava's com.google.common.base.Joiner.
+    String translation =
+        translateSourceFile(
+            """
+            class Test {
+              private Object first;
+              private Object second;
+              private Object[] rest;
+              public Object get(int index) {
+                return switch (index) {
+                  case 0 -> first;
+                  case 1 -> second;
+                  default -> rest[index - 2];
+                };
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        return ^ id (){
+          switch (index) {
+            case 0:
+            return first_;
+            case 1:
+            return second_;
+            default:
+            return IOSObjectArray_Get(rest_, JreIntMinus(index, 2));
+          }
+        }();
+        """);
+  }
+
+  public void testMultipleCasesSwitchExpression() throws IOException {
+    // Snippet from Guava's com.google.common.base.CharMatcher.
+    String translation =
+        translateSourceFile(
+            """
+            class Test {
+              public boolean matches(char c) {
+                return switch (c) {
+                  case '\\t',
+                    '\\n',
+                    '\\013',
+                    '\\f',
+                    '\\r',
+                    ' ',
+                    '\\u0085',
+                    '\\u1680',
+                    '\\u2028',
+                    '\\u2029',
+                    '\\u205f',
+                    '\\u3000' ->
+                    true;
+                  case '\\u2007' -> false;
+                  default -> c >= '\\u2000' && c <= '\\u200a';
+                };
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        - (bool)matchesWithChar:(unichar)c {
+          return ^ bool (){
+            switch (c) {
+              case 0x0009:
+              case 0x000a:
+              case 0x000b:
+              case 0x000c:
+              case 0x000d:
+              case ' ':
+              case 0x0085:
+              case 0x1680:
+              case 0x2028:
+              case 0x2029:
+              case 0x205f:
+              case 0x3000:
+              return true;
+              case 0x2007:
+              return false;
+              default:
+              return (c >= 0x2000) && (c <= 0x200a);
+            }
+          }();
+        }
+        """);
+  }
+
+  public void testEnumSwitchExpressionCase() throws IOException {
+    // Snippet from Guava's com.google.common.collect.AbstractIterator.
+    String translation =
+        translateSourceFile(
+            """
+            abstract class Test<T> {
+              private State state = State.NOT_READY;
+              private enum State {
+                READY,
+                NOT_READY,
+                DONE,
+              }
+              private T next;
+              protected abstract T computeNext();
+              protected final T endOfData() {
+                state = State.DONE;
+                return null;
+              }
+              public final boolean hasNext() {
+                switch (state) {
+                  case DONE -> {
+                    return false;
+                  }
+                  case READY -> {
+                    return true;
+                  }
+                  default -> {}
+                }
+                return tryToComputeNext();
+              }
+              private boolean tryToComputeNext() {
+                next = computeNext();
+                if (state != State.DONE) {
+                  state = State.READY;
+                  return true;
+                }
+                return false;
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        - (bool)hasNext {
+          {
+            Test_State *tmp = nil_chk(state_);
+            switch ([tmp ordinal]) {
+              case Test_State_Enum_DONE:
+              {
+                return false;
+              }
+              case Test_State_Enum_READY:
+              {
+                return true;
+              }
+              default:
+              {
+                break;
+              }
+            }
+          }
+          return Test_tryToComputeNext(self);
+        }
+        """);
+  }
+
+  public void testYieldInCaseBlock() throws IOException {
+    // Snippet from Guava's com.google.common.math.LongMath.
+    String translation =
+        translateSourceFile(
+            """
+            class Test<T> {
+              static void checkNoOverflow(boolean condition, String methodName, long a, long b) {}
+              public static long checkedPow(long b, int k) {
+                return switch ((int) b) {
+                  case 2 -> {
+                    checkNoOverflow(k < Long.SIZE - 1, "checkedPow", b, k);
+                    yield 1L << k;
+                  }
+                  default -> throw new AssertionError();
+                };
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        return ^ int64_t (){
+          {
+            int32_t tmp = (int32_t) b;
+            switch (tmp) {
+              case 2:
+              {
+                Test_checkNoOverflowWithBoolean_withNSString_withLong_withLong_(k < JreIntMinus(JavaLangLong_SIZE, 1), @"checkedPow", b, k);
+                return JreLShift64(1LL, k);
+              }
+              default:
+              @throw create_JavaLangAssertionError_init();
+            }
+          }
+        }();
+        """);
+  }
+
+  public void testEnumConstAsSwitchExpression() throws IOException {
+    // Snippet from Guava's com.google.common.math.ToDoubleRounder.
+    String translation =
+        translateSourceFile(
+            """
+            import java.math.RoundingMode;
+            class Test<T> {
+              final double roundToDouble(Double x, RoundingMode mode) {
+                if (Double.isInfinite(x)) {
+                  switch (mode) {
+                    case DOWN:
+                      return Double.MAX_VALUE;
+                    default:
+                      return x;
+                  }
+                }
+                return Double.MAX_VALUE;
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        JavaMathRoundingMode *tmp = nil_chk(mode);
+        switch ([tmp ordinal]) {
+          case JavaMathRoundingMode_Enum_DOWN:
+            return JavaLangDouble_MAX_VALUE;
+          default:
+            return [x doubleValue];
+        }
+        """);
+  }
+
+  public void testSwitchExpressionReturnForAllEnumPaths() throws IOException {
+    // Snippet from Guava's com.google.common.base.Stopwatch.
+    // Verifies that a switch using an enum can have all paths handled without a default case.
+    String translation =
+        translateSourceFile(
+            """
+            import java.util.concurrent.TimeUnit;
+            class Test<T> {
+              static String abbreviate(TimeUnit unit) {
+                return switch (unit) {
+                  case NANOSECONDS -> "ns";
+                  case MICROSECONDS -> "\\u03bcs";
+                  case MILLISECONDS -> "ms";
+                  case SECONDS -> "s";
+                  case MINUTES -> "min";
+                  case HOURS -> "h";
+                  case DAYS -> "d";
+                };
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        return ^ NSString * (){
+          {
+            JavaUtilConcurrentTimeUnit *tmp = nil_chk(unit);
+            switch ([tmp ordinal]) {
+              case JavaUtilConcurrentTimeUnit_Enum_NANOSECONDS:
+              return @"ns";
+              case JavaUtilConcurrentTimeUnit_Enum_MICROSECONDS:
+              return @"\\u03bcs";
+              case JavaUtilConcurrentTimeUnit_Enum_MILLISECONDS:
+              return @"ms";
+              case JavaUtilConcurrentTimeUnit_Enum_SECONDS:
+              return @"s";
+              case JavaUtilConcurrentTimeUnit_Enum_MINUTES:
+              return @"min";
+              case JavaUtilConcurrentTimeUnit_Enum_HOURS:
+              return @"h";
+              case JavaUtilConcurrentTimeUnit_Enum_DAYS:
+              return @"d";
+              default:
+              __builtin_unreachable();
+            }
+          }
+        }();
+        """);
+  }
+
+  public void testSavedSwitchExpression() throws IOException {
+    String translation =
+        translateSourceFile(
+            """
+            class Test {
+              String test(int choice) {
+                String foo = "foo";
+                String result = switch (choice) {
+                  case 1 -> null;
+                  case 2 -> "Hello";
+                  default -> {
+                    yield "World";
+                  }
+                };
+                return result;
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        NSString *result = ^ NSString * (){
+          switch (choice) {
+            case 1:
+            return nil;
+            case 2:
+            return @"Hello";
+            default:
+            {
+              return @"World";
+            }
+          }
+        }();
+        """);
+  }
+
+  public void testStringSwitchNewSyntax() throws IOException {
+    // Snippet from Guava's com.google.common.io.Files.
+    String translation =
+        translateSourceFile(
+            """
+            import java.util.*;
+            class Test {
+              String simplifyPath(String pathname) {
+                String[] components = pathname.split("/");
+                List<String> path = new ArrayList<>();
+                for (String component : components) {
+                  switch (component) {
+                    case "." -> {
+                      continue;
+                    }
+                    case ".." -> {
+                      path.add("..");
+                    }
+                    default -> path.add(component);
+                  }
+                }
+                return String.join("/", path);
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        NSString *tmp = nil_chk(component);
+        switch (JreIndexOfStr(tmp, (id[]){ @".", @".." }, 2)) {
+          case 0:
+          {
+            continue;
+            break;
+          }
+          case 1:
+          {
+            [path addWithId:@".."];
+            break;
+          }
+          default:
+          {
+            [path addWithId:component];
+            break;
+          }
+        }
+        """);
+  }
+
+  public void testSwitchExpressionCaseConstantExpression() throws IOException {
+    String translation =
+        translateSourceFile(
+            """
+            class Test {
+              static final int PLACES = 1 << 1;
+              public Object get(int index) {
+                return switch (index) {
+                  case 2 + 1 -> null;
+                  case 10 >> PLACES -> null;
+                  default -> null;
+                };
+              }
+            }
+            """,
+            "Test",
+            "Test.m");
+    assertTranslatedLines(
+        translation,
+        """
+        - (id)getWithInt:(int32_t)index {
+          return ^ id (){
+            switch (index) {
+              case 3:
+              return nil;
+              case 2:
+              return nil;
+              default:
+              return nil;
+            }
+          }();
+        }
+        """);
   }
 }

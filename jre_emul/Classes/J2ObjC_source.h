@@ -28,19 +28,17 @@
 #import "jni.h"
 #import "objc/runtime.h"
 
-#pragma clang system_header
+#import <math.h>
 
 // "I" is defined in complex.h, which results in errors if that file is also
 // included.
 #pragma push_macro("I")
 #undef I
 
-__attribute__ ((unused)) static inline id cast_chk(id __unsafe_unretained p, Class clazz) {
-#if !defined(J2OBJC_DISABLE_CAST_CHECKS)
+__attribute__((unused)) static inline id cast_chk(id __unsafe_unretained p, Class clazz) {
   if (__builtin_expect(p && ![p isKindOfClass:clazz], 0)) {
     JreThrowClassCastException(p, clazz);
   }
-#endif
   return p;
 }
 
@@ -48,18 +46,19 @@ __attribute__ ((unused)) static inline id cast_chk(id __unsafe_unretained p, Cla
 // parameter. This check is necessary for interface and array types and is
 // faster than a conformsToProtocol check for interfaces.
 __attribute__((always_inline)) inline id cast_check(id __unsafe_unretained p, IOSClass *cls) {
-#if !defined(J2OBJC_DISABLE_CAST_CHECKS)
   if (__builtin_expect(p && ![cls isInstance:p], 0)) {
     JreThrowClassCastExceptionWithIOSClass(p, cls);
   }
-#endif
   return p;
 }
 
 FOUNDATION_EXPORT void JreThrowAssertionError(id __unsafe_unretained msg);
 
 #ifndef NS_BLOCK_ASSERTIONS
-#define JreAssert(cond, msg) do { if (!(cond)) JreThrowAssertionError(msg); } while(0)
+#define JreAssert(cond, msg)                  \
+  do {                                        \
+    if (!(cond)) JreThrowAssertionError(msg); \
+  } while (0)
 #else
 #define JreAssert(cond, msg)
 #endif
@@ -85,16 +84,16 @@ __attribute__((always_inline)) inline void JreCheckFinalize(id self, Class cls) 
  * name mangling pattern.
  */
 typedef struct J2ObjcNameMapping {
-  const char * const java_name;
-  const char * const ios_name;
+  const char *const java_name;
+  const char *const ios_name;
 } J2ObjcNameMapping;
 
 /*!
  * Defines a mapping between Java and iOS names, using a custom data segment.
  */
-#define J2OBJC_NAME_MAPPING(CLASS, JAVANAME, IOSNAME) \
-  static J2ObjcNameMapping CLASS##_mapping __attribute__((used,\
-  section("__DATA,__j2objc_aliases"))) = { JAVANAME, IOSNAME };
+#define J2OBJC_NAME_MAPPING(CLASS, JAVANAME, IOSNAME)      \
+  static J2ObjcNameMapping CLASS##_mapping __attribute__(( \
+      used, no_sanitize("address"), section("__DATA,__j2objc_aliases"))) = {JAVANAME, IOSNAME};
 
 /*!
  * Defines a data element that corresponds to a Java resource file. These are
@@ -102,10 +101,10 @@ typedef struct J2ObjcNameMapping {
  * of full_name, used to find a named resource more quickly.
  */
 typedef struct J2ObjcResourceDefinition {
-  const char * const full_name;
-  const jbyte * const data;
-  const jint length;
-  const jint name_hash;
+  const char *const full_name;
+  const int8_t *const data;
+  const int32_t length;
+  const int32_t name_hash;
 } J2ObjcResourceDefinition;
 
 // Preprocessor trick to add quotes to a macro arg:
@@ -117,12 +116,13 @@ typedef struct J2ObjcResourceDefinition {
  * Defines a data resource using a custom data segment. The data segment name length cannot
  * exceed 16 characters.
  */
-#define J2OBJC_RESOURCE(BUF, LEN, HASH) \
-  static J2ObjcResourceDefinition BUF##_resource __attribute__((used,\
-  section("__DATA,__j2objcresource"))) = { QUOTE(BUF), BUF, LEN, HASH };
+#define J2OBJC_RESOURCE(BUF, LEN, HASH)                                                     \
+  static J2ObjcResourceDefinition BUF##_resource                                            \
+      __attribute__((used, no_sanitize("address"), section("__DATA,__j2objcresource"))) = { \
+          QUOTE(BUF), BUF, LEN, HASH};
 
-FOUNDATION_EXPORT jint JreIndexOfStr(NSString *str, NSString **values, jint size);
-FOUNDATION_EXPORT NSString *JreEnumConstantName(IOSClass *enumClass, jint ordinal);
+FOUNDATION_EXPORT int32_t JreIndexOfStr(NSString *str, NSString **values, int32_t size);
+FOUNDATION_EXPORT NSString *JreEnumConstantName(IOSClass *enumClass, int32_t ordinal);
 
 /*!
  * Macros that simplify the syntax for loading of static fields.
@@ -161,202 +161,379 @@ FOUNDATION_EXPORT NSString *JreEnumConstantName(IOSClass *enumClass, jint ordina
  */
 #if __has_feature(objc_arc)
 #define J2OBJC_NEW_IMPL(CLASS, NAME, ...) \
-  CLASS *self = [CLASS alloc]; \
-  CLASS##_##NAME(self, ##__VA_ARGS__); \
+  CLASS *self = [CLASS alloc];            \
+  CLASS##_##NAME(self, ##__VA_ARGS__);    \
   return self;
-#define J2OBJC_CREATE_IMPL(CLASS, NAME, ...) \
-  return new_##CLASS##_##NAME(__VA_ARGS__);
+#define J2OBJC_CREATE_IMPL(CLASS, NAME, ...) return new_##CLASS##_##NAME(__VA_ARGS__);
 #else
-#define J2OBJC_NEW_IMPL(CLASS, NAME, ...) \
-  CLASS *self = [CLASS alloc]; \
-  bool needsRelease = true; \
-  @try { \
-    CLASS##_##NAME(self, ##__VA_ARGS__); \
-    needsRelease = false; \
-  } @finally { \
+#define J2OBJC_NEW_IMPL(CLASS, NAME, ...)    \
+  CLASS *self = [CLASS alloc];               \
+  bool needsRelease = true;                  \
+  @try {                                     \
+    CLASS##_##NAME(self, ##__VA_ARGS__);     \
+    needsRelease = false;                    \
+  } @finally {                               \
     if (__builtin_expect(needsRelease, 0)) { \
-      [self autorelease]; \
-    } \
-  } \
+      [self autorelease];                    \
+    }                                        \
+  }                                          \
   return self;
 #define J2OBJC_CREATE_IMPL(CLASS, NAME, ...) \
   CLASS *self = [[CLASS alloc] autorelease]; \
-  CLASS##_##NAME(self, ##__VA_ARGS__); \
+  CLASS##_##NAME(self, ##__VA_ARGS__);       \
   return self;
 #endif
 
 #define J2OBJC_IGNORE_DESIGNATED_BEGIN \
-  _Pragma("clang diagnostic push") \
-  _Pragma("clang diagnostic ignored \"-Wobjc-designated-initializers\"")
-#define J2OBJC_IGNORE_DESIGNATED_END \
-  _Pragma("clang diagnostic pop")
+  _Pragma("clang diagnostic push")     \
+      _Pragma("clang diagnostic ignored \"-Wobjc-designated-initializers\"")
+#define J2OBJC_IGNORE_DESIGNATED_END _Pragma("clang diagnostic pop")
 
 /*!
- * Returns correct result when casting a double to an integral type. In C, a
- * float >= Integer.MAX_VALUE (allowing for rounding) returns 0x80000000,
- * while Java requires 0x7FFFFFFF.  A double >= Long.MAX_VALUE returns
- * 0x8000000000000000L, while Java requires 0x7FFFFFFFFFFFFFFFL. Also in C, a
- * floating point NaN value casts to the equivalent MIN_VALUE while Java
- * requires that NaN casts to 0. (JLS 5.1.3)
+ * Returns correct result when casting a double to an integral type. According to the C standard
+ * casting a double to an integral type is undefined behavior when the double is out of range
+ * of the integral type or is NaN.
+ *
+ * Java expectations (from JLS 5.1.3):
+ *   - NaN -> 0
+ *   - Zero -> 0
+ *   - Positive overflow -> {Integer|Long}.MAX_VALUE  aka {0x7FFFFFFF|0x7FFFFFFFFFFFFFFFLL}
+ *   - Negative overflow -> {Integer|Long}.MIN_VALUE) aka {0x80000000|0x8000000000000000LL)
+ *   - Otherwise, cast to the integral type.
+ *
+ * For arm64 (FCVTZS instruction):
+ *   - Case NaN:
+ *     - ARM64 yields tmp = 0.
+ *   - Case Zero:
+ *     - ARM64 yields tmp = 0.
+ *   - Case Positive Overflow:
+ *     - ARM64 yields tmp = 0x7FFFFFFF.
+ *   - Case Negative Overflow:
+ *     - ARM64 yields tmp = 0x80000000.
+ * https://developer.arm.com/documentation/dui0801/h/A64-Floating-point-Instructions/FCVTZS--scalar--integer-
+ * https://developer.arm.com/documentation/ddi0487/mb/-Part-J-Architectural-Pseudocode/-Chapter-J1-A-profile-Architecture-Pseudocode/-J1-4-Shared-pseudocode/-J1-4-357-FPToFixed?lang=en#asl_func_fptofixed_7
+ * https://developer.arm.com/documentation/ddi0487/mb/-Part-J-Architectural-Pseudocode/-Chapter-J1-A-profile-Architecture-Pseudocode/-J1-4-Shared-pseudocode/-J1-4-362-FPUnpackBase?lang=en#asl_func_fpunpackbase_4
+ * https://developer.arm.com/documentation/ddi0487/mb/-Part-J-Architectural-Pseudocode/-Chapter-J1-A-profile-Architecture-Pseudocode/-J1-4-Shared-pseudocode/-J1-4-631-SignedSatQ?lang=en#asl_func_signedsatq_2
+ * For other platforms it's explicitly spelled out in the code.
  */
-__attribute__((always_inline))
-__attribute__((no_sanitize("float-cast-overflow")))
-inline jint JreFpToInt(jdouble d) {
-  jint tmp = (jint)d;
-  return tmp == (jint)0x80000000 ? (d != d ? 0 : (d >= 0 ? 0x7FFFFFFF : tmp)) : tmp;
+__attribute__((always_inline)) __attribute__((no_sanitize("float-cast-overflow"))) inline jint
+JreFpToInt(jdouble d) {
+#if defined(__arm64__) || defined(__aarch64__)
+  // Force the use of the FCVTZS instruction, which matches the Java expectations for floating
+  // point to integer conversion.
+  jint result;
+  // %w0 = 32-bit general purpose register
+  // %d1 = 64-bit floating-point (SIMD) register
+  __asm__("fcvtzs %w0, %d1"
+          : "=r"(result)  // Output: General purpose register
+          : "w"(d)        // Input: Floating-point/SIMD register
+  );
+  return result;
+#else
+  if (__builtin_expect(isnan(d), 0)) {
+    return 0;
+  }
+  // 2147483648.0 (2^31) is the ceiling. Any value >= to this cannot fit in int32.
+  if (__builtin_expect(d >= ((double)INT32_MAX), 0)) {
+    return 0x7FFFFFFF;  // Integer.MAX_VALUE
+  }
+
+  // -2147483648.0 (-2^31) is the floor.
+  if (__builtin_expect(d < ((double)INT32_MIN), 0)) {
+    return 0x80000000;  // Integer.MIN_VALUE
+  }
+
+  // We have proven d is within the legal integral bounds of jint aka int32_t.
+  return (jint)d;
+#endif
 }
-__attribute__((always_inline))
-__attribute__((no_sanitize("float-cast-overflow")))
-inline jlong JreFpToLong(jdouble d) {
-  jlong tmp = (jlong)d;
-  return tmp == (jlong)0x8000000000000000LL
-      ? (d != d ? 0 : (d >= 0 ? 0x7FFFFFFFFFFFFFFFL : tmp)) : tmp;
+__attribute__((always_inline)) __attribute__((no_sanitize("float-cast-overflow"))) inline jlong
+JreFpToLong(jdouble d) {
+#if defined(__arm64__) || defined(__aarch64__)
+  // Force the use of the FCVTZS instruction, which matches the Java expectations for floating
+  // point to integer conversion.
+  jlong result;
+  // %x0 = 64-bit general purpose register
+  // %d1 = 64-bit floating-point (SIMD) register
+  __asm__("fcvtzs %x0, %d1" : "=r"(result) : "w"(d));
+  return result;
+#else
+  if (__builtin_expect(isnan(d), 0)) {
+    return 0;
+  }
+
+  // 9223372036854775808.0 (2^63) is the ceiling. Any value >= to this cannot fit in int64.
+  if (__builtin_expect(d >= ((double)INT64_MAX), 0)) {
+    return 0x7FFFFFFFFFFFFFFFLL;  // Long.MAX_VALUE
+  }
+
+  // -9223372036854775808.0 (-2^63) is the floor.
+  if (__builtin_expect(d < ((double)INT64_MIN), 0)) {
+    return 0x8000000000000000LL;  // Long.MIN_VALUE
+  }
+
+  // We have proven d is within the legal integral bounds of jlong aka int64_t.
+  return (jlong)d;
+#endif
 }
-__attribute__((always_inline))
-__attribute__((no_sanitize("float-cast-overflow")))
-inline jchar JreFpToChar(jdouble d) {
-  unsigned tmp = (unsigned)d;
-  return tmp > 0xFFFF || (tmp == 0 && d > 0) ? 0xFFFF : (jchar)tmp;
+__attribute__((always_inline)) __attribute__((no_sanitize("float-cast-overflow"))) inline uint16_t
+JreFpToChar(double d) {
+  return (uint16_t)JreFpToInt(d);
+}
+__attribute__((always_inline)) inline int16_t JreFpToShort(double d) {
+  return (int16_t)JreFpToInt(d);
+}
+__attribute__((always_inline)) __attribute__((no_sanitize("float-cast-overflow"))) inline int8_t
+JreFpToByte(double d) {
+  return (int8_t)JreFpToInt(d);
 }
 
-#define ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, OPNAME, OP, PNAME, PTYPE, CAST) \
-  __attribute__((always_inline)) inline TYPE Jre##OPNAME##Assign##NAME##PNAME( \
-      TYPE *pLhs, PTYPE rhs) { \
-    return *pLhs = CAST(*pLhs OP rhs); \
+#define ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, OPNAME, OP, PNAME, PTYPE, CAST)               \
+  __attribute__((always_inline)) inline TYPE Jre##OPNAME##Assign##NAME##PNAME(TYPE *pLhs,  \
+                                                                              PTYPE rhs) { \
+    return *pLhs = CAST(*pLhs OP rhs);                                                     \
   }
-#define ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, OPNAME, OP, PNAME, PTYPE, CAST) \
+#define ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, OPNAME, OP, PNAME, PTYPE, CAST)  \
   __attribute__((always_inline)) inline TYPE Jre##OPNAME##AssignVolatile##NAME##PNAME( \
-      volatile_##TYPE *pLhs, PTYPE rhs) { \
-    TYPE result = CAST(__c11_atomic_load(pLhs, __ATOMIC_SEQ_CST) OP rhs); \
-    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST); \
-    return result; \
+      volatile_##TYPE *pLhs, PTYPE rhs) {                                              \
+    TYPE result = CAST(__c11_atomic_load(pLhs, __ATOMIC_SEQ_CST) OP rhs);              \
+    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST);                                \
+    return result;                                                                     \
   }
-#define MOD_ASSIGN_FP_DEFN(NAME, TYPE, FUNC, PNAME, PTYPE, CAST) \
+#define MOD_ASSIGN_FP_DEFN(NAME, TYPE, FUNC, PNAME, PTYPE, CAST)                                \
   __attribute__((always_inline)) inline TYPE JreModAssign##NAME##PNAME(TYPE *pLhs, PTYPE rhs) { \
-    return *pLhs = CAST(FUNC(*pLhs, rhs)); \
-  } \
-  __attribute__((always_inline)) inline TYPE JreModAssignVolatile##NAME##PNAME( \
-      volatile_##TYPE *pLhs, PTYPE rhs) { \
-    TYPE result = CAST(FUNC(__c11_atomic_load(pLhs, __ATOMIC_SEQ_CST), rhs)); \
-    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST); \
-    return result; \
+    return *pLhs = CAST(FUNC(*pLhs, rhs));                                                      \
+  }                                                                                             \
+  __attribute__((always_inline)) inline TYPE JreModAssignVolatile##NAME##PNAME(                 \
+      volatile_##TYPE *pLhs, PTYPE rhs) {                                                       \
+    TYPE result = CAST(FUNC(__c11_atomic_load(pLhs, __ATOMIC_SEQ_CST), rhs));                   \
+    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST);                                         \
+    return result;                                                                              \
   }
-#define ARITHMETIC_INTEGRAL_OPERATORS_DEFN(NAME, TYPE, PNAME, PTYPE) \
-  ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Plus, +, PNAME, PTYPE, (TYPE)) \
-  ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Minus, -, PNAME, PTYPE, (TYPE)) \
-  ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Times, *, PNAME, PTYPE, (TYPE)) \
+#define ARITHMETIC_INTEGRAL_OPERATORS_DEFN(NAME, TYPE, PNAME, PTYPE)             \
+  /* Plus, Minus and Times are handled by the overflow-safe macros below. */     \
   ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Divide, /, PNAME, PTYPE, (TYPE)) \
   ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Mod, %, PNAME, PTYPE, (TYPE))
-#define ARITHMETIC_FP_OPERATORS_DEFN(NAME, TYPE, PNAME, PTYPE, MODFUNC, CAST) \
-  ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, Plus, +, PNAME, PTYPE, CAST) \
-  ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Plus, +, PNAME, PTYPE, CAST) \
-  ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, Minus, -, PNAME, PTYPE, CAST) \
-  ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Minus, -, PNAME, PTYPE, CAST) \
-  ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, Times, *, PNAME, PTYPE, CAST) \
-  ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Times, *, PNAME, PTYPE, CAST) \
-  ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, Divide, /, PNAME, PTYPE, CAST) \
+#define ARITHMETIC_FP_OPERATORS_DEFN(NAME, TYPE, PNAME, PTYPE, MODFUNC, CAST)  \
+  ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, Plus, +, PNAME, PTYPE, CAST)            \
+  ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Plus, +, PNAME, PTYPE, CAST)   \
+  ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, Minus, -, PNAME, PTYPE, CAST)           \
+  ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Minus, -, PNAME, PTYPE, CAST)  \
+  ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, Times, *, PNAME, PTYPE, CAST)           \
+  ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Times, *, PNAME, PTYPE, CAST)  \
+  ARITHMETIC_OPERATOR_DEFN(NAME, TYPE, Divide, /, PNAME, PTYPE, CAST)          \
   ARITHMETIC_VOLATILE_OPERATOR_DEFN(NAME, TYPE, Divide, /, PNAME, PTYPE, CAST) \
   MOD_ASSIGN_FP_DEFN(NAME, TYPE, MODFUNC, PNAME, PTYPE, CAST)
 
-ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Char, jchar, I, jint)
-ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Char, jchar, J, jlong)
-ARITHMETIC_FP_OPERATORS_DEFN(Char, jchar, F, jfloat, fmodf, JreFpToChar)
-ARITHMETIC_FP_OPERATORS_DEFN(Char, jchar, D, jdouble, fmod, JreFpToChar)
-ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Byte, jbyte, I, jint)
-ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Byte, jbyte, J, jlong)
-ARITHMETIC_FP_OPERATORS_DEFN(Byte, jbyte, F, jfloat, fmodf, JreFpToInt)
-ARITHMETIC_FP_OPERATORS_DEFN(Byte, jbyte, D, jdouble, fmod, JreFpToInt)
-ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Short, jshort, I, jint)
-ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Short, jshort, J, jlong)
-ARITHMETIC_FP_OPERATORS_DEFN(Short, jshort, F, jfloat, fmodf, JreFpToInt)
-ARITHMETIC_FP_OPERATORS_DEFN(Short, jshort, D, jdouble, fmod, JreFpToInt)
-ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Int, jint, I, jint)
-ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Int, jint, J, jlong)
-ARITHMETIC_FP_OPERATORS_DEFN(Int, jint, F, jfloat, fmodf, JreFpToInt)
-ARITHMETIC_FP_OPERATORS_DEFN(Int, jint, D, jdouble, fmod, JreFpToInt)
-ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Long, jlong, J, jlong)
-ARITHMETIC_FP_OPERATORS_DEFN(Long, jlong, F, jfloat, fmodf, JreFpToLong)
-ARITHMETIC_FP_OPERATORS_DEFN(Long, jlong, D, jdouble, fmod, JreFpToLong)
-ARITHMETIC_FP_OPERATORS_DEFN(Float, jfloat, F, jfloat, fmodf, (jfloat))
-ARITHMETIC_FP_OPERATORS_DEFN(Float, jfloat, D, jdouble, fmod, (jfloat))
-ARITHMETIC_FP_OPERATORS_DEFN(Double, jdouble, D, jdouble, fmod, (jdouble))
+ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Char, uint16_t, I, int32_t)
+ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Char, uint16_t, J, int64_t)
+ARITHMETIC_FP_OPERATORS_DEFN(Char, uint16_t, F, float, fmodf, JreFpToChar)
+ARITHMETIC_FP_OPERATORS_DEFN(Char, uint16_t, D, double, fmod, JreFpToChar)
+ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Byte, int8_t, I, int32_t)
+ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Byte, int8_t, J, int64_t)
+ARITHMETIC_FP_OPERATORS_DEFN(Byte, int8_t, F, float, fmodf, JreFpToByte)
+ARITHMETIC_FP_OPERATORS_DEFN(Byte, int8_t, D, double, fmod, JreFpToByte)
+ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Short, int16_t, I, int32_t)
+ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Short, int16_t, J, int64_t)
+ARITHMETIC_FP_OPERATORS_DEFN(Short, int16_t, F, float, fmodf, JreFpToShort)
+ARITHMETIC_FP_OPERATORS_DEFN(Short, int16_t, D, double, fmod, JreFpToShort)
+ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Int, int32_t, I, int32_t)
+ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Int, int32_t, J, int64_t)
+ARITHMETIC_FP_OPERATORS_DEFN(Int, int32_t, F, float, fmodf, JreFpToInt)
+ARITHMETIC_FP_OPERATORS_DEFN(Int, int32_t, D, double, fmod, JreFpToInt)
+ARITHMETIC_INTEGRAL_OPERATORS_DEFN(Long, int64_t, J, int64_t)
+ARITHMETIC_FP_OPERATORS_DEFN(Long, int64_t, F, float, fmodf, JreFpToLong)
+ARITHMETIC_FP_OPERATORS_DEFN(Long, int64_t, D, double, fmod, JreFpToLong)
+ARITHMETIC_FP_OPERATORS_DEFN(Float, float, F, float, fmodf, (float))
+ARITHMETIC_FP_OPERATORS_DEFN(Float, float, D, double, fmod, (float))
+ARITHMETIC_FP_OPERATORS_DEFN(Double, double, D, double, fmod, (double))
 #undef ARITHMETIC_OPERATOR_DEFN
 #undef ARITHMETIC_VOLATILE_OPERATOR_DEFN
 #undef MOD_ASSIGN_FP_DEFN
 #undef ARITHMETIC_INTEGRAL_OPERATORS_DEFN
 #undef ARITHMETIC_FP_OPERATORS_DEFN
 
-#define SHIFT_OPERATORS_DEFN(NAME, TYPE, UTYPE, MASK) \
-  __attribute__((always_inline)) inline TYPE JreLShift##NAME(TYPE lhs, jlong rhs) { \
-    return lhs << (rhs & MASK); \
-  } \
-  __attribute__((always_inline)) inline TYPE JreRShift##NAME(TYPE lhs, jlong rhs) { \
-    return lhs >> (rhs & MASK); \
-  } \
-  __attribute__((always_inline)) inline TYPE JreURShift##NAME(TYPE lhs, jlong rhs) { \
-    return (TYPE) (((UTYPE) lhs) >> (rhs & MASK)); \
+#define SHIFT_OPERATORS_DEFN(NAME, TYPE, UTYPE, MASK)                                  \
+  __attribute__((always_inline)) inline TYPE JreLShift##NAME(TYPE lhs, int64_t rhs) {  \
+    return lhs << (rhs & MASK);                                                        \
+  }                                                                                    \
+  __attribute__((always_inline)) inline TYPE JreRShift##NAME(TYPE lhs, int64_t rhs) {  \
+    return lhs >> (rhs & MASK);                                                        \
+  }                                                                                    \
+  __attribute__((always_inline)) inline TYPE JreURShift##NAME(TYPE lhs, int64_t rhs) { \
+    return (TYPE)(((UTYPE)lhs) >> (rhs & MASK));                                       \
   }
 
-#define SHIFT_ASSIGN_OPERATORS_DEFN(NAME, TYPE, UTYPE, MASK) \
-  __attribute__((always_inline)) inline TYPE JreLShiftAssign##NAME(TYPE *pLhs, jlong rhs) { \
-    return *pLhs = (TYPE) (*pLhs << (rhs & MASK)); \
-  } \
-  __attribute__((always_inline)) inline TYPE JreRShiftAssign##NAME(TYPE *pLhs, jlong rhs) { \
-    return *pLhs = (TYPE) (*pLhs >> (rhs & MASK)); \
-  } \
-  __attribute__((always_inline)) inline TYPE JreURShiftAssign##NAME(TYPE *pLhs, jlong rhs) { \
-    return *pLhs = (TYPE) (((UTYPE) *pLhs) >> (rhs & MASK)); \
-  } \
-  __attribute__((always_inline)) inline TYPE JreLShiftAssignVolatile##NAME( \
-      volatile_##TYPE *pLhs, jlong rhs) { \
-    TYPE result = __c11_atomic_load(pLhs, __ATOMIC_SEQ_CST) << (rhs & MASK); \
-    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST); \
-    return result; \
-  } \
-  __attribute__((always_inline)) inline TYPE JreRShiftAssignVolatile##NAME( \
-      volatile_##TYPE *pLhs, jlong rhs) { \
-    TYPE result = __c11_atomic_load(pLhs, __ATOMIC_SEQ_CST) >> (rhs & MASK); \
-    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST); \
-    return result; \
-  } \
-  __attribute__((always_inline)) inline TYPE JreURShiftAssignVolatile##NAME( \
-      volatile_##TYPE *pLhs, jlong rhs) { \
-    TYPE result = ((UTYPE)__c11_atomic_load(pLhs, __ATOMIC_SEQ_CST)) >> (rhs & MASK); \
-    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST); \
-    return result; \
+#define SHIFT_ASSIGN_OPERATORS_DEFN(NAME, TYPE, UTYPE, MASK)                                       \
+  __attribute__((always_inline)) inline TYPE JreLShiftAssign##NAME(TYPE *pLhs, int64_t rhs) {      \
+    return *pLhs = (TYPE)(*pLhs << (rhs & MASK));                                                  \
+  }                                                                                                \
+  __attribute__((always_inline)) inline TYPE JreRShiftAssign##NAME(TYPE *pLhs, int64_t rhs) {      \
+    return *pLhs = (TYPE)(*pLhs >> (rhs & MASK));                                                  \
+  }                                                                                                \
+  __attribute__((always_inline)) inline TYPE JreURShiftAssign##NAME(TYPE *pLhs, int64_t rhs) {     \
+    return *pLhs = (TYPE)(((UTYPE) * pLhs) >> (rhs & MASK));                                       \
+  }                                                                                                \
+  __attribute__((always_inline)) inline TYPE JreLShiftAssignVolatile##NAME(volatile_##TYPE *pLhs,  \
+                                                                           int64_t rhs) {          \
+    TYPE result = (TYPE)(__c11_atomic_load(pLhs, __ATOMIC_SEQ_CST) << (rhs & MASK));               \
+    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST);                                            \
+    return result;                                                                                 \
+  }                                                                                                \
+  __attribute__((always_inline)) inline TYPE JreRShiftAssignVolatile##NAME(volatile_##TYPE *pLhs,  \
+                                                                           int64_t rhs) {          \
+    TYPE result = __c11_atomic_load(pLhs, __ATOMIC_SEQ_CST) >> (rhs & MASK);                       \
+    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST);                                            \
+    return result;                                                                                 \
+  }                                                                                                \
+  __attribute__((always_inline)) inline TYPE JreURShiftAssignVolatile##NAME(volatile_##TYPE *pLhs, \
+                                                                            int64_t rhs) {         \
+    TYPE result = (TYPE)(((UTYPE)__c11_atomic_load(pLhs, __ATOMIC_SEQ_CST)) >> (rhs & MASK));      \
+    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST);                                            \
+    return result;                                                                                 \
   }
 
 // Shift masks are determined by the JLS spec, section 15.19.
-SHIFT_OPERATORS_DEFN(32, jint, uint32_t, 0x1f)
-SHIFT_OPERATORS_DEFN(64, jlong, uint64_t, 0x3f)
-SHIFT_ASSIGN_OPERATORS_DEFN(Char, jchar, uint32_t, 0x1f)
-SHIFT_ASSIGN_OPERATORS_DEFN(Byte, jbyte, uint32_t, 0x1f)
-SHIFT_ASSIGN_OPERATORS_DEFN(Short, jshort, uint32_t, 0x1f)
-SHIFT_ASSIGN_OPERATORS_DEFN(Int, jint, uint32_t, 0x1f)
-SHIFT_ASSIGN_OPERATORS_DEFN(Long, jlong, uint64_t, 0x3f)
+SHIFT_OPERATORS_DEFN(32, int32_t, uint32_t, 0x1f)
+SHIFT_OPERATORS_DEFN(64, int64_t, uint64_t, 0x3f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Char, uint16_t, uint32_t, 0x1f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Byte, int8_t, uint32_t, 0x1f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Short, int16_t, uint32_t, 0x1f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Int, int32_t, uint32_t, 0x1f)
+SHIFT_ASSIGN_OPERATORS_DEFN(Long, int64_t, uint64_t, 0x3f)
 #undef SHIFT_OPERATORS_DEFN
 #undef SHIFT_ASSIGN_OPERATORS_DEFN
 
-#define BIT_OPERATOR_DEFN(NAME, TYPE, OPNAME, OP) \
-  __attribute__((always_inline)) inline TYPE Bit##OPNAME##AssignVolatile##NAME( \
-      volatile_##TYPE *pLhs, TYPE rhs) { \
-    TYPE result = __c11_atomic_load(pLhs, __ATOMIC_SEQ_CST) OP rhs; \
-    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST); \
-    return result; \
+#define BIT_OPERATOR_DEFN(NAME, TYPE, OPNAME, OP)                                  \
+  __attribute__((always_inline)) inline TYPE JreBit##OPNAME##AssignVolatile##NAME( \
+      volatile_##TYPE *pLhs, TYPE rhs) {                                           \
+    TYPE result = __c11_atomic_load(pLhs, __ATOMIC_SEQ_CST) OP rhs;                \
+    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST);                            \
+    return result;                                                                 \
   }
-#define BIT_OPERATORS_DEFN(NAME, TYPE) \
+#define BIT_OPERATORS_DEFN(NAME, TYPE)  \
   BIT_OPERATOR_DEFN(NAME, TYPE, And, &) \
-  BIT_OPERATOR_DEFN(NAME, TYPE, Or, |) \
+  BIT_OPERATOR_DEFN(NAME, TYPE, Or, |)  \
   BIT_OPERATOR_DEFN(NAME, TYPE, Xor, ^)
 
-BIT_OPERATORS_DEFN(Boolean, jboolean)
-BIT_OPERATORS_DEFN(Char, jchar)
-BIT_OPERATORS_DEFN(Byte, jbyte)
-BIT_OPERATORS_DEFN(Short, jshort)
-BIT_OPERATORS_DEFN(Int, jint)
-BIT_OPERATORS_DEFN(Long, jlong)
+BIT_OPERATORS_DEFN(Boolean, bool)
+BIT_OPERATORS_DEFN(Char, uint16_t)
+BIT_OPERATORS_DEFN(Byte, int8_t)
+BIT_OPERATORS_DEFN(Short, int16_t)
+BIT_OPERATORS_DEFN(Int, int32_t)
+BIT_OPERATORS_DEFN(Long, int64_t)
 #undef BIT_OPERATOR_DEFN
 #undef BIT_OPERATORS_DEFN
+
+#define JRE_HANDLE_DIV_BY_ZERO(NAME, TYPE, OP)                               \
+  __attribute__((always_inline)) inline TYPE Jre##NAME(TYPE op1, TYPE op2) { \
+    if (__builtin_expect(op2 == 0, 0)) {                                     \
+      JreThrowArithmeticExceptionWithNSString(@"/ by zero");                 \
+    }                                                                        \
+    return op1 OP op2;                                                       \
+  }
+
+JRE_HANDLE_DIV_BY_ZERO(IntDiv, int32_t, /);
+JRE_HANDLE_DIV_BY_ZERO(LongDiv, int64_t, /);
+JRE_HANDLE_DIV_BY_ZERO(IntMod, int32_t, %);
+JRE_HANDLE_DIV_BY_ZERO(LongMod, int64_t, %);
+
+// Signed overflow in C is undefined, but unsigned overflow is well defined see
+// {@link} https://en.cppreference.com/cpp/language/operator_arithmetic and
+// {@link} https://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.2.2
+// Support for the +, -, and * operators handling overflow.
+#define JRE_HANDLE_OVERFLOW_INFIX_OPERATION(NAME, TYPENAME, TYPE, UNSIGNED_TYPE, OPERATION) \
+  __attribute__((always_inline)) inline TYPE Jre##TYPENAME##NAME(TYPE a, TYPE b) {          \
+    return (TYPE)((UNSIGNED_TYPE)a)OPERATION((UNSIGNED_TYPE)b);                             \
+  }
+
+#define JRE_HANDLE_OVERFLOW_INFIX_OPERATIONS(NAME, OPERATION)                   \
+  JRE_HANDLE_OVERFLOW_INFIX_OPERATION(NAME, Int, jint, uint32_t, OPERATION)     \
+  JRE_HANDLE_OVERFLOW_INFIX_OPERATION(NAME, Long, jlong, uint64_t, OPERATION)   \
+  JRE_HANDLE_OVERFLOW_INFIX_OPERATION(NAME, Char, jchar, uint16_t, OPERATION)   \
+  JRE_HANDLE_OVERFLOW_INFIX_OPERATION(NAME, Short, jshort, uint16_t, OPERATION) \
+  JRE_HANDLE_OVERFLOW_INFIX_OPERATION(NAME, Byte, jbyte, uint8_t, OPERATION)
+
+JRE_HANDLE_OVERFLOW_INFIX_OPERATIONS(Plus, +)
+JRE_HANDLE_OVERFLOW_INFIX_OPERATIONS(Minus, -)
+JRE_HANDLE_OVERFLOW_INFIX_OPERATIONS(Times, *)
+
+// Support for +=, -=, and *= operators handling overflow.
+#define JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGN(NAME, LHSTYPENAME, RHSTYPENAME, LHSTYPE, RHSTYPE)  \
+  __attribute__((always_inline)) inline LHSTYPE Jre##NAME##Assign##LHSTYPENAME##RHSTYPENAME(   \
+      LHSTYPE *pLhs, RHSTYPE rhs) {                                                            \
+    return *pLhs = (LHSTYPE)Jre##LHSTYPENAME##NAME(*pLhs, (LHSTYPE)rhs);                       \
+  }                                                                                            \
+  __attribute__((always_inline)) inline LHSTYPE                                                \
+  Jre##NAME##AssignVolatile##LHSTYPENAME##RHSTYPENAME(volatile_##LHSTYPE *pLhs, RHSTYPE rhs) { \
+    LHSTYPE lhs = __c11_atomic_load(pLhs, __ATOMIC_SEQ_CST);                                   \
+    LHSTYPE result = (LHSTYPE)Jre##LHSTYPENAME##NAME(lhs, (LHSTYPE)rhs);                       \
+    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST);                                        \
+    return result;                                                                             \
+  }
+
+#define JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS_32_64(NAME, TYPE, JTYPE) \
+  JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGN(NAME, TYPE, I, JTYPE, jint)     \
+  JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGN(NAME, TYPE, J, JTYPE, jlong)
+
+#define JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS(NAME)              \
+  JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS_32_64(NAME, Int, jint)   \
+  JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS_32_64(NAME, Long, jlong) \
+  JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS_32_64(NAME, Char, jchar) \
+  JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS_32_64(NAME, Byte, jbyte) \
+  JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS_32_64(NAME, Short, jshort)
+
+JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS(Plus)
+JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS(Minus)
+JRE_HANDLE_OVERFLOW_COMPOUND_ASSIGNS(Times)
+
+// Support for ++ and -- operators handling overflow.
+#define JRE_HANDLE_OVERFLOW_POSTPREFIX_OPERATOR(TYPENAME, TYPE, OPNAME, OPERATION)              \
+  __attribute__((always_inline)) inline TYPE JrePost##OPNAME##TYPENAME(TYPE *pLhs) {            \
+    TYPE result = *pLhs;                                                                        \
+    *pLhs = (TYPE)Jre##TYPENAME##OPERATION(result, 1);                                          \
+    return result;                                                                              \
+  }                                                                                             \
+  __attribute__((always_inline)) inline TYPE JrePre##OPNAME##TYPENAME(TYPE *pLhs) {             \
+    return *pLhs = (TYPE)Jre##TYPENAME##OPERATION(*pLhs, 1);                                    \
+  }                                                                                             \
+  __attribute__((always_inline)) inline TYPE JrePost##OPNAME##Volatile##TYPENAME(               \
+      volatile_##TYPE *pLhs) {                                                                  \
+    TYPE result = __c11_atomic_load(pLhs, __ATOMIC_SEQ_CST);                                    \
+    __c11_atomic_store(pLhs, (TYPE)Jre##TYPENAME##OPERATION(result, 1), __ATOMIC_SEQ_CST);      \
+    return result;                                                                              \
+  }                                                                                             \
+  __attribute__((always_inline)) inline TYPE JrePre##OPNAME##Volatile##TYPENAME(                \
+      volatile_##TYPE *pLhs) {                                                                  \
+    TYPE result = (TYPE)Jre##TYPENAME##OPERATION(__c11_atomic_load(pLhs, __ATOMIC_SEQ_CST), 1); \
+    __c11_atomic_store(pLhs, result, __ATOMIC_SEQ_CST);                                         \
+    return result;                                                                              \
+  }
+
+#define JRE_HANDLE_OVERFLOW_POSTPREFIX_OPERATORS(TYPENAME, TYPE)     \
+  JRE_HANDLE_OVERFLOW_POSTPREFIX_OPERATOR(TYPENAME, TYPE, Inc, Plus) \
+  JRE_HANDLE_OVERFLOW_POSTPREFIX_OPERATOR(TYPENAME, TYPE, Dec, Minus)
+
+JRE_HANDLE_OVERFLOW_POSTPREFIX_OPERATORS(Int, jint)
+JRE_HANDLE_OVERFLOW_POSTPREFIX_OPERATORS(Long, jlong)
+JRE_HANDLE_OVERFLOW_POSTPREFIX_OPERATORS(Char, jchar)
+JRE_HANDLE_OVERFLOW_POSTPREFIX_OPERATORS(Byte, jbyte)
+JRE_HANDLE_OVERFLOW_POSTPREFIX_OPERATORS(Short, jshort)
+
+// Support for the "==" and "!=" operators. Objective C coalescing of
+// string literals only happens with linked bundles, so the same literal string in
+// an app and an app extention or dynamic library will have different addresses.
+// Support for the "==" and "!=" operators. Objective C coalescing of
+// string literals only happens with linked bundles, so the same literal string in
+// an app and an app extention or dynamic library will have different addresses.
+__attribute__((always_inline)) inline bool JreObjectEqualsEquals(id objA, id objB) {
+  return objA == objB ||
+         ([objA isKindOfClass:[NSString class]] ? [(NSString *)objA isEqual:objB] : false);
+}
+
+__attribute__((always_inline)) inline bool JreStringEqualsEquals(NSString *strA, NSString *strB) {
+  return strA == strB || [strA isEqualToString:strB];
+}
 
 #pragma pop_macro("I")
 

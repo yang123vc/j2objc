@@ -120,29 +120,22 @@ public class TreeUtil {
     return null;
   }
 
-  /**
-   * Returns the first descendant of the given node that is not a ParenthesizedExpression.
-   */
-  public static Expression trimParentheses(Expression node) {
-    while (node instanceof ParenthesizedExpression) {
-      node = ((ParenthesizedExpression) node).getExpression();
-    }
-    return node;
-  }
-
   public static MethodDeclaration getEnclosingMethod(TreeNode node) {
     return getNearestAncestorWithType(MethodDeclaration.class, node);
   }
 
-  private static final ImmutableList<Class<?>> EXECUTABLE_DECLARATION_TYPES =
-      ImmutableList.of(MethodDeclaration.class, FunctionDeclaration.class);
+  private static final ImmutableList<Class<?>> NODES_ENCLOSING_RETURN =
+      ImmutableList.of(
+          MethodDeclaration.class, FunctionDeclaration.class, EmbeddedStatementExpression.class);
 
   public static TypeMirror getOwningReturnType(TreeNode node) {
-    TreeNode enclosingNode = getNearestAncestorWithTypeOneOf(EXECUTABLE_DECLARATION_TYPES, node);
-    if (enclosingNode instanceof MethodDeclaration) {
-      return ((MethodDeclaration) enclosingNode).getExecutableElement().getReturnType();
-    } else if (enclosingNode instanceof FunctionDeclaration) {
-      return ((FunctionDeclaration) enclosingNode).getReturnType().getTypeMirror();
+    TreeNode enclosingNode = getNearestAncestorWithTypeOneOf(NODES_ENCLOSING_RETURN, node);
+    if (enclosingNode instanceof MethodDeclaration methodDeclaration) {
+      return methodDeclaration.getExecutableElement().getReturnType();
+    } else if (enclosingNode instanceof FunctionDeclaration functionDeclaration) {
+      return functionDeclaration.getReturnType().getTypeMirror();
+    } else if (enclosingNode instanceof Expression expression) {
+      return expression.getTypeMirror();
     }
     return null;
   }
@@ -180,16 +173,10 @@ public class TreeUtil {
       public Iterator<VariableDeclarationFragment> iterator() {
         final Iterator<FieldDeclaration> fieldIter = fieldDecls.iterator();
         return new AbstractIterator<VariableDeclarationFragment>() {
-          private Iterator<VariableDeclarationFragment> fragIter;
           @Override protected VariableDeclarationFragment computeNext() {
-            do {
-              if (fragIter != null && fragIter.hasNext()) {
-                return fragIter.next();
-              }
-              if (fieldIter.hasNext()) {
-                fragIter = fieldIter.next().getFragments().iterator();
-              }
-            } while (fieldIter.hasNext() || (fragIter != null && fragIter.hasNext()));
+            while (fieldIter.hasNext()) {
+              return fieldIter.next().getFragment();
+            }
             return endOfData();
           }
         };
@@ -241,7 +228,6 @@ public class TreeUtil {
    * represents a variable. Returns null otherwise.
    */
   public static VariableElement getVariableElement(Expression node) {
-    node = trimParentheses(node);
     switch (node.getKind()) {
       case FIELD_ACCESS:
         return ((FieldAccess) node).getVariableElement();
@@ -315,7 +301,7 @@ public class TreeUtil {
 
   /**
    * Returns the given statement as a list of statements that can be added to.
-   * If node is a Block, then returns it's statement list. If node is the direct
+   * If node is a Block, then returns its statement list. If node is the direct
    * child of a Block, returns the sublist containing node as the only element.
    * Otherwise, creates a new Block node in the place of node and returns its
    * list of statements.
@@ -400,15 +386,7 @@ public class TreeUtil {
     } else if (value instanceof Character) {
       return new CharacterLiteral((Character) value, typeUtil);
     } else if (value instanceof Number) {
-      String token = value.toString();
-      if (value instanceof Long) {
-        token += "L";
-      } else if (value instanceof Float) {
-        token += "F";
-      } else if (value instanceof Double) {
-        token += "D";
-      }
-      return new NumberLiteral((Number) value, typeUtil).setToken(token);
+      return new NumberLiteral((Number) value, typeUtil);
     } else if (value instanceof String) {
       return new StringLiteral((String) value, typeUtil);
     }
@@ -419,5 +397,10 @@ public class TreeUtil {
       AbstractTypeDeclaration node) {
     return Lists.newArrayList(
         Iterables.filter(node.getBodyDeclarations(), AnnotationTypeMemberDeclaration.class));
+  }
+
+  public static boolean isAssignmentLeftHandSide(Expression expression) {
+    TreeNode parent = expression.getParent();
+    return parent instanceof Assignment && ((Assignment) parent).getLeftHandSide() == expression;
   }
 }

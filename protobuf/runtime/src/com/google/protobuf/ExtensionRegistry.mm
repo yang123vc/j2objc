@@ -60,6 +60,14 @@ static CGPExtensionRegistry *CGPExtensionRegistry_EMPTY_;
 - (ComGoogleProtobufExtensionRegistry_ExtensionInfo *)
     findExtensionByNumberWithComGoogleProtobufDescriptors_Descriptor:(CGPDescriptor *)descriptor
     withInt:(jint)fieldId {
+  return [self findImmutableExtensionByNumberWithComGoogleProtobufDescriptors_Descriptor:descriptor
+                                                                                 withInt:fieldId];
+}
+
+- (ComGoogleProtobufExtensionRegistry_ExtensionInfo *)
+    findImmutableExtensionByNumberWithComGoogleProtobufDescriptors_Descriptor:
+        (CGPDescriptor *)descriptor
+    withInt:(jint)fieldId {
   CGPFieldDescriptor *field = CGPExtensionRegistryFind(self, descriptor, fieldId);
   if (field != nil) {
     return [[[CGPExtensionInfo alloc] initWithField:field] autorelease];
@@ -92,14 +100,29 @@ ComGoogleProtobufExtensionRegistry *ComGoogleProtobufExtensionRegistry_getEmptyR
   return CGPExtensionRegistry_EMPTY_;
 }
 
+void ComGoogleProtobufExtensionRegistry_initWithBoolean_(ComGoogleProtobufExtensionRegistry *self,
+                                                         bool empty) {
+  ComGoogleProtobufExtensionRegistry_initialize();
+  ComGoogleProtobufExtensionRegistryLite_initWithBoolean_(self, empty);
+}
+
+ComGoogleProtobufExtensionRegistry_ExtensionInfo *
+ComGoogleProtobufExtensionRegistry_newExtensionInfoWithComGoogleProtobufExtension_(
+    ComGoogleProtobufExtension *extension) {
+  ComGoogleProtobufExtensionRegistry_initialize();
+  return [[ComGoogleProtobufExtensionRegistry_ExtensionInfo alloc]
+      initWithField:[extension getDescriptor]];
+}
+
+
 @implementation ComGoogleProtobufExtensionRegistry_ExtensionInfo
 
 - (instancetype)initWithField:(CGPFieldDescriptor *)field {
   if (self = [super init]) {
     descriptor_ = field;
-    if (CGPJavaTypeIsMessage(CGPFieldGetJavaType(field))) {
+    if (CGPFieldTypeIsMessage(field)) {
       // No need to retain. Default message values are eternal.
-      defaultInstance_ = CGPFieldGetDefaultValue(field);
+      defaultInstance_ = CGPFieldGetDefaultValueObject(field);
     }
   }
   return self;

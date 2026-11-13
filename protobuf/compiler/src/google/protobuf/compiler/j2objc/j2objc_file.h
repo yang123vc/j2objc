@@ -47,22 +47,20 @@ namespace j2objc {
 
 class FileGenerator {
  public:
-  explicit FileGenerator(const FileDescriptor* file);
+  explicit FileGenerator(const FileDescriptor* file, bool enforce_lite);
   ~FileGenerator();
 
   // Checks for problems that would otherwise lead to cryptic compile errors.
   // Returns true if there are no problems, or writes an error description to
   // the given string and returns false otherwise.
-  bool Validate(string* error);
+  bool Validate(std::string* error);
 
-  void Generate(GeneratorContext* generator_context,
-                std::vector<string>* file_list);
+  void Generate(GeneratorContext* generator_context);
 
   // If we aren't putting everything into one file, this will write all the
   // files other than the outer file (i.e. one for each message, enum, and
   // service type).
-  void GenerateSiblings(GeneratorContext* generator_context,
-                        std::vector<string>* file_list);
+  void GenerateSiblings(GeneratorContext* generator_context);
 
   void GenerateHeaderMappings(GeneratorContext* context);
   void GenerateClassMappings(GeneratorContext* generator_context);
@@ -71,31 +69,26 @@ class FileGenerator {
   void GenerateBoilerplate(io::Printer* printer);
   void GenerateHeaderBoilerplate(io::Printer* printer);
   void GenerateSourceBoilerplate(io::Printer* printer);
-  void GenerateHeader(GeneratorContext* generator_context,
-                      std::vector<string>* file_list);
-  void GenerateSource(GeneratorContext* generator_context,
-                      std::vector<string>* file_list);
+  void GenerateHeader(GeneratorContext* generator_context);
+  void GenerateSource(GeneratorContext* generator_context);
   void GenerateEnumHeader(GeneratorContext* context,
-                          std::vector<string>* file_list,
                           const EnumDescriptor* descriptor);
   void GenerateEnumSource(GeneratorContext* context,
-                          std::vector<string>* file_list,
                           const EnumDescriptor* descriptor);
   void GenerateMessageHeader(GeneratorContext* context,
-                             std::vector<string>* file_list,
                              const Descriptor* descriptor);
   void GenerateMessageSource(GeneratorContext* context,
-                             std::vector<string>* file_list,
                              const Descriptor* descriptor);
   void GenerateMessageOrBuilder(GeneratorContext* context,
-                                std::vector<string>* file_list,
                                 const Descriptor* descriptor);
-  string GetFileName(string suffix);
-  bool GenerateMultipleFiles();
+  std::string GetFileName(std::string suffix);
+  bool GenerateMultipleFiles(const Descriptor* descriptor);
+  bool GenerateMultipleFiles(const EnumDescriptor* descriptor);
 
   const FileDescriptor* file_;
-  string output_dir_;
-  string classname_;
+  std::string output_dir_;
+  std::string classname_;
+  bool enforce_lite_;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(FileGenerator);
 };

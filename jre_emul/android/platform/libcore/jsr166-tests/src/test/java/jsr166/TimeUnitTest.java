@@ -16,8 +16,6 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
-import com.google.j2objc.util.ReflectionUtil;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -370,7 +368,6 @@ public class TimeUnitTest extends JSR166TestCase {
     /**
      * timedJoin throws InterruptedException when interrupted
      */
-    /* TODO(user): enable after b/62899314 is fixed.
     public void testTimedJoin_Interruptible() {
         final CountDownLatch pleaseInterrupt = new CountDownLatch(1);
         final Thread s = newStartedThread(new CheckedInterruptedRunnable() {
@@ -402,7 +399,6 @@ public class TimeUnitTest extends JSR166TestCase {
         s.interrupt();
         awaitTermination(s);
     }
-    */
 
     /**
      * timedSleep throws InterruptedException when interrupted
@@ -437,10 +433,6 @@ public class TimeUnitTest extends JSR166TestCase {
      * a deserialized serialized unit is the same instance
      */
     public void testSerialization() throws Exception {
-        // J2ObjC reflection-stripping change.
-        if (ReflectionUtil.isJreReflectionStripped()) {
-            return;
-        }
         for (TimeUnit x : TimeUnit.values())
             assertSame(x, serialClone(x));
     }
